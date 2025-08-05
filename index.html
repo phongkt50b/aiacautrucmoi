@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIA - Minh Họa Quyền Lợi Bảo Hiểm</title>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+    <div class="min-h-screen container mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="mb-8 text-center">
+            <img src="https://www.aia.com.vn/etc.clientlibs/aia-digital/clientlibs/publish/resources/images/logo-desktop-red.svg" alt="AIA Logo" class="h-12 mx-auto mb-4">
+            <h1 class="text-3xl font-bold text-aia-red">Bảng Minh Họa Quyền Lợi Sản Phẩm Bảo Hiểm</h1>
+            <p class="text-gray-600 mt-2">Công cụ tính toán và minh họa chi tiết quyền lợi bảo hiểm</p>
+        </header>
+
+        <main class="bg-white p-6 sm:p-8 rounded-2xl shadow-lg border border-gray-100">
+            <form id="insurance-form" class="space-y-10">
+
+                <!-- Section 1: Thông tin khách hàng -->
+                <div class="grid grid-cols-1 gap-x-8 gap-y-6 border-b border-gray-200 pb-10">
+                    <div>
+                        <h2 class="text-xl font-semibold leading-7 text-gray-900 flex items-center">
+                            <i data-lucide="user-circle-2" class="mr-3 text-aia-red"></i>Thông Tin Bên Mua Bảo Hiểm
+                        </h2>
+                        <p class="mt-1 text-sm leading-6 text-gray-600">Vui lòng cung cấp thông tin cá nhân chính xác để tính toán quyền lợi.</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+                        <div>
+                            <label for="name" class="block text-sm font-medium leading-6 text-gray-900">Họ và tên</label>
+                            <div class="mt-2">
+                                <input type="text" id="name" name="name" class="form-input" placeholder="Nguyễn Văn A" required>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="dob" class="block text-sm font-medium leading-6 text-gray-900">Ngày sinh</label>
+                            <div class="mt-2">
+                                <input type="text" id="dob" name="dob" class="form-input" placeholder="dd/mm/yyyy" required>
+                                <p id="age-display" class="text-xs text-gray-500 mt-1 h-4"></p>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="gender" class="block text-sm font-medium leading-6 text-gray-900">Giới tính</label>
+                            <div class="mt-2">
+                                <select id="gender" name="gender" class="form-select" required>
+                                    <option value="Nam">Nam</option>
+                                    <option value="Nữ">Nữ</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Lựa chọn sản phẩm -->
+                <div class="grid grid-cols-1 gap-x-8 gap-y-6 border-b border-gray-200 pb-10">
+                     <div>
+                        <h2 class="text-xl font-semibold leading-7 text-gray-900 flex items-center">
+                            <i data-lucide="shield-check" class="mr-3 text-aia-red"></i>Lựa Chọn Sản Phẩm Bảo Hiểm
+                        </h2>
+                        <p class="mt-1 text-sm leading-6 text-gray-600">Chọn sản phẩm chính và các sản phẩm bổ trợ đi kèm (nếu có).</p>
+                    </div>
+
+                    <!-- Sản phẩm chính -->
+                    <div class="mt-4">
+                        <label for="main-product" class="block text-sm font-medium leading-6 text-gray-900 mb-2">Sản phẩm chính (*)</label>
+                        <select id="main-product" name="main-product" class="form-select" required>
+                            <option value="">-- Vui lòng chọn --</option>
+                            <option value="PUL_td">PUL trọn đời</option>
+                            <option value="PUL_15">PUL 15 năm</option>
+                            <option value="PUL_5">PUL 5 năm</option>
+                            <option value="MUL_KBA">MUL - Khoẻ Bình An</option>
+                            <option value="MUL_VTL">MUL - Vững Tương Lai</option>
+                            <option value="TTA">Trọn tâm an</option>
+                            <option value="ABUV">An Bình Ưu Việt</option>
+                        </select>
+                    </div>
+
+                    <!-- Chi tiết theo sản phẩm -->
+                    <div id="product-details-container" class="mt-6 space-y-6">
+                        <!-- PUL/MUL Details -->
+                        <div id="PUL_MUL_details" class="product-details-group hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="sum-assured-pul" class="form-label">Số tiền bảo hiểm</label>
+                                    <input type="text" id="sum-assured-pul" class="form-input money" placeholder="VD: 1.000.000.000">
+                                </div>
+                                <div>
+                                    <label for="premium-term-pul" class="form-label">Thời gian đóng phí (năm)</label>
+                                    <input type="number" id="premium-term-pul" class="form-input" min="4" placeholder="Tối thiểu 4 năm">
+                                </div>
+                                <div id="main-premium-pul-container">
+                                    <label class="form-label">Phí sản phẩm chính (ước tính)</label>
+                                    <input type="text" id="main-premium-pul" class="form-input" readonly>
+                                </div>
+                                <div id="main-premium-mul-container" class="hidden">
+                                     <label for="main-premium-mul" class="form-label">Phí sản phẩm chính</label>
+                                    <input type="text" id="main-premium-mul" class="form-input money">
+                                    <p id="mul-premium-range" class="text-xs text-gray-500 mt-1 h-4"></p>
+                                </div>
+                                <div>
+                                    <label for="topup-premium" class="form-label">Số phí tài khoản đóng thêm</label>
+                                    <input type="text" id="topup-premium" class="form-input money" placeholder="Tùy chọn">
+                                    <p id="topup-premium-error" class="text-xs text-red-500 mt-1 h-4"></p>
+                                </div>
+                                <div>
+                                    <label for="end-age" class="form-label">Tính phí đến năm (tuổi)</label>
+                                    <input type="number" id="end-age" class="form-input" placeholder="VD: 80">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- An Binh Uu Viet Details -->
+                        <div id="ABUV_details" class="product-details-group hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label for="sum-assured-abuv" class="form-label">Số tiền bảo hiểm</label>
+                                    <input type="text" id="sum-assured-abuv" class="form-input money" placeholder="VD: 500.000.000">
+                                </div>
+                                <div>
+                                    <label for="premium-term-abuv" class="form-label">Thời hạn đóng phí</label>
+                                    <select id="premium-term-abuv" class="form-select">
+                                        <!-- Options populated by JS -->
+                                    </select>
+                                    <p class="text-xs text-gray-500 mt-1">Thời gian bảo vệ bằng thời gian đóng phí.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tron Tam An Details -->
+                         <div id="TTA_details" class="product-details-group hidden">
+                            <div class="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg">
+                                <p><strong class="font-semibold">Sản phẩm chính:</strong> Trọn Tâm An</p>
+                                <p><strong class="font-semibold">Số tiền bảo hiểm:</strong> 100.000.000 VNĐ (Mặc định)</p>
+                                <p><strong class="font-semibold">Thời hạn đóng phí:</strong> 10 năm (Mặc định)</p>
+                                <p class="mt-2 text-sm">Sản phẩm này bắt buộc tham gia kèm "Sức khoẻ bùng gia lực".</p>
+                            </div>
+                        </div>
+                    </div>
+                     <p id="main-premium-error" class="text-sm text-red-600 font-medium mt-2 h-5"></p>
+                </div>
+
+                <!-- Section 3: Sản phẩm bổ trợ -->
+                <div id="riders-section" class="grid grid-cols-1 gap-x-8 gap-y-6 border-b border-gray-200 pb-10">
+                    <div>
+                        <h3 class="text-base font-semibold leading-6 text-gray-900">Sản phẩm bổ trợ</h3>
+                        <p class="mt-1 text-sm text-gray-500">Lựa chọn tham gia các sản phẩm bổ trợ để gia tăng quyền lợi.</p>
+                    </div>
+                    
+                    <!-- Sức khoẻ bùng gia lực -->
+                    <div id="health-rider-container" class="rider-group hidden space-y-4 rounded-lg border border-gray-200 p-4">
+                        <div class="flex items-center justify-between">
+                            <label for="health-rider-check" class="font-medium text-gray-900">Tham gia "Sức khoẻ bùng gia lực"?</label>
+                            <input id="health-rider-check" type="checkbox" class="form-checkbox">
+                        </div>
+                        <div id="health-rider-options" class="hidden space-y-4 pt-4 border-t border-gray-200">
+                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="health-program" class="form-label-sm">Chương trình bảo hiểm</label>
+                                    <select id="health-program" class="form-select-sm"></select>
+                                </div>
+                                <div>
+                                    <label for="health-scope" class="form-label-sm">Phạm vi bảo vệ</label>
+                                    <select id="health-scope" class="form-select-sm">
+                                        <option value="VN">Việt Nam</option>
+                                        <option value="GLOBAL">Toàn cầu (trừ Hoa Kỳ)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-6">
+                                <div class="flex items-center gap-x-3">
+                                    <input id="health-outpatient" type="checkbox" class="form-checkbox-sm">
+                                    <label for="health-outpatient" class="block text-sm font-medium leading-6 text-gray-900">Ngoại trú</label>
+                                </div>
+                                <div class="flex items-center gap-x-3">
+                                    <input id="health-dental" type="checkbox" class="form-checkbox-sm">
+                                    <label for="health-dental" class="block text-sm font-medium leading-6 text-gray-900">Nha khoa</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bệnh hiểm nghèo -->
+                     <div id="ci-rider-container" class="rider-group hidden space-y-4 rounded-lg border border-gray-200 p-4">
+                        <div class="flex items-center justify-between">
+                            <label for="ci-rider-check" class="font-medium text-gray-900">Tham gia "Bảo hiểm toàn diện bệnh hiểm nghèo 2.0"?</label>
+                            <input id="ci-rider-check" type="checkbox" class="form-checkbox">
+                        </div>
+                         <div id="ci-rider-options" class="hidden space-y-4 pt-4 border-t border-gray-200">
+                             <div>
+                                <label for="ci-sum-assured" class="form-label-sm">Số tiền bảo hiểm</label>
+                                <input type="text" id="ci-sum-assured" class="form-input-sm money" placeholder="VD: 300.000.000">
+                            </div>
+                         </div>
+                    </div>
+                </div>
+
+
+                <!-- Section 4: Nút tạo minh họa -->
+                <div class="flex justify-end pt-6">
+                    <button type="submit" id="generate-btn" class="flex items-center justify-center rounded-md bg-aia-red px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-aia-red-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-aia-red transition-colors duration-200">
+                        <i data-lucide="file-spreadsheet" class="mr-2 h-5 w-5"></i>
+                        Tạo Bảng Minh Họa
+                    </button>
+                </div>
+            </form>
+        </main>
+
+        <!-- Section 5: Kết quả -->
+        <div id="results-container" class="hidden mt-12">
+            <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-lg border border-gray-100">
+                <h2 class="text-2xl font-bold text-aia-red mb-6 text-center">Bảng Minh Họa Quyền Lợi Chi Tiết</h2>
+
+                <!-- Tóm tắt thông tin -->
+                <div class="mb-8 p-6 bg-gray-50 rounded-lg border">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">I. Tóm Tắt Thông Tin Hợp Đồng</h3>
+                    <div id="summary-info" class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm"></div>
+                </div>
+
+                <!-- Tóm tắt quyền lợi -->
+                <div id="summary-benefits-container" class="mb-8">
+                     <h3 class="text-lg font-semibold text-gray-800 mb-4">II. Tóm Tắt Quyền Lợi Sản Phẩm</h3>
+                     <div id="summary-benefits" class="space-y-4"></div>
+                </div>
+
+                <!-- Bảng minh họa phí -->
+                <div class="mb-8">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">III. Bảng Minh Họa Phí Bảo Hiểm</h3>
+                    <div class="overflow-x-auto">
+                        <table id="illustration-table" class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                                <!-- Header generated by JS -->
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <!-- Rows generated by JS -->
+                            </tbody>
+                            <tfoot class="bg-gray-100 font-bold">
+                                <!-- Footer generated by JS -->
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script type="module" src="scripts/main.js"></script>
+</body>
+</html>

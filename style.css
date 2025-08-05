@@ -1,0 +1,79 @@
+:root {
+    --aia-red: #ED1C24;
+    --aia-red-dark: #C4141B;
+    --aia-dark-gray: #333333;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+.form-input, .form-select {
+    @apply block w-full rounded-md border-0 py-2.5 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-aia-red sm:text-sm sm:leading-6 transition-all duration-200;
+}
+
+.form-input-sm, .form-select-sm {
+    @apply block w-full rounded-md border-0 py-1.5 px-2.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-aia-red sm:text-sm sm:leading-6 transition-all duration-200;
+}
+
+
+.form-checkbox {
+    @apply h-5 w-5 rounded border-gray-300 text-aia-red focus:ring-aia-red cursor-pointer;
+}
+
+.form-checkbox-sm {
+    @apply h-4 w-4 rounded border-gray-300 text-aia-red focus:ring-aia-red cursor-pointer;
+}
+
+
+.form-label {
+    @apply block text-sm font-medium leading-6 text-gray-900;
+}
+
+.form-label-sm {
+     @apply block text-xs font-medium leading-6 text-gray-900;
+}
+
+.text-aia-red {
+    color: var(--aia-red);
+}
+
+.bg-aia-red {
+    background-color: var(--aia-red);
+}
+
+.bg-aia-red-dark {
+    background-color: var(--aia-red-dark);
+}
+
+.focus\:ring-aia-red:focus {
+    --tw-ring-color: var(--aia-red);
+}
+
+.focus-visible\:outline-aia-red:focus-visible {
+    outline-color: var(--aia-red);
+}
+
+.hidden {
+    display: none;
+}
+
+#illustration-table th, #illustration-table td {
+    @apply px-4 py-3 text-sm text-center whitespace-nowrap;
+}
+
+#illustration-table th {
+    @apply font-semibold text-gray-700;
+}
+
+#illustration-table td {
+    @apply text-gray-600;
+}
+
+#illustration-table th:first-child, #illustration-table td:first-child {
+    @apply text-left;
+}
+
+#illustration-table tfoot td {
+    @apply font-bold text-gray-800;
+}
