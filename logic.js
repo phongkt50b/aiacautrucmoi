@@ -2827,3 +2827,93 @@ window.MDP3 = (function () {
     setupObservers();
   });
 })();
+/* ==== HOTFIX NHANH: dán vào CUỐI logic.js ==== */
+(function(){
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const fmt = (n) => (Number(n)||0).toLocaleString('vi-VN');
+  const toNum = (t) => parseInt(String(t||'').replace(/[^\d]/g,''),10)||0;
+
+  // 1) Danh sách "Xem từng người" — cố định & cộng MDP3 đúng người
+  window.renderSuppListSimple = function(){
+    const wrap = $('#supp-insured-summaries');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+
+    let mdp3Id = null, mdp3Fee = 0;
+    try {
+      if ($('#mdp3-enable')?.checked && window.MDP3) {
+        mdp3Id  = window.MDP3.getSelectedId && window.MDP3.getSelectedId();
+        mdp3Fee = Number(window.MDP3.getPremium ? (window.MDP3.getPremium()||0) : 0);
+      }
+    } catch(e){}
+
+    const mainId   = 'main-person-container';
+    const mainName = $('#main-person-container .name-input')?.value?.trim() || 'NĐBH chính';
+    const mainSupp = (window.personFees?.[mainId]?.supp) || 0;
+    const mainSum  = mainSupp + ((mdp3Id === mainId) ? mdp3Fee : 0);
+    wrap.insertAdjacentHTML('beforeend',
+      `<div class="flex justify-between items-center py-1 text-sm">
+         <span>${(window.sanitizeHtml?sanitizeHtml(mainName):mainName)}</span>
+         <span class="font-semibold">${fmt(mainSum)}</span>
+       </div>`);
+
+    document.querySelectorAll('#supplementary-insured-container .person-container').forEach((cont, i) => {
+      const id   = cont.id;
+      const name = cont.querySelector('.name-input')?.value?.trim() || \`NĐBH bổ sung \${i+1}\`;
+      const fee  = (window.personFees?.[id]?.supp) || 0;
+      const sum  = fee + ((mdp3Id === id) ? mdp3Fee : 0);
+      wrap.insertAdjacentHTML('beforeend',
+        `<div class="flex justify-between items-center py-1 text-sm">
+           <span>${(window.sanitizeHtml?sanitizeHtml(name):name)}</span>
+           <span class="font-semibold">${fmt(sum)}</span>
+         </div>`);
+    });
+  };
+
+  // 2) Nút "Xem từng người" — không đổi nhãn, chỉ toggle danh sách
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn  = $('#toggle-supp-list-btn');
+    const list = $('#supp-insured-summaries');
+    if (!btn || !list) return;
+    const safeBtn = btn.cloneNode(true);      // loại bỏ mọi observer/handler cũ gây đơ
+    btn.replaceWith(safeBtn);
+    safeBtn.textContent = 'Xem từng người';
+    safeBtn.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      list.classList.toggle('hidden');
+    }, true);
+  });
+
+  // 3) Panel kỳ đóng phí — xoá dòng "Kỳ: …" & ẩn dòng có giá trị 0
+  function cleanupFrequencyPanel(){
+    const pane = $('#frequency-breakdown');
+    if (!pane) return;
+
+    const first = pane.querySelector(':scope > div');
+    if (first && /^\\s*Kỳ\\s*:/.test(first.textContent||'')) first.remove();
+
+    ['freq-main-plus-extra','freq-supp-total','freq-total-period','freq-total-year','freq-diff'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const row = el.closest('div'); if (!row) return;
+      row.classList.toggle('hidden', toNum(el.textContent) === 0);
+    });
+
+    const freq = $('#payment-frequency')?.value || 'year';
+    pane.classList.toggle('hidden', freq === 'year'); // nếu Năm thì ẩn cả panel
+  }
+
+  const oldUpdate = window.updateSummaryUI;
+  window.updateSummaryUI = function(){
+    oldUpdate && oldUpdate.apply(this, arguments);
+    try { cleanupFrequencyPanel(); } catch(e){}
+    try { window.renderSuppListSimple(); } catch(e){}
+  };
+
+  document.getElementById('payment-frequency')?.addEventListener('change', () => {
+    setTimeout(() => { try { cleanupFrequencyPanel(); window.renderSuppListSimple(); } catch(e){} }, 0);
+  });
+
+  // chạy lần đầu
+  setTimeout(() => { try { cleanupFrequencyPanel(); window.renderSuppListSimple(); } catch(e){} }, 0);
+})();
