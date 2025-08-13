@@ -105,80 +105,77 @@
     </div>
   </div>
 
-  <!-- Cột kết quả -->
+  <!-- Cột kết quả: Compact Card -->
   <div class="lg:col-span-1">
-    <div class="bg-white p-6 rounded-lg shadow-sm border-2 border-aia-red sticky top-8">
-      
-      <!-- SECTION 6: Tóm Tắt Phí Bảo Hiểm -->
-      <div id="results-container" class="space-y-3 text-lg">
-        <h2 class="text-2xl font-bold text-gray-900 mb-4 text-center">Tóm Tắt Phí Bảo Hiểm</h2>
+    <div id="results-container" class="bg-white p-5 rounded-xl shadow-sm border-2 border-aia-red sticky top-8 space-y-3">
 
-        <!-- Dòng 1-3: Tổng hợp NĐBH chính -->
-        <div id="main-insured-summary" class="space-y-2 mb-3">
-          <div class="text-lg font-semibold">Người được bảo hiểm chính: <span id="main-insured-total" class="text-aia-red">0</span></div>
-          <div class="text-sm text-gray-600 pl-4">
-            <div>Phí sản phẩm chính: <span id="main-insured-main-fee">0</span></div>
-            <div>Phí đóng thêm: <span id="main-insured-extra-fee">0</span></div>
-            <div>Phí sản phẩm bổ sung: <span id="main-insured-supp-fee">0</span></div>
-          </div>
-        </div>
-
-        <!-- Dòng 4..: Mỗi NĐBH bổ sung -->
-        <div id="supp-insured-summaries" class="mb-3"></div>
-
-        <!-- Dòng 5: Tổng -->
-        <div id="summary-totals" class="border-t pt-3 mt-3 mb-3">
-          <div class="font-semibold text-gray-800 mb-2">Tóm tắt tổng phí:</div>
-          <div class="pl-4 text-sm">
-            <div>Phí chính: <span id="summary-main-fee">0</span></div>
-            <div>Phí đóng thêm: <span id="summary-extra-fee">0</span></div>
-            <div>Phí sản phẩm bổ sung: <span id="summary-supp-fee">0</span></div>
-            <div class="font-bold mt-2">Tổng cộng: <span id="summary-total" class="text-aia-red">0</span></div>
-          </div>
-        </div>
-
-        <!-- Dòng 6-7: Kỳ đóng phí -->
-        <div class="mb-4">
-          <label for="payment-frequency" class="font-medium text-gray-700 block mb-1">Kỳ đóng phí</label>
-          <select id="payment-frequency" class="form-select w-full" aria-label="Kỳ đóng phí">
-            <option value="year" selected>Năm (mặc định)</option>
-            <option value="half">Nửa năm</option>
-            <option value="quarter">Quý</option>
-          </select>
-        </div>
-
-        <!-- Breakdown theo kỳ (ẩn khi chọn Năm) -->
-        <div id="frequency-breakdown" class="space-y-1 text-sm text-gray-700 mb-3 hidden" aria-live="polite">
-          <div>Phí chính + đóng thêm (theo kỳ): <span id="freq-main-plus-extra">0</span></div>
-          <div>Phí sản phẩm bổ sung (theo kỳ): <span id="freq-supp-total">0</span></div>
-          <div class="font-semibold">Tổng (theo kỳ): <span id="freq-total-period" class="text-aia-red">0</span></div>
-          <div>Tổng cộng đóng 1 năm (quy đổi): <span id="freq-total-year">0</span></div>
-          <div>Chênh lệch so với đóng 1 năm: <span id="freq-diff">0</span></div>
-        </div>
-
-        <!-- Giữ các ID cũ để tương thích với logic.js -->
-        <div class="mt-3">
-          <div class="flex justify-between items-center py-2 border-b">
-            <span class="text-gray-600">Phí sản phẩm chính (hiển thị tương thích):</span>
-            <span id="main-premium-result" class="font-bold text-gray-900">0</span>
-          </div>
-          <div id="supplementary-premiums-results"></div>
-          <div class="flex justify-between items-center pt-4 text-xl">
-            <span class="font-semibold text-aia-red">Tổng phí năm đầu:</span>
-            <span id="total-premium-result" class="font-extrabold text-aia-red">0</span>
-          </div>
-        </div>
-
+      <!-- Tổng năm -->
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-semibold text-gray-700">Tổng phí (năm)</h2>
+      </div>
+      <div class="text-3xl font-extrabold text-aia-red tracking-tight">
+        <span id="summary-total">0</span>
       </div>
 
-      <div class="mt-6 space-y-4">
+      <!-- Nhóm chính -->
+      <div class="border-t pt-3">
+        <ul class="text-sm space-y-1">
+          <li class="flex justify-between">
+            <span>Phí sản phẩm chính</span><span id="main-insured-main-fee">0</span>
+          </li>
+          <li class="flex justify-between">
+            <span>Phí đóng thêm</span><span id="main-insured-extra-fee">0</span>
+          </li>
+          <li class="flex justify-between">
+            <span>Phí sản phẩm bổ sung</span><span id="summary-supp-fee">0</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Nhóm bổ sung: danh sách từng người -->
+      <div class="border-t pt-3">
+        <div id="supp-insured-summary-line" class="flex justify-between text-sm mt-1">
+          <button id="toggle-supp-list-btn" class="text-xs text-aia-red underline">Xem từng người</button>
+        </div>
+        <div id="supp-insured-summaries" class="mt-2 hidden text-sm space-y-1"></div>
+      </div>
+    
+      <!-- Kỳ đóng phí (tự ẩn/hiện theo ngưỡng 7tr/8tr) -->
+      <div>
+        <label for="payment-frequency" class="font-medium text-gray-700 block mb-1">Kỳ đóng phí</label>
+        <select id="payment-frequency" class="form-select w-full" aria-label="Kỳ đóng phí">
+          <option value="year" selected>Năm (mặc định)</option>
+          <option value="half">Nửa năm</option>
+          <option value="quarter">Quý</option>
+        </select>
+      </div>
+
+      <!-- Breakdown theo kỳ -->
+      <div id="frequency-breakdown" class="space-y-1 text-sm text-gray-700 hidden">
+        <div>Phí chính + đóng thêm (theo kỳ): <span id="freq-main-plus-extra">0</span></div>
+        <div>Phí sản phẩm bổ sung (theo kỳ): <span id="freq-supp-total">0</span></div>
+        <div class="font-semibold">Tổng (theo kỳ): <span id="freq-total-period" class="text-aia-red">0</span></div>
+        <div class="text-sm">Quy năm: <span id="freq-total-year">0</span></div>
+        <div class="text-sm">Chênh lệch so với đóng 1 năm: <span id="freq-diff">0</span></div>
+      </div>
+
+      <!-- Minh họa đến năm -->
+      <div class="border-t pt-3 space-y-2">
         <div>
           <label for="target-age-input" class="font-medium text-gray-700 block mb-1">Minh họa phí đến năm (tuổi NĐBH chính)</label>
           <input type="number" id="target-age-input" class="form-input" placeholder="VD: 75" min="0" max="100">
         </div>
         <button id="view-summary-btn" class="w-full bg-aia-red text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700 transition-colors" aria-controls="summary-modal">Xem Bảng Minh Họa Chi Tiết</button>
+        <div id="error-message" class="text-center text-red-500 font-medium min-h-[1.25rem]" aria-live="assertive"></div>
       </div>
-      <div id="error-message" class="mt-4 text-center text-red-500 font-medium min-h-[1.25rem]" aria-live="assertive"></div>
+
+      <!-- Shim cho các ID cũ -->
+      <div id="compat-shim" class="hidden">
+        <span id="main-premium-result">0</span>
+        <div id="supplementary-premiums-results"></div>
+        <span id="total-premium-result">0</span>
+      </div>
+
     </div>
   </div>
 </main>
@@ -197,7 +194,6 @@
       <button id="close-summary-modal-btn" class="text-3xl font-light leading-none hover:text-red-600" aria-label="Đóng bảng tóm tắt">&times;</button>
     </div>
     <div id="summary-content-container" class="p-6 overflow-y-auto"></div>
-    <!-- Miễn trừ cuối bảng (in đậm) -->
     <div class="p-6 border-t">
       <p class="font-bold text-gray-800">
         Công cụ này chỉ mang tính chất tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA.
@@ -208,7 +204,7 @@
   </div>
 </div>
 
-<!-- Giữ nguyên thứ tự module theo bản gốc của bạn -->
+<!-- Scripts -->
 <script type="module" src="logic.js"></script>
 <script type="module" src="data.js"></script>
 </body>
