@@ -1956,12 +1956,12 @@ window.MDP3 = (function () {
       } else {
         freqHtml = `<div class="mb-2">Kỳ: ${freq==='half'?'Nửa năm':'Quý'}</div>`;
         freqHtml += `<div class="grid grid-cols-2 gap-2">
-          <div>Phí chính (kỳ):</div><div class="text-right">${formatCurrency(freqInfo.breakdown.perMain)}</div>
-          <div>Phí đóng thêm (kỳ):</div><div class="text-right">${formatCurrency(freqInfo.breakdown.perExtra)}</div>
-          <div>Phí bổ sung (kỳ):</div><div class="text-right">${formatCurrency(freqInfo.breakdown.perSupp)}</div>
-          <div class="font-semibold">Tổng theo kỳ:</div><div class="font-semibold text-right">${formatCurrency(freqInfo.perPeriod)}</div>
-          <div>Tổng năm (từ kỳ):</div><div class="text-right">${formatCurrency(freqInfo.totalYearFromPeriod)}</div>
-          <div>Chênh lệch (tổng năm theo kỳ - tổng năm đóng năm):</div><div class="text-right ${freqInfo.diff>0?'text-red-600':''}">${formatCurrency(freqInfo.diff)}</div>
+          <div>Phí sản phẩm chính:</div><div class="text-right">${formatCurrency(freqInfo.breakdown.perMain)}</div>
+          <div>Phí đóng thêm:</div><div class="text-right">${formatCurrency(freqInfo.breakdown.perExtra)}</div>
+          <div>Phí sản phẩm bổ sung:</div><div class="text-right">${formatCurrency(freqInfo.breakdown.perSupp)}</div>
+          <div class="font-semibold">Tổng:</div><div class="font-semibold text-right">${formatCurrency(freqInfo.perPeriod)}</div>
+          <div>Tổng năm:</div><div class="text-right">${formatCurrency(freqInfo.totalYearFromPeriod)}</div>
+          <div>Chênh lệch:</div><div class="text-right ${freqInfo.diff>0?'text-red-600':''}">${formatCurrency(freqInfo.diff)}</div>
         </div>`;
       }
 
