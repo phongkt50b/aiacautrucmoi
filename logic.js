@@ -1118,6 +1118,11 @@ function updateSummaryUI(premiums) {
   if (elExtra) elExtra.textContent = formatCurrency(extra);
   if (elSupp) elSupp.textContent = formatCurrency(supp);
   if (elTotal) elTotal.textContent = formatCurrency(total);
+  // Ẩn các dòng nếu = 0
+  if (elMain) { const li = elMain.closest('li'); if (li) li.classList.toggle('hidden', base === 0); }
+  if (elExtra) { const li = elExtra.closest('li'); if (li) li.classList.toggle('hidden', extra === 0); }
+  if (elSupp) { const li = elSupp.closest('li'); if (li) li.classList.toggle('hidden', supp === 0); }
+
 
   // Render danh sách từng người (1) — giản lược tên + số tiền, thêm dòng NĐBH chính
   renderSuppListSimple();
