@@ -1129,37 +1129,42 @@ function renderSuppListSimple() {
   if (!wrap) return;
   wrap.innerHTML = '';
 
-  // NĐBH chính – phí bổ sung
+  // lấy MDP3 (nếu có)
+  let mdp3SelectedId = null, mdp3Fee = 0;
+  try {
+    if (window.MDP3) {
+      mdp3SelectedId = window.MDP3.getSelectedId && window.MDP3.getSelectedId();
+      mdp3Fee = Number(window.MDP3.getPremium ? (window.MDP3.getPremium() || 0) : 0);
+    }
+  } catch {}
+
+  // NĐBH chính – phí bổ sung (+ MDP3 nếu gán cho chính)
   const mainSupp = (window.personFees?.['main-person-container']?.supp) || 0;
   const mainName = document.querySelector('#main-person-container .name-input')?.value?.trim() || 'NĐBH chính';
+  const mainTotalSupp = mainSupp + ((mdp3SelectedId === 'main-person-container') ? mdp3Fee : 0);
   const mainRow = document.createElement('div');
   mainRow.className = 'flex justify-between items-center py-1 text-sm';
-  mainRow.innerHTML = `<span>${sanitizeHtml(mainName)}</span><span class="font-semibold">${formatCurrency(mainSupp)}</span>`;
+  mainRow.innerHTML = `<span>${sanitizeHtml(mainName)}</span><span class="font-semibold">${formatCurrency(mainTotalSupp)}</span>`;
   wrap.appendChild(mainRow);
 
-  // NĐBH bổ sung
-  Array.from(document.querySelectorAll('#supplementary-insured-container .person-container')).forEach((cont, idx)=>{
+  // NĐBH bổ sung (+ MDP3 nếu gán cho người đó)
+  Array.from(document.querySelectorAll('#supplementary-insured-container .person-container')).forEach((cont, idx) => {
     const fee = (window.personFees?.[cont.id]?.supp) || 0;
-    const name = cont.querySelector('.name-input')?.value?.trim() || `NĐBH bổ sung ${idx+1}`;
+    const name = cont.querySelector('.name-input')?.value?.trim() || `NĐBH bổ sung ${idx + 1}`;
+    const total = fee + ((mdp3SelectedId === cont.id) ? mdp3Fee : 0);
     const row = document.createElement('div');
     row.className = 'flex justify-between items-center py-1 text-sm';
-    row.innerHTML = `<span>${sanitizeHtml(name)}</span><span class="font-semibold">${formatCurrency(fee)}</span>`;
+    row.innerHTML = `<span>${sanitizeHtml(name)}</span><span class="font-semibold">${formatCurrency(total)}</span>`;
     wrap.appendChild(row);
   });
 
-  // Nếu có MDP3 gán “Người khác”, cộng thêm dòng riêng
-  try {
-    if (window.MDP3) {
-      const selId = window.MDP3.getSelectedId && window.MDP3.getSelectedId();
-      const fee = Number(window.MDP3.getPremium ? (window.MDP3.getPremium()||0) : 0);
-      if (selId === 'other' && fee > 0) {
-        const row = document.createElement('div');
-        row.className = 'flex justify-between items-center py-1 text-sm';
-        row.innerHTML = `<span>Miễn đóng phí 3.0 (Người khác)</span><span class="font-semibold">${formatCurrency(fee)}</span>`;
-        wrap.appendChild(row);
-      }
-    }
-  } catch {}
+  // Nếu MDP3 gán “Người khác” thì thêm dòng riêng
+  if (mdp3SelectedId === 'other' && mdp3Fee > 0) {
+    const row = document.createElement('div');
+    row.className = 'flex justify-between items-center py-1 text-sm';
+    row.innerHTML = `<span>Miễn đóng phí 3.0 (Người khác)</span><span class="font-semibold">${formatCurrency(mdp3Fee)}</span>`;
+    wrap.appendChild(row);
+  }
 }
 
 try{window.renderSection6V2 && window.renderSection6V2();}catch(e){}
