@@ -113,34 +113,14 @@
       <!-- Header Tổng năm + badge kỳ -->
       <div class="flex items-center justify-between">
         <h2 class="text-base font-semibold text-gray-700">Tổng phí (năm)</h2>
-        <span id="badge-frequency" class="text-xs px-2 py-1 rounded-full bg-red-50 text-aia-red border border-red-200">Năm</span>
       </div>
       <div class="text-3xl font-extrabold text-aia-red tracking-tight">
         <span id="summary-total">0 VNĐ</span>
       </div>
 
-      <!-- Kỳ đóng phí -->
-      <div>
-        <label for="payment-frequency" class="font-medium text-gray-700 block mb-1">Kỳ đóng phí</label>
-        <select id="payment-frequency" class="form-select w-full" aria-label="Kỳ đóng phí">
-          <option value="year" selected>Năm (mặc định)</option>
-          <option value="half">Nửa năm</option>
-          <option value="quarter">Quý</option>
-        </select>
-      </div>
-
-      <!-- Breakdown theo kỳ (ẩn khi Năm) -->
-      <div id="frequency-breakdown" class="space-y-1 text-sm text-gray-700 hidden">
-        <div>Phí chính + đóng thêm (theo kỳ): <span id="freq-main-plus-extra">0 VNĐ</span></div>
-        <div>Phí sản phẩm bổ sung (theo kỳ): <span id="freq-supp-total">0 VNĐ</span></div>
-        <div class="font-semibold">Tổng (theo kỳ): <span id="freq-total-period" class="text-aia-red">0 VNĐ</span></div>
-        <div class="text-sm">Quy năm: <span id="freq-total-year">0 VNĐ</span></div>
-        <div class="text-sm">Chênh lệch so với đóng 1 năm: <span id="freq-diff">0 VNĐ</span></div>
-      </div>
-
+      
       <!-- Nhóm chính -->
       <div class="border-t pt-3">
-        <div class="text-sm text-gray-500 mb-1">Người được bảo hiểm chính</div>
         <ul class="text-sm space-y-1">
           <li class="flex justify-between">
             <span>Phí sản phẩm chính</span><span id="main-insured-main-fee">0 VNĐ</span>
@@ -163,8 +143,28 @@
         <div id="supp-insured-summary-line" class="flex justify-between text-sm mt-1">
           <span>Tổng</span>
           <span id="summary-supp-fee">0 VNĐ</span>
+          <span>Phí sản phẩm bổ sung</span><span id="main-insured-supp-fee">0 VNĐ</span>
         </div>
         <div id="supp-insured-summaries" class="mt-2 hidden text-sm space-y-1"></div>
+      </div>
+    
+      <!-- Kỳ đóng phí -->
+      <div>
+        <label for="payment-frequency" class="font-medium text-gray-700 block mb-1">Kỳ đóng phí</label>
+        <select id="payment-frequency" class="form-select w-full" aria-label="Kỳ đóng phí">
+          <option value="year" selected>Năm (mặc định)</option>
+          <option value="half">Nửa năm</option>
+          <option value="quarter">Quý</option>
+        </select>
+      </div>
+
+      <!-- Breakdown theo kỳ (ẩn khi Năm) -->
+      <div id="frequency-breakdown" class="space-y-1 text-sm text-gray-700 hidden">
+        <div>Phí chính + đóng thêm (theo kỳ): <span id="freq-main-plus-extra">0 VNĐ</span></div>
+        <div>Phí sản phẩm bổ sung (theo kỳ): <span id="freq-supp-total">0 VNĐ</span></div>
+        <div class="font-semibold">Tổng (theo kỳ): <span id="freq-total-period" class="text-aia-red">0 VNĐ</span></div>
+        <div class="text-sm">Quy năm: <span id="freq-total-year">0 VNĐ</span></div>
+        <div class="text-sm">Chênh lệch so với đóng 1 năm: <span id="freq-diff">0 VNĐ</span></div>
       </div>
 
       <!-- Minh họa đến năm -->
