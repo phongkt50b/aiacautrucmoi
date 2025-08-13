@@ -1817,3 +1817,1013 @@ function generateSupplementaryProductsHtml() {
 // nhưng mình đã loại bỏ hậu tố " VNĐ" trong các helper (fmt/setText) để đồng bộ yêu cầu (3).
 
 // ========================= KẾT THÚC FILE =========================
+// ===== MODULE MDP3 =====
+window.MDP3 = (function () {
+    let selectedId = null;
+
+    function init() {
+        renderSection();
+        attachListeners();
+    }
+
+    // ===== MDP3 BỔ SUNG ===== tiện ích reset
+    function reset() {
+        selectedId = null;
+        const enableCb = document.getElementById('mdp3-enable');
+        if (enableCb) enableCb.checked = false;
+
+        const selContainer = document.getElementById('mdp3-select-container');
+        if (selContainer) selContainer.innerHTML = '';
+
+        const feeEl = document.getElementById('mdp3-fee-display');
+        if (feeEl) feeEl.textContent = '';
+    }
+    function isEnabled() {
+        const cb = document.getElementById('mdp3-enable');
+        return !!(cb && cb.checked);
+    }
+    function resetIfEnabled() {
+        if (isEnabled()) reset();
+    }
+
+    // Hiện/ẩn Section 5 tùy sản phẩm chính
+    function renderSection() {
+        const sec = document.getElementById('mdp3-section');
+        if (!sec) return;
+        const mainProduct = document.getElementById('main-product').value;
+
+        if (mainProduct === 'TRON_TAM_AN') {
+            reset();
+            sec.classList.add('hidden');
+            return;
+        }
+        sec.classList.remove('hidden');
+
+        // Thêm checkbox bật/tắt nếu chưa có
+        const container = document.getElementById('mdp3-radio-list');
+        if (container && !document.getElementById('mdp3-enable')) {
+            container.innerHTML = `
+                <div class="flex items-center space-x-2 mb-3">
+                    <input type="checkbox" id="mdp3-enable" class="form-checkbox">
+                    <label for="mdp3-enable" class="text-gray-700 font-medium">
+                        Bật Miễn đóng phí 3.0
+                    </label>
+                </div>
+                <div id="mdp3-select-container"></div>
+            `;
+        }
+    }
+
+    // Render dropdown danh sách người được bảo hiểm bổ sung hoặc "Người khác"
+    function renderSelect() {
+        const selectContainer = document.getElementById('mdp3-select-container');
+        if (!selectContainer) return;
+
+        let html = `<select id="mdp3-person-select" class="form-select w-full mb-3">
+                        <option value="">-- Chọn người --</option>`;
+
+        document.querySelectorAll('.person-container').forEach(cont => {
+            if (cont.id !== 'main-person-container' && !cont.id.includes('mdp3-other')) {
+                const info = getCustomerInfo(cont, false);
+                let label = info.name || 'NĐBH bổ sung';
+                label += ` (tuổi ${info.age || "?"})`;
+
+                let disabled = '';
+                if (!info.age || info.age <= 0) {
+                    label += ' - Chưa đủ thông tin';
+                    disabled = 'disabled';
+                } else if (info.age < 18 || info.age > 60) {
+                    label += ' - Không đủ điều kiện';
+                    disabled = 'disabled';
+                }
+
+                html += `<option value="${cont.id}" ${disabled}>${label}</option>`;
+            }
+        });
+
+        html += `<option value="other">Người khác</option></select>
+                 <div id="mdp3-other-form" class="hidden mt-4 p-3 border rounded bg-gray-50"></div>`;
+
+        selectContainer.innerHTML = html;
+    }
+
+    // Gắn sự kiện cho checkbox và dropdown
+    function attachListeners() {
+        // Render lại Section khi đổi sản phẩm chính
+        document.getElementById('main-product').addEventListener('change', () => {
+            renderSection();
+            reset(); // đổi SP chính -> luôn reset
+        });
+
+        document.body.addEventListener('change', function (e) {
+            if (e.target.id === 'mdp3-enable') {
+                if (e.target.checked) {
+                    renderSelect();
+                } else {
+                    const sel = document.getElementById('mdp3-select-container');
+                    if (sel) sel.innerHTML = '';
+                    const fee = document.getElementById('mdp3-fee-display');
+                    if (fee) fee.textContent = '';
+                }
+            }
+
+            if (e.target.id === 'mdp3-person-select') {
+                selectedId = e.target.value;
+                const otherForm = document.getElementById('mdp3-other-form');
+
+                if (selectedId === 'other') {
+                    // Render form người khác
+                    otherForm.classList.remove('hidden');
+                    otherForm.innerHTML = `
+                        <div id="person-container-mdp3-other" class="person-container">
+                            ${generateSupplementaryPersonHtml('mdp3-other', '—')}
+                        </div>
+                    `;
+                    initPerson(document.getElementById('person-container-mdp3-other'), 'mdp3-other', true);
+
+                    // Ẩn phần sản phẩm bổ sung của "Người khác"
+                    const suppBlock = otherForm.querySelector('.mt-4');
+                    if (suppBlock) suppBlock.style.display = 'none';
+
+                    // Nghe DOB để validate + tính realtime
+                    const dobInput = otherForm.querySelector('.dob-input');
+                    dobInput?.addEventListener('input', () => {
+                        validateDobField(dobInput);
+                        calculateAll();
+                    });
+                    dobInput?.addEventListener('blur', () => validateDobField(dobInput));
+                } else {
+                    otherForm.classList.add('hidden');
+                    otherForm.innerHTML = '';
+                }
+                calculateAll();
+            }
+        });
+    }
+
+    // Tính phí MDP3
+    function getPremium() {
+        const enableCb = document.getElementById('mdp3-enable');
+        const feeEl = document.getElementById('mdp3-fee-display');
+        if (!enableCb || !enableCb.checked) {
+            if (feeEl) feeEl.textContent = '';
+            return 0;
+        }
+        if (!selectedId || !window.personFees) {
+            if (feeEl) feeEl.textContent = '';
+            return 0;
+        }
+        if (selectedId !== 'other' && !document.getElementById(selectedId)) {
+            reset();
+            return 0;
+        }
+
+        // Tính STBH: phí chính thuần + phí bổ sung (không cộng extra premium)
+        let stbhBase = 0;
+        for (let pid in window.personFees) {
+            stbhBase += (window.personFees[pid].mainBase || 0) + (window.personFees[pid].supp || 0);
+        }
+
+        // Nếu là người bổ sung trong danh sách, trừ phí bổ sung của họ
+        if (selectedId !== 'other' && window.personFees[selectedId]) {
+            stbhBase -= window.personFees[selectedId].supp || 0;
+        }
+
+        let age, gender;
+        if (selectedId === 'other') {
+            const form = document.getElementById('person-container-mdp3-other');
+            const info = getCustomerInfo(form, false);
+            age = info.age;
+            gender = info.gender;
+
+            // Nếu chưa có DOB hợp lệ → chỉ hiển thị STBH
+            if (!age || age <= 0) {
+                if (feeEl) feeEl.textContent = `STBH: ${formatCurrency(stbhBase)} | Phí: —`;
+                return 0;
+            }
+        } else {
+            const info = getCustomerInfo(document.getElementById(selectedId), false);
+            age = info.age;
+            gender = info.gender;
+        }
+
+        // Tính phí nếu đủ tuổi
+        const rate = findMdp3Rate(age, gender);
+        const premiumRaw = (stbhBase / 1000) * rate;
+        const premium = roundDownTo1000(premiumRaw);
+
+        if (feeEl) {
+            feeEl.textContent = premium > 0
+                ? `STBH: ${formatCurrency(stbhBase)} | Phí: ${formatCurrency(premium)}`
+                : `STBH: ${formatCurrency(stbhBase)} | Phí: —`;
+        }
+
+        return premium;
+    }
+
+    function findMdp3Rate(age, gender) {
+        const genderKey = gender === 'Nữ' ? 'nu' : 'nam';
+        const row = product_data.mdp3_rates.find(r => age >= r.ageMin && age <= r.ageMax);
+        return row ? (row[genderKey] || 0) : 0;
+    }
+
+    function getSelectedId(){ return selectedId; }
+    return { init, renderSection, renderSelect, getPremium, reset, resetIfEnabled, getSelectedId };
+})();
+
+
+
+// [PATCH] Section 6 renderer & payment frequency handling (minimal invasive additions)
+// - Adds a renderSection6() which reads values produced by existing calculation logic (window.personFees and lastSummaryPrem)
+// - Adds a wrapper around calculateAll to ensure renderSection6 is called after every full recalculation
+// - Creates a payment frequency selector at runtime if not present, and shows per-period breakdown
+(function(){
+  // helper: floor to thousand
+  function floorToThousand(v){ return Math.floor(v/1000)*1000; }
+
+  function ensurePaymentFrequencyElement(){
+    let sel = document.getElementById('payment-frequency');
+    if(sel) return sel;
+    const results = document.getElementById('results-container');
+    if(!results) return null;
+    // insert at top of results-container
+    const wrapper = document.createElement('div');
+    wrapper.className = 'mb-4';
+    wrapper.innerHTML = `
+      <label for="payment-frequency" class="font-medium text-gray-700 block mb-1">Kỳ đóng phí</label>
+      <select id="payment-frequency" class="form-select w-full">
+        <option value="year">Năm (mặc định)</option>
+        <option value="half">Nửa năm</option>
+        <option value="quarter">Quý</option>
+      </select>
+    `;
+    results.insertBefore(wrapper, results.firstChild);
+    sel = wrapper.querySelector('#payment-frequency');
+    sel.addEventListener('change', ()=>{
+      renderSection6();
+    });
+    return sel;
+  }
+
+  function computeFrequencyBreakdown(baseMain, extra, suppTotal, freq){
+    const totalAnnual = (baseMain||0) + (extra||0) + (suppTotal||0);
+    if(freq==='year' || !freq){
+      return { periods:1, perPeriod: floorToThousand(baseMain+extra+suppTotal), totalYearFromPeriod: totalAnnual, diff:0, breakdown: { perMain: floorToThousand(baseMain), perExtra: floorToThousand(extra), perSupp: floorToThousand(suppTotal) } };
+    }
+    const periods = freq==='half'?2:4;
+    const perMain = floorToThousand(baseMain/periods);
+    const perExtra = floorToThousand(extra/periods);
+    const factor = freq==='half'?1.02:1.04;
+    // perSupp: Math.floor((annualSupp/1000 * factor / periods)) * 1000
+    const perSupp = Math.floor((suppTotal/1000 * factor / periods)) * 1000;
+    const perPeriod = perMain + perExtra + perSupp;
+    const totalYearFromPeriod = perPeriod * periods;
+    const diff = totalYearFromPeriod - totalAnnual;
+    return { periods, perPeriod, totalYearFromPeriod, diff, breakdown: { perMain, perExtra, perSupp } };
+  }
+
+  // render summary section (Section 6) inside results-container using existing window.personFees and DOM fields
+  window.renderSection6 = function renderSection6(){
+    try{
+      const results = document.getElementById('results-container');
+      if(!results) return;
+      // ensure payment frequency select exists (but don't duplicate if HTML already had it)
+      ensurePaymentFrequencyElement();
+
+      // gather base main and extra from DOM if possible
+      const baseMain = parseFormattedNumber(document.getElementById('main-premium-result')?.dataset?.base || '') || 0;
+      // fallback: try to read lastSummaryPrem stored by calculateAll
+      const last = window.lastSummaryPrem || {};
+      const baseMainGuess = last.baseMainPremium || 0;
+      const extraGuess = last.extraPremium || 0;
+      const mainTotalGuess = last.mainPremium || (baseMainGuess + extraGuess);
+      const suppTotalGuess = last.totalSupplementaryPremium || 0;
+      const totalGuess = last.totalPremium || (mainTotalGuess + suppTotalGuess);
+
+      // Prefer using window.lastSummaryPrem if available
+      const base = baseMainGuess;
+      const extra = extraGuess;
+      const mainTotal = mainTotalGuess;
+      const suppTotal = suppTotalGuess;
+      const total = totalGuess;
+
+      // Build HTML for details. Keep minimal changes to DOM structure.
+      let html = '';
+
+      // Main insured breakdown
+      html += `<div class="py-2 border-b">
+        <div class="flex justify-between items-center"><span class="text-gray-600">Người được bảo hiểm chính - Tổng phí:</span><span class="font-bold text-gray-900">${formatCurrency(mainTotal)}</span></div>
+        <div class="mt-2 text-sm text-gray-700 pl-2">
+          <div class="flex justify-between"><span>Phí sản phẩm chính:</span><span>${formatCurrency(base)}</span></div>
+          <div class="flex justify-between"><span>Phí đóng thêm:</span><span>${formatCurrency(extra)}</span></div>
+          <div class="flex justify-between"><span>Phí sản phẩm bổ sung (NĐBH chính):</span><span>${formatCurrency(window.personFees?.['main-person-container'] ? window.personFees['main-person-container'].supp : 0)}</span></div>
+        </div>
+      </div>`;
+
+      // Supplementary persons
+      const suppPersons = Array.from(document.querySelectorAll('#supplementary-insured-container .person-container'));
+      if(suppPersons.length>0){
+        html += `<div class="py-2 border-b"><div class="text-gray-600 mb-2">Người được bảo hiểm bổ sung</div>`;
+        suppPersons.forEach((p, idx)=>{
+          const id = p.id;
+          const nameEl = p.querySelector('.name-input');
+          const name = nameEl ? (nameEl.value||`NĐBH bổ sung ${idx+1}`) : `NĐBH bổ sung ${idx+1}`;
+          const fee = window.personFees && window.personFees[id] ? window.personFees[id].supp : 0;
+          html += `<div class="flex justify-between items-center py-1"><span class="text-sm">${sanitizeHtml(name)}</span><span class="font-semibold">${formatCurrency(fee)}</span></div>`;
+        });
+        html += `</div>`;
+      }
+
+      // Totals and breakdown
+      html += `<div class="py-2 border-b mt-2">
+        <div class="flex justify-between items-center"><span class="text-gray-800 font-semibold">Tổng phí (năm):</span><span class="font-bold text-aia-red">${formatCurrency(total)}</span></div>
+        <div class="text-sm text-gray-600 mt-2">
+          <div>+ Phí chính: ${formatCurrency(base)}</div>
+          <div>+ Phí đóng thêm: ${formatCurrency(extra)}</div>
+          <div>+ Phí sản phẩm bổ sung: ${formatCurrency(suppTotal)}</div>
+        </div>
+      </div>`;
+
+      // Frequency breakdown area (either existing element or create)
+      let freqEl = document.getElementById('frequency-breakdown');
+      if(!freqEl){
+        freqEl = document.createElement('div');
+        freqEl.id = 'frequency-breakdown';
+        freqEl.className = 'mt-3 text-sm text-gray-700';
+        // append near totals
+        results.appendChild(freqEl);
+      }
+
+      // Compute frequency breakdown using the function
+      const sel = document.getElementById('payment-frequency');
+      const freq = sel ? sel.value : 'year';
+      const freqInfo = computeFrequencyBreakdown(base, extra, suppTotal, freq);
+
+      // render freq breakdown
+      let freqHtml = '';
+      if(freqInfo.periods === 1){
+        freqHtml = `<div>Không hiển thị thêm (Kỳ = Năm). Tổng năm: <strong>${formatCurrency(total)}</strong></div>`;
+      } else {
+        freqHtml = `<div class="mb-2">Kỳ: ${freq==='half'?'Nửa năm':'Quý'}</div>`;
+        freqHtml += `<div class="grid grid-cols-2 gap-2">
+          <div>Phí sản phẩm chính:</div><div class="text-right">${formatCurrency(freqInfo.breakdown.perMain)}</div>
+          <div>Phí đóng thêm:</div><div class="text-right">${formatCurrency(freqInfo.breakdown.perExtra)}</div>
+          <div>Phí sản phẩm bổ sung:</div><div class="text-right">${formatCurrency(freqInfo.breakdown.perSupp)}</div>
+          <div class="font-semibold">Tổng:</div><div class="font-semibold text-right">${formatCurrency(freqInfo.perPeriod)}</div>
+          <div>Tổng năm:</div><div class="text-right">${formatCurrency(freqInfo.totalYearFromPeriod)}</div>
+          <div>Chênh lệch:</div><div class="text-right ${freqInfo.diff>0?'text-red-600':''}">${formatCurrency(freqInfo.diff)}</div>
+        </div>`;
+      }
+
+      // find where to place frequency html: if a dedicated container exists, use it
+      const freqContainer = document.getElementById('frequency-breakdown');
+      if(freqContainer){
+        freqContainer.innerHTML = freqHtml;
+      }
+
+      // finally inject main html details into a subcontainer (we try to keep structure consistent)
+      // look for an inner container we can update: supplementary-premiums-results exists; we will set its innerHTML to blank and append our details above the totals area.
+      const suppResults = document.getElementById('supplementary-premiums-results');
+      if(suppResults){
+        // put the detailed html before suppResults's parent block, but to keep minimal changes we set suppResults.innerHTML to list of supplementary items (already done above) and append totals after
+        // We'll create a temporary container for the main breakdown and insert it right above suppResults
+        let detailWrap = document.getElementById('_section6_detailwrap');
+        if(!detailWrap){
+          detailWrap = document.createElement('div');
+          detailWrap.id = '_section6_detailwrap';
+          suppResults.parentElement.insertBefore(detailWrap, suppResults);
+        }
+        detailWrap.innerHTML = html;
+      }
+
+    }catch(err){
+      console.error('renderSection6 error', err);
+    }
+  };
+
+  // [PATCH] wrap calculateAll to auto-render Section6 after compute.
+  if(typeof calculateAll === 'function'){
+    const __orig_calc = calculateAll;
+    calculateAll = function(){
+      const res = __orig_calc.apply(this, arguments);
+      try{ window.renderSection6(); }catch(e){ console.error(e); }
+      return res;
+    };
+  }
+
+  // initial run if page already loaded
+  if(document.readyState === 'complete' || document.readyState === 'interactive'){
+    setTimeout(()=>{ try{ ensurePaymentFrequencyElement(); renderSection6(); }catch(e){}} , 50);
+  }else{
+    document.addEventListener('DOMContentLoaded', ()=>{ try{ ensurePaymentFrequencyElement(); renderSection6(); }catch(e){} });
+  }
+
+})(); // end patch IIFE
+
+
+// ==== Enhanced Section 6 renderer V2 (align with new HTML IDs) ====
+(function(){
+  function roundToThousand(v){ return Math.round((Number(v)||0)/1000)*1000; }
+  function floorToThousand(v){ return Math.floor((Number(v)||0)/1000)*1000; }
+  function fmt(v){ return formatCurrency(v||0); }
+  function getFreq(){ const sel = document.getElementById('payment-frequency'); return sel ? sel.value : 'year'; }
+  function suppPerPeriod(annual, freq){
+    annual = Number(annual)||0;
+    if(freq==='half'){
+      const perUnits = Math.round((annual/1000)*1.02/2);
+      return perUnits*1000;
+    }
+    if(freq==='quarter'){
+      const perUnits = Math.round((annual/1000)*1.04/4);
+      return perUnits*1000;
+    }
+    return annual;
+  }
+  function mainExtraPerPeriod(annual, freq){
+    annual = Number(annual)||0;
+    if(freq==='half') return floorToThousand(annual/2);
+    if(freq==='quarter') return floorToThousand(annual/4);
+    return annual;
+  }
+
+  function render(){
+    const last = window.lastSummaryPrem || {};
+    const base = Number(last.baseMainPremium||0);
+    const extra = Number(last.extraPremium||0);
+    const mainTotal = Number(last.mainPremium||0);
+    let suppTotal = Number(last.totalSupplementaryPremium||0);
+
+    // derive per-person supp from window.personFees
+    const personFees = (window.personFees)||{};
+    const mainPerson = personFees['main-person-container']||{supp:0};
+    const mainSupp = Number(mainPerson.supp||0);
+
+    // Build per-supp lines
+    const suppListEl = document.getElementById('supp-insured-summaries');
+    if(suppListEl){
+      suppListEl.innerHTML = '';
+      // Collect MDP3 mapping
+      let mdp3SelectedId = null, mdp3Fee = 0;
+      try{
+        if(window.MDP3){
+          mdp3SelectedId = (window.MDP3.getSelectedId && window.MDP3.getSelectedId()) || (document.getElementById('mdp3-person-select')?.value||null);
+          mdp3Fee = Number(window.MDP3.getPremium()||0);
+        }
+      }catch(e){}
+
+      // Iterate all person containers except main
+      document.querySelectorAll('.person-container').forEach(cont=>{
+        if(cont.id==='main-person-container') return;
+        const info = getCustomerInfo(cont,false);
+        let supp = Number((personFees[cont.id]?.supp)||0);
+        if(mdp3SelectedId && mdp3SelectedId===cont.id) supp += mdp3Fee; // include MDP3 into this person
+        if(supp<=0) return;
+        const name = info.name || 'NĐBH bổ sung';
+        const row = document.createElement('div');
+        row.className = 'flex justify-between items-center py-1 text-sm';
+        row.innerHTML = `<span>Phí sản phẩm bổ sung của ${sanitizeHtml(name)}:</span><span class="font-semibold">${fmt(supp)}</span>`;
+        suppListEl.appendChild(row);
+      });
+
+      // Handle MDP3 = "Người khác"
+      if(mdp3Fee>0 && mdp3SelectedId==='other'){
+        const row = document.createElement('div');
+        row.className = 'flex justify-between items-center py-1 text-sm';
+        row.innerHTML = `<span>Phí MDP3 (Người khác):</span><span class="font-semibold">${fmt(mdp3Fee)}</span>`;
+        suppListEl.appendChild(row);
+      }
+    }
+
+    // Update main-insured block
+    const mainMainFeeEl = document.getElementById('main-insured-main-fee');
+    const mainExtraFeeEl = document.getElementById('main-insured-extra-fee');
+    const mainSuppFeeEl = document.getElementById('main-insured-supp-fee');
+    const mainTotalEl = document.getElementById('main-insured-total');
+    if(mainMainFeeEl) mainMainFeeEl.textContent = fmt(base);
+    if(mainExtraFeeEl) mainExtraFeeEl.textContent = fmt(extra);
+    if(mainSuppFeeEl) mainSuppFeeEl.textContent = fmt(mainSupp);
+    if(mainTotalEl) mainTotalEl.textContent = fmt(base+extra+mainSupp);
+
+    // Recompute suppTotal based on personFees to be safe (includes MDP3 as arranged above)
+    let recomputedSuppTotal = 0;
+    for(const pid in personFees){ if(pid==='main-person-container'){ recomputedSuppTotal += Number(personFees[pid].supp||0); } else { recomputedSuppTotal += Number(personFees[pid].supp||0); } }
+    // add mdp3 if selected other or not already included
+    try{
+      const mdp3SelectedId2 = (window.MDP3 && (window.MDP3.getSelectedId && window.MDP3.getSelectedId())) || (document.getElementById('mdp3-person-select')?.value||null);
+      const mdp3Fee2 = window.MDP3 ? Number(window.MDP3.getPremium()||0) : 0;
+      if(mdp3Fee2>0 && mdp3SelectedId2 && mdp3SelectedId2!=='main-person-container'){
+        // If not main, and not included in recomputed sum for main, we need to include; if it's a supplemental person, already added above since we didn't differentiate
+        if(mdp3SelectedId2==='other'){ recomputedSuppTotal += mdp3Fee2; }
+        // else already added in that person's supp via earlier injection in UI only; recomputedSuppTotal didn't include it, so add here as well:
+        else { recomputedSuppTotal += mdp3Fee2; }
+      }
+    }catch(e){}
+    suppTotal = recomputedSuppTotal || suppTotal;
+
+    // Summary totals
+    const totalAnnual = (base+extra) + suppTotal;
+    const sumMainEl = document.getElementById('summary-main-fee');
+    const sumExtraEl = document.getElementById('summary-extra-fee');
+    const sumSuppEl = document.getElementById('summary-supp-fee');
+    const sumTotalEl = document.getElementById('summary-total');
+    if(sumMainEl) sumMainEl.textContent = fmt(base);
+    if(sumExtraEl) sumExtraEl.textContent = fmt(extra);
+    if(sumSuppEl) sumSuppEl.textContent = fmt(suppTotal);
+    if(sumTotalEl) sumTotalEl.textContent = fmt(totalAnnual);
+
+    // Frequency breakdown
+    const freq = getFreq();
+    const breakdown = document.getElementById('frequency-breakdown');
+    if(!breakdown) return;
+
+    if(freq==='year'){
+      breakdown.classList.add('hidden');
+      // Also keep compatibility IDs updated
+      return;
+    }
+
+    const perMainExtra = mainExtraPerPeriod(base+extra, freq);
+    const perSupp = suppPerPeriod(suppTotal, freq);
+    const periods = (freq==='half'?2:4);
+    const perTotal = perMainExtra + perSupp;
+    const yearFromPeriod = perTotal * periods;
+    const diff = yearFromPeriod - totalAnnual;
+
+    const el1 = document.getElementById('freq-main-plus-extra');
+    const el2 = document.getElementById('freq-supp-total');
+    const el3 = document.getElementById('freq-total-period');
+    const el4 = document.getElementById('freq-total-year');
+    const el5 = document.getElementById('freq-diff');
+
+    if(el1) el1.textContent = fmt(perMainExtra);
+    if(el2) el2.textContent = fmt(perSupp);
+    if(el3) el3.textContent = fmt(perTotal);
+    if(el4) el4.textContent = fmt(yearFromPeriod);
+    if(el5) el5.textContent = fmt(diff);
+    breakdown.classList.remove('hidden');
+  }
+
+  // Expose and hook
+  window.renderSection6V2 = render;
+
+  // re-render on payment-frequency change
+  document.addEventListener('change', function(e){
+    if(e.target && e.target.id==='payment-frequency'){
+      render();
+      // if modal open, regenerate table
+      const modal = document.getElementById('summary-modal');
+      if(modal && !modal.classList.contains('hidden') && typeof generateSummaryTable==='function'){
+        try{ generateSummaryTable(); }catch(err){}
+      }
+    }
+  });
+
+  // Also render after initial calculateAll (calculateAll calls updateSummaryUI)
+  try{
+    const origCalc = window.calculateAll;
+    if(typeof origCalc==='function'){
+      window.calculateAll = function(){ const r = origCalc.apply(this, arguments); try{ render(); }catch(e){} return r; };
+    }
+  }catch(e){}
+})();
+
+// ===== Section 6 V2 (non-invasive) =====
+(() => {
+  // Avoid re-defining
+  if (window.__SECTION6_V2_ATTACHED__) return;
+  window.__SECTION6_V2_ATTACHED__ = true;
+
+  function roundTo1000(n){ n = Number(n)||0; if(n<=0) return 0; return Math.round(n/1000)*1000; }
+  function floorTo1000(n){ n = Number(n)||0; if(n<=0) return 0; return Math.floor(n/1000)*1000; }
+  function fmt(n){ return (Number(n)||0).toLocaleString('vi-VN') + ' VNĐ'; }
+  function getFreq(){
+    const sel = document.getElementById('payment-frequency');
+    return sel ? sel.value : 'year';
+  }
+
+  // Read annual numbers already computed by core logic
+  function readAnnuals(){
+    const pf = (window.personFees)||{};
+    const main = pf['main-person-container']||{mainBase:0, supp:0};
+    const base = Number(main.mainBase||0);
+    const extra = (typeof getExtraPremiumValue==='function') ? Number(getExtraPremiumValue()||0) : 0;
+
+    // supplementaries
+    let suppTotal = Number(main.supp||0);
+
+    // add all supplementary persons
+    document.querySelectorAll('#supplementary-insured-container .person-container').forEach(cont => {
+      const id = cont.id;
+      const fee = pf[id] ? Number(pf[id].supp||0) : 0;
+      suppTotal += fee;
+    });
+
+    // include MDP3 if "other" selected or selected main (main person MDP3 fee goes to main-insured-supp or supp-insured line; we only need overall total here)
+    try{
+      if(window.MDP3){
+        const selId = window.MDP3.getSelectedId ? window.MDP3.getSelectedId() :
+                      (document.getElementById('mdp3-person-select')?.value||null);
+        const fee = Number(window.MDP3.getPremium ? (window.MDP3.getPremium()||0) : 0);
+        if(fee>0){
+          // if assigned to specific person, that person fee was not merged into pf totals.
+          // Add regardless to ensure overall total includes it.
+          suppTotal += fee;
+        }
+      }
+    }catch(e){}
+
+    return { base, extra, suppTotal };
+  }
+
+  function computeFrequency(base, extra, suppAnnual, freq){
+    const totalAnnual = base + extra + suppAnnual;
+    if(freq==='year'){
+      return { periods:1, perMain:base, perExtra:extra, perSupp:suppAnnual, perPeriod: totalAnnual, totalYearFromPeriod: totalAnnual, diff: 0 };
+    }
+    const periods = (freq==='half') ? 2 : 4;
+    const perMain = roundTo1000(base/periods);
+    const perExtra = roundTo1000(extra/periods);
+    const factor = (freq==='half') ? 1.02 : 1.04;
+    const perSupp = Math.round((suppAnnual/1000 * factor / periods)) * 1000; // << round as spec
+    const perPeriod = perMain + perExtra + perSupp;
+    const totalYearFromPeriod = perPeriod * periods;
+    const diff = totalYearFromPeriod - totalAnnual;
+    return { periods, perMain, perExtra, perSupp, perPeriod, totalYearFromPeriod, diff };
+  }
+
+  function renderSection6V2(){
+    try{
+      const { base, extra, suppTotal } = readAnnuals();
+      const total = base + extra + suppTotal;
+
+      // line items
+      const elMainFee = document.getElementById('main-insured-main-fee');
+      const elExtra = document.getElementById('main-insured-extra-fee');
+      const elMainSupp = document.getElementById('main-insured-supp-fee');
+      const elMainTotal = document.getElementById('main-insured-total');
+      if(elMainFee) elMainFee.textContent = fmt(base);
+      if(elExtra) elExtra.textContent = fmt(extra);
+      if(elMainSupp){
+        const pf = (window.personFees||{})['main-person-container']||{supp:0};
+        elMainSupp.textContent = fmt(Number(pf.supp||0));
+      }
+      if(elMainTotal) elMainTotal.textContent = fmt(base + extra + ((window.personFees||{})['main-person-container']?.supp||0));
+
+      // supplementary persons list
+      const list = document.getElementById('supp-insured-summaries');
+      if(list){
+        list.innerHTML = '';
+        document.querySelectorAll('#supplementary-insured-container .person-container').forEach((cont, idx)=>{
+          const pf = (window.personFees||{})[cont.id]||{supp:0};
+          const name = cont.querySelector('.name-input')?.value || `NĐBH bổ sung ${idx+1}`;
+          const row = document.createElement('div');
+          row.className = 'flex justify-between items-center py-1 text-sm';
+          row.innerHTML = `<span>Phí sản phẩm bổ sung của ${sanitizeHtml(name)}:</span><span class="font-semibold">${fmt(pf.supp||0)}</span>`;
+          list.appendChild(row);
+        });
+        // if MDP3 is assigned to "other", show it as a separate line
+        try{
+          if(window.MDP3){
+            const selId = window.MDP3.getSelectedId ? window.MDP3.getSelectedId() :
+                          (document.getElementById('mdp3-person-select')?.value||null);
+            const fee = Number(window.MDP3.getPremium ? (window.MDP3.getPremium()||0) : 0);
+            if(selId==='other' && fee>0){
+              const row = document.createElement('div');
+              row.className = 'flex justify-between items-center py-1 text-sm';
+              row.innerHTML = `<span>Phí MDP 3.0 (Người khác):</span><span class="font-semibold">${fmt(fee)}</span>`;
+              list.appendChild(row);
+            }
+          }
+        }catch(e){}
+      }
+
+      // totals
+      const sumMain = document.getElementById('summary-main-fee');
+      const sumExtra = document.getElementById('summary-extra-fee');
+      const sumSupp = document.getElementById('summary-supp-fee');
+      const sumTotal = document.getElementById('summary-total');
+      if(sumMain) sumMain.textContent = fmt(base);
+      if(sumExtra) sumExtra.textContent = fmt(extra);
+      if(sumSupp) sumSupp.textContent = fmt(suppTotal);
+      if(sumTotal) sumTotal.textContent = fmt(total);
+      const totalPremiumResult = document.getElementById('total-premium-result');
+      if(totalPremiumResult) totalPremiumResult.textContent = fmt(total);
+
+      // frequency breakdown
+      const freq = getFreq();
+      const fb = document.getElementById('frequency-breakdown');
+      if(fb){
+        if(freq==='year'){
+          fb.classList.add('hidden');
+          fb.innerHTML = '';
+        } else {
+          fb.classList.remove('hidden');
+          const info = computeFrequency(base, extra, suppTotal, freq);
+          const el1 = document.getElementById('freq-main-plus-extra');
+          const el2 = document.getElementById('freq-supp-total');
+          const el3 = document.getElementById('freq-total-period');
+          const el4 = document.getElementById('freq-total-year');
+          const el5 = document.getElementById('freq-diff');
+          if(el1) el1.textContent = fmt(info.perMain + info.perExtra);
+          if(el2) el2.textContent = fmt(info.perSupp);
+          if(el3) el3.textContent = fmt(info.perPeriod);
+          if(el4) el4.textContent = fmt(info.totalYearFromPeriod);
+          if(el5) el5.textContent = fmt(info.diff);
+        }
+      }
+    }catch(err){
+      console.error('renderSection6V2 error', err);
+    }
+  }
+  window.renderSection6V2 = renderSection6V2;
+
+  // Override summary generator to add "Chênh lệch so với năm"
+  const __origGen = window.generateSummaryTable;
+  window.generateSummaryTable = function(){
+    const container = document.getElementById('summary-content-container');
+    const modal = document.getElementById('summary-modal');
+    if(container) container.innerHTML = '';
+    try{
+      // Basic info
+      const mainContainer = document.getElementById('main-person-container');
+      const mainInfo = getCustomerInfo(mainContainer, true);
+
+      // Determine payment term
+      let paymentTerm = 0;
+      if (mainInfo.mainProduct === 'TRON_TAM_AN') paymentTerm = 10;
+      else if (mainInfo.mainProduct === 'AN_BINH_UU_VIET') paymentTerm = parseInt(document.getElementById('abuv-term')?.value || '15', 10);
+      else paymentTerm = parseInt(document.getElementById('payment-term')?.value || '0', 10) || 0;
+
+      // Target age validation (reuse existing UI)
+      const targetAgeInput = document.getElementById('target-age-input');
+      const targetAge = parseInt(targetAgeInput?.value || '0', 10);
+      if(isNaN(targetAge) || targetAge < (mainInfo.age + Math.max(paymentTerm-1, 0)) || targetAge > 100){
+        throw new Error(`Không hợp lệ, từ ${mainInfo.age + Math.max(paymentTerm-1, 0)} đến 100`);
+      }
+
+      const baseAnnual = calculateMainPremium(mainInfo);
+      const extraAnnual = getExtraPremiumValue ? Number(getExtraPremiumValue()||0) : 0;
+      const initialMainWithExtra = baseAnnual + extraAnnual;
+      const totalMaxSupport = Math.floor(baseAnnual / 4000000) * 100000;
+
+      // Collect supplementary persons (DOM order)
+      const suppPersons = [];
+      document.querySelectorAll('#supplementary-insured-container .person-container').forEach(p => {
+        suppPersons.push(getCustomerInfo(p, false));
+      });
+
+      // Build header
+      let html = `<div class="mb-4">
+        <div class="text-lg font-semibold mb-2">Tóm tắt sản phẩm</div>
+      </div>`;
+
+      // Table header
+      html += `<table class="w-full text-left border-collapse"><thead class="bg-gray-100"><tr>`;
+      html += `<th class="p-2 border">Năm HĐ</th>`;
+      html += `<th class="p-2 border">Tuổi NĐBH chính<br>(${sanitizeHtml(mainInfo.name)})</th>`;
+      html += `<th class="p-2 border">Phí chính</th>`;
+      html += `<th class="p-2 border">Phí đóng thêm</th>`;
+      html += `<th class="p-2 border">Phí bổ sung<br>(${sanitizeHtml(mainInfo.name)})</th>`;
+      suppPersons.forEach(person => {
+        html += `<th class="p-2 border">Phí bổ sung<br>(${sanitizeHtml(person.name)})</th>`;
+      });
+      html += `<th class="p-2 border">Tổng cộng</th>`;
+      html += `<th class="p-2 border">Chênh lệch so với năm</th>`;
+      html += `</tr></thead><tbody>`;
+
+      const freq = getFreq();
+      const periods = (freq==='half') ? 2 : (freq==='quarter' ? 4 : 1);
+      const factor = (freq==='half') ? 1.02 : (freq==='quarter' ? 1.04 : 1.0);
+
+      for(let i=0; (mainInfo.age + i) <= targetAge; i++){
+        const yr = i + 1;
+        const ageThisYear = mainInfo.age + i;
+
+        // Main + extra for this year
+        const mainThisYear = (yr <= paymentTerm) ? baseAnnual : 0;
+        const extraThisYear = (yr <= paymentTerm) ? extraAnnual : 0;
+
+        // Supplementaries for main person this year
+        let suppMain = 0;
+        const mainSuppCont = document.querySelector('#main-supp-container .supplementary-products-container');
+        if (mainSuppCont){
+          suppMain += calculateHealthSclPremium({ ...mainInfo, age: ageThisYear }, mainSuppCont, ageThisYear);
+          suppMain += calculateBhnPremium({ ...mainInfo, age: ageThisYear }, mainSuppCont, ageThisYear);
+          suppMain += calculateAccidentPremium({ ...mainInfo, age: ageThisYear }, mainSuppCont, ageThisYear);
+          suppMain += calculateHospitalSupportPremium({ ...mainInfo, age: ageThisYear }, baseAnnual, mainSuppCont, 0, ageThisYear);
+        }
+
+        // Supplementaries for each extra person this year
+        let suppEachArr = [];
+        let totalHsStbh = 0;
+        suppPersons.forEach(person => {
+          const cont = person.container?.querySelector('.supplementary-products-container');
+          let s = 0;
+          if(cont){
+            s += calculateHealthSclPremium({ ...person, age: person.age + i }, cont, person.age + i);
+            s += calculateBhnPremium({ ...person, age: person.age + i }, cont, person.age + i);
+            s += calculateAccidentPremium({ ...person, age: person.age + i }, cont, person.age + i);
+            s += calculateHospitalSupportPremium({ ...person, age: person.age + i }, baseAnnual, cont, 0, person.age + i);
+          }
+          suppEachArr.push(s);
+        });
+
+        // MDP3 for the selected assignee (count into that person's supplement or standalone if "other")
+        try{
+          if(window.MDP3){
+            const selId = window.MDP3.getSelectedId ? window.MDP3.getSelectedId() :
+                          (document.getElementById('mdp3-person-select')?.value||null);
+            const fee = Number(window.MDP3.getPremium ? (window.MDP3.getPremium()||0) : 0);
+            if(fee>0){
+              if(selId==='main-person-container') suppMain += fee;
+              else if(selId==='other') { /* count later into overall total only */ }
+              else {
+                const idx = suppPersons.findIndex(p => p.container?.id === selId);
+                if(idx>=0) suppEachArr[idx] += fee;
+              }
+            }
+          }
+        }catch(e){}
+
+        const annualSupp = suppMain + suppEachArr.reduce((a,b)=>a+b,0);
+        const annualYearlyTotal = mainThisYear + extraThisYear + annualSupp;
+
+        // apply frequency (supplementary gets factor, main/extra simple split)
+        const perMain = (periods===1) ? mainThisYear : roundTo1000(mainThisYear/periods);
+        const perExtra = (periods===1) ? extraThisYear : roundTo1000(extraThisYear/periods);
+        const perSupp = (periods===1) ? annualSupp : (Math.round((annualSupp/1000 * factor / periods)) * 1000);
+        const perPeriod = perMain + perExtra + perSupp;
+        const totalFromPeriod = perPeriod * periods;
+        const diff = totalFromPeriod - annualYearlyTotal;
+
+        // Row
+        html += `<tr>`;
+        html += `<td class="p-2 border text-center">${yr}</td>`;
+        html += `<td class="p-2 border text-center">${ageThisYear}</td>`;
+        html += `<td class="p-2 border text-right">${fmt(mainThisYear)}</td>`;
+        html += `<td class="p-2 border text-right">${fmt(extraThisYear)}</td>`;
+        html += `<td class="p-2 border text-right">${fmt(suppMain)}</td>`;
+        suppEachArr.forEach(s => { html += `<td class="p-2 border text-right">${fmt(s)}</td>`; });
+        html += `<td class="p-2 border text-right">${fmt(totalFromPeriod)}</td>`;
+        html += `<td class="p-2 border text-right">${periods===1 ? '' : fmt(diff)}</td>`;
+        html += `</tr>`;
+      }
+
+      html += `</tbody></table>`;
+      if(container) container.innerHTML = html;
+      if(modal) modal.classList.remove('hidden');
+    }catch(err){
+      if(container) container.innerHTML = `<div class="text-red-600">${sanitizeHtml(err.message||String(err))}</div>`;
+      if(modal) modal.classList.remove('hidden');
+    }
+  };
+
+  // Render once DOM is interactive
+  document.addEventListener('DOMContentLoaded', () => {
+    try { renderSection6V2(); } catch(e){}
+  });
+  // Re-render on user interactions (do not override core calculateAll)
+  document.body.addEventListener('input', () => { try { renderSection6V2(); } catch(e){} });
+  document.body.addEventListener('change', () => { try { renderSection6V2(); } catch(e){} });
+})();
+
+
+
+/* ===============================================================
+ * UI Enhancer v3 (Stable & Fast)
+ * - Restores results-container wrapper & hidden legacy IDs in HTML.
+ * - Scoped MutationObserver to #results-container to avoid heavy loops.
+ * - "Set-if-changed" to prevent mutation storms/infinite loops.
+ * - Period breakdown: Half/Quarter incl. diff; hides zero rows.
+ * =============================================================== */
+(function() {
+  const $$ = (sel, root=document) => root.querySelector(sel);
+  const toInt = (s) => {
+    if (s == null) return 0;
+    const n = String(s).replace(/[^\d]/g, "");
+    return n ? parseInt(n, 10) : 0;
+  };
+  const fmt = (n) => {
+    try { return n.toLocaleString("vi-VN") + " VNĐ"; }
+    catch(e){ return (n+"").replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " VNĐ"; }
+  };
+  const round1000 = (n) => Math.round(n/1000)*1000;
+  const setText = (id, val) => {
+    const el = typeof id === "string" ? $$(id) : id;
+    if (!el) return;
+    const target = fmt(Math.max(0, Math.round(val)));
+    if (el.textContent !== target) el.textContent = target;
+  };
+
+  function computeYearTotals() {
+    const main = toInt(($$("#main-insured-main-fee")||{}).textContent);
+    const extra = toInt(($$("#main-insured-extra-fee")||{}).textContent);
+    const suppAll = toInt(($$("#summary-supp-fee")||{}).textContent);
+    const totalEl = $$("#summary-total");
+    const total = totalEl ? toInt(totalEl.textContent) : (main + extra + suppAll);
+    return {main, extra, suppAll, total, mainPlusExtra: main + extra};
+  }
+
+  function updateBadge() {
+    const sel = $$("#payment-frequency");
+    const badge = $$("#badge-frequency");
+    if (!sel || !badge) return;
+    const map = {year:"Năm", half:"Nửa năm", quarter:"Quý"};
+    const label = map[sel.value] || "Năm";
+    if (badge.textContent !== label) badge.textContent = label;
+  }
+
+  function updatePeriodBreakdown() {
+    const sel = $$("#payment-frequency");
+    const box = $$("#frequency-breakdown");
+    if (!sel || !box) return;
+    const show = sel.value !== "year";
+    box.classList.toggle("hidden", !show);
+    if (!show) return;
+
+    const {mainPlusExtra, suppAll, total} = computeYearTotals();
+
+    // Main+Extra theo kỳ: chia đều
+    const mainExtraPeriod = sel.value === "half"
+      ? mainPlusExtra / 2
+      : sel.value === "quarter" ? mainPlusExtra / 4 : mainPlusExtra;
+
+    // Supplement theo kỳ: áp dụng 1.02/1.04 và làm tròn *1000
+    let suppPeriod;
+    if (sel.value === "half") {
+      suppPeriod = round1000((suppAll/1000 * 1.02 / 2) * 1000);
+    } else if (sel.value === "quarter") {
+      suppPeriod = round1000((suppAll/1000 * 1.04 / 4) * 1000);
+    } else {
+      suppPeriod = suppAll;
+    }
+
+    const totalPeriod = Math.round(mainExtraPeriod + suppPeriod);
+    const toYear = sel.value === "half" ? totalPeriod * 2 : sel.value === "quarter" ? totalPeriod * 4 : total;
+    const diff = toYear - total;
+
+    setText("#freq-main-plus-extra", mainExtraPeriod);
+    setText("#freq-supp-total", suppPeriod);
+    setText("#freq-total-period", totalPeriod);
+    setText("#freq-total-year", toYear);
+    setText("#freq-diff", diff);
+
+    // Ẩn chênh lệch nếu 0
+    const diffEl = $$("#freq-diff");
+    if (diffEl) {
+      const row = diffEl.closest("div");
+      if (row) row.classList.toggle("hidden", diff === 0);
+    }
+  }
+
+  function hideZeroLines() {
+    const pairs = [
+      "#main-insured-main-fee",
+      "#main-insured-extra-fee",
+      "#main-insured-supp-fee",
+      "#summary-supp-fee"
+    ];
+    pairs.forEach(id => {
+      const el = $$(id);
+      if (!el) return;
+      const row = el.closest("li,div");
+      const val = toInt(el.textContent);
+      if (row) row.classList.toggle("hidden", val === 0);
+    });
+  }
+
+  function setupSuppAccordion() {
+    const btn = $$("#toggle-supp-list-btn");
+    const list = $$("#supp-insured-summaries");
+    if (!btn || !list) return;
+    btn.addEventListener("click", () => {
+      list.classList.toggle("hidden");
+      btn.textContent = list.classList.contains("hidden") ? "Xem từng người" : "Ẩn danh sách";
+    });
+  }
+
+  function refreshUI() {
+    updateBadge();
+    hideZeroLines();
+    updatePeriodBreakdown();
+  }
+
+  function setupObservers() {
+    const root = $$("#results-container");
+    if (!root) return;
+    const obs = new MutationObserver((mutations) => {
+      // Filter out attribute-only mutations to reduce loops
+      if (!mutations.some(m => m.type === "childList" || m.type === "characterData")) return;
+      refreshUI();
+    });
+    obs.observe(root, {subtree:true, childList:true, characterData:true});
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setupSuppAccordion();
+    const sel = $$("#payment-frequency");
+    if (sel) sel.addEventListener("change", refreshUI);
+    refreshUI();
+    setupObservers();
+  });
+})();
