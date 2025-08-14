@@ -206,7 +206,169 @@
 
 <!-- Scripts -->
 <script type="module" src="logic.js"></script>
-<script src="logic.hotfix.js?v=1"></script>
 <script type="module" src="data.js"></script>
+<script>
+/* --- HOTFIX INLINE (chạy chắc chắn) --- */
+(function(){
+  // Badge xác nhận đã load
+  (function okBadge(){
+    const b = document.createElement('div');
+    b.textContent = 'HOTFIX ✓';
+    Object.assign(b.style,{position:'fixed',right:'8px',bottom:'8px',padding:'2px 6px',background:'#16a34a',color:'#fff',fontSize:'12px',borderRadius:'6px',zIndex:99999,opacity:.8});
+    document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(b));
+    setTimeout(()=>b.remove(), 4000);
+  })();
+
+  const q  = (s,r=document)=>r.querySelector(s);
+  const qa = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  const int = t => {const v=parseInt(String(t||'').replace(/[^\d\-]/g,''),10);return isNaN(v)?0:v};
+  const cur = n => (Number(n)||0).toLocaleString('vi-VN');
+  const san = s => String(s??'');
+
+  /* 1) Nút "Xem từng người" giữ nguyên nhãn, không đổi khi đổi kỳ */
+  function lockToggleBtn(){
+    const btn=q('#toggle-supp-list-btn'), list=q('#supp-insured-summaries');
+    if(!btn||!list) return;
+    const LABEL='Xem từng người';
+    const clone = btn.cloneNode(true);
+    btn.replaceWith(clone);
+    clone.textContent = LABEL;
+    clone.addEventListener('click', e=>{ e.preventDefault(); list.classList.toggle('hidden'); clone.textContent=LABEL; }, true);
+    new MutationObserver(()=>{ if((clone.textContent||'').trim()!==LABEL) clone.textContent=LABEL; })
+      .observe(clone,{childList:true,characterData:true,subtree:true});
+  }
+
+  /* 2) Danh sách từng người: thêm dòng NĐBH chính + cộng Miễn đóng phí 3.0 đúng người */
+  function getMdp3(){
+    try{
+      if(!q('#mdp3-enable')?.checked) return {id:null,fee:0};
+      const api=window.MDP3||{};
+      return { id: api.getSelectedId?api.getSelectedId():null, fee: Number(api.getPremium?api.getPremium():0)||0 };
+    }catch(_){ return {id:null,fee:0}; }
+  }
+  function adjustSuppList(){
+    const wrap=q('#supp-insured-summaries'); if(!wrap) return;
+    const mainName = q('#main-person-container .name-input')?.value?.trim() || 'NĐBH chính';
+    let hasMainRow = qa(':scope > *',wrap).some(el => (el.textContent||'').includes(mainName));
+    if(!hasMainRow){
+      const dv=document.createElement('div');
+      dv.className='flex justify-between items-center py-1 text-sm';
+      dv.innerHTML=`<span>${san(mainName)}</span><span class="font-semibold">0</span>`;
+      wrap.prepend(dv);
+    }
+    const {id:mdpId,fee:mdpFee}=getMdp3();
+    if(mdpFee>0){
+      let targetName=null;
+      if(mdpId==='main-person-container') targetName=mainName;
+      else if(mdpId && mdpId!=='other'){
+        const c=document.getElementById(mdpId);
+        targetName=c?.querySelector('.name-input')?.value?.trim()||null;
+      }
+      if(targetName){
+        const row=qa(':scope > *',wrap).find(el => (el.textContent||'').includes(targetName));
+        if(row){
+          const val=row.querySelector('span:last-child');
+          const curVal=int(val?.textContent);
+          val.textContent=cur(curVal+mdpFee);
+        }
+      }
+      // "other" => không thêm dòng riêng
+    }
+  }
+  // bọc render gốc (nếu có), luôn hậu xử lý
+  (function wrapSuppList(){
+    const orig = window.renderSuppListSimple || window.renderSuppListSimplePatched;
+    window.renderSuppListSimple = function(){
+      if(typeof orig==='function') try{ orig.apply(this,arguments); }catch(_){}
+      try{ adjustSuppList(); }catch(_){}
+    };
+  })();
+
+  /* 3) Khối kỳ đóng phí: xoá dòng "Kỳ: ...", ẩn dòng = 0, ẩn "Chênh lệch" khi kỳ = Năm */
+  function cleanupFrequencyPanel(){
+    const pane=q('#frequency-breakdown'), sel=q('#payment-frequency');
+    if(!pane||!sel) return;
+    // xoá dòng "Kỳ: ..."
+    const first=pane.querySelector(':scope > div');
+    if(first && /^\s*Kỳ\s*:/.test(first.textContent||'')) first.remove();
+
+    const isYear = sel.value==='year';
+    const ids=['freq-main-plus-extra','freq-supp-total','freq-total-period','freq-total-year','freq-diff'];
+    ids.forEach(id=>{
+      const el=q('#'+id); if(!el) return;
+      el.textContent=(el.textContent||'').replace(/\s*VNĐ\s*$/i,''); // bỏ VNĐ dư
+      const row=el.closest('div'); if(!row) return;
+      const v=int(el.textContent);
+      const hide=(v===0)|| (id==='freq-diff' && isYear);
+      row.classList.toggle('hidden',hide);
+    });
+    pane.classList.toggle('hidden', isYear);
+  }
+
+  /* 4) Báo cáo chi tiết: đổi nhãn "Số năm đóng phí"; điền STBH cho Miễn đóng phí 3.0; ẩn ô = 0; ẩn cột chênh lệch khi Năm */
+  function computeMdp3StbhBase(){
+    const pf=window.personFees||{};
+    let stbh=0;
+    if(Object.keys(pf).length){
+      for(const k in pf) stbh += (pf[k].mainBase||0) + (pf[k].supp||0);
+    }else{
+      qa('#supp-insured-summaries span:last-child').forEach(el=> stbh+=int(el.textContent));
+    }
+    return stbh;
+  }
+  function postprocessSummary(){
+    const box=q('#summary-content-container'); if(!box) return;
+    // đổi nhãn
+    box.querySelectorAll('th').forEach(th=>{
+      if(/Năm\s+đóng\s+phí/i.test(th.textContent||'')) th.textContent='Số năm đóng phí';
+    });
+    // điền STBH cho "Miễn đóng phí 3.0"
+    const stbh=computeMdp3StbhBase();
+    box.querySelectorAll('table tbody tr').forEach(tr=>{
+      const tds=tr.querySelectorAll('td');
+      if(tds.length>=5 && /Miễn đóng phí\s*3\.0/i.test(tds[1]?.textContent||'')){
+        const c=tds[2], txt=(c.textContent||'').trim();
+        if(txt==='—'||txt==='-') c.textContent=cur(stbh);
+      }
+    });
+    // ẩn ô = 0
+    box.querySelectorAll('td').forEach(td=>{ if(int(td.textContent)===0) td.textContent=''; });
+    // ẩn cột chênh lệch nếu kỳ = Năm
+    const sel=q('#payment-frequency'); const isYear=(sel?.value==='year');
+    if(isYear){
+      const ths=Array.from(box.querySelectorAll('thead th'));
+      const idx=ths.findIndex(th=>/Chênh lệch/i.test(th.textContent||''));
+      if(idx>=0){
+        ths[idx].style.display='none';
+        box.querySelectorAll('tbody tr').forEach(tr=>{ const c=tr.children[idx]; if(c) c.style.display='none'; });
+      }
+    }
+  }
+  (function wrapSummary(){
+    const orig=window.generateSummaryTable;
+    window.generateSummaryTable=function(){
+      if(typeof orig==='function') orig.apply(this,arguments);
+      try{ postprocessSummary(); }catch(_){}
+    };
+  })();
+
+  /* 5) Gắn vòng đời */
+  function start(){
+    try{ lockToggleBtn(); }catch(_){}
+    try{ cleanupFrequencyPanel(); }catch(_){}
+    try{ adjustSuppList(); }catch(_){}
+    // Sau mỗi lần UI update từ code cũ
+    const prev=window.updateSummaryUI;
+    window.updateSummaryUI=function(){
+      const r = typeof prev==='function' ? prev.apply(this,arguments) : undefined;
+      try{ cleanupFrequencyPanel(); }catch(_){}
+      try{ adjustSuppList(); }catch(_){}
+      return r;
+    };
+  }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',start); } else { start(); }
+})();
+</script>
+
 </body>
 </html>
