@@ -140,8 +140,224 @@ input[type="number"] { -moz-appearance: textfield; }
 
 /* Customize frequency breakdown display */
 #frequency-breakdown > div {
-  font-size: 1rem; /* slightly larger text for readability */
+  font-size: 1rem;
 }
 #frequency-breakdown > div.text-sm {
-  font-size: 0.875rem; /* keep smaller on designated elements */
+  font-size: 0.875rem;
+}
+
+/* ================== (BỔ SUNG) IMAGE / PRODUCT GALLERY MODULE ================== */
+/* Khối gallery giới thiệu công ty */
+.img-company-gallery{
+  margin:24px 0 32px;
+  padding:16px 12px 4px;
+  border:1px solid var(--gray-200);
+  border-radius:12px;
+  background:#fff;
+}
+.img-company-gallery h3{
+  margin:0 0 14px;
+  font-size:18px;
+  font-weight:600;
+  color:#111;
+}
+.img-company-grid{
+  display:grid;
+  gap:14px;
+  grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+}
+
+/* Khối gallery sản phẩm */
+.img-product-gallery{
+  margin:40px 0 60px;
+  padding:20px 16px 8px;
+  border:1px solid var(--gray-200);
+  border-radius:14px;
+  background:#fff;
+}
+.img-product-gallery h3{
+  margin:0 0 18px;
+  font-size:20px;
+  font-weight:700;
+  color:#111;
+}
+.img-product-block{ margin-bottom:36px; }
+.img-product-title{
+  font-size:16px;
+  font-weight:600;
+  margin:0 0 8px;
+  color:#333;
+}
+.img-grid{
+  display:grid;
+  gap:14px;
+  grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+}
+
+/* Hình & figure chung */
+.img-figure{
+  margin:0;
+  padding:10px;
+  background:#fafafa;
+  border:1px solid #ececec;
+  border-radius:10px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  position:relative;
+  cursor:zoom-in;
+  transition:box-shadow .2s, transform .2s;
+}
+.img-figure:hover{
+  box-shadow:0 2px 6px rgba(0,0,0,.12);
+}
+.img-figure:focus-within{
+  outline:2px solid var(--aia-red);
+  outline-offset:2px;
+}
+.img-thumb{
+  width:100%;
+  background:#fff;
+  border-radius:6px;
+  object-fit:contain;
+  max-height:250px;
+  transition:transform .25s ease, opacity .2s;
+}
+.img-thumb.loading{ opacity:0.3; }
+.img-thumb-error{
+  opacity:.55;
+  filter:grayscale(1);
+  outline:2px dashed #d33;
+}
+.img-caption{
+  font-size:12px;
+  line-height:1.35;
+  text-align:center;
+  color:#444;
+  min-height:28px;
+  overflow-wrap:break-word;
+}
+.orientation-portrait .img-thumb{ max-height:320px; }
+.orientation-landscape .img-thumb{ max-height:210px; }
+
+/* Lightbox */
+.img-lightbox{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  display:none;
+  font-family:inherit;
+}
+.img-lightbox.show{ display:block; }
+.img-lightbox-backdrop{
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,0.75);
+  backdrop-filter:blur(2px);
+}
+@media (prefers-reduced-transparency: reduce){
+  .img-lightbox-backdrop{ backdrop-filter:none; }
+}
+.img-lightbox-dialog{
+  position:absolute;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  max-width:92vw;
+  max-height:90vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:14px;
+  color:#fff;
+}
+.img-lightbox-dialog img{
+  max-width:92vw;
+  max-height:70vh;
+  object-fit:contain;
+  background:#111;
+  border-radius:10px;
+  box-shadow:0 0 0 1px #444;
+}
+.img-lightbox-caption{
+  font-size:14px;
+  max-width:80ch;
+  text-align:center;
+  line-height:1.35;
+}
+.img-lightbox-close{
+  position:absolute;
+  top:-44px;
+  right:-8px;
+  background:transparent;
+  color:#fff;
+  font-size:42px;
+  border:none;
+  cursor:pointer;
+  line-height:1;
+  padding:0 4px;
+}
+.img-lightbox-close:focus-visible{
+  outline:2px solid #fff;
+  border-radius:4px;
+}
+.img-lightbox-nav{
+  display:flex;
+  gap:16px;
+}
+.img-lightbox-nav button{
+  background:#fff;
+  color:#000;
+  border:none;
+  padding:8px 16px;
+  font-size:14px;
+  font-weight:600;
+  border-radius:24px;
+  cursor:pointer;
+  transition:background .2s, transform .15s;
+}
+.img-lightbox-nav button:hover:not(:disabled){
+  background:#f3f4f6;
+}
+.img-lightbox-nav button:active:not(:disabled){
+  transform:translateY(1px);
+}
+.img-lightbox-nav button:disabled{
+  opacity:.35;
+  cursor:default;
+}
+
+/* Hiệu ứng focus cho accessibility */
+.img-figure a:focus-visible,
+.img-figure button:focus-visible,
+.img-lightbox-nav button:focus-visible{
+  outline:2px solid var(--aia-red);
+  outline-offset:2px;
+}
+
+/* Tối ưu lưới trên màn nhỏ */
+@media (max-width:640px){
+  .img-company-grid{ grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); }
+  .img-grid{ grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+}
+
+/* Dark mode (nếu sau này bạn cho thêm class .dark vào body) */
+.dark .img-company-gallery,
+.dark .img-product-gallery{
+  background:#1f2937;
+  border-color:#374151;
+}
+.dark .img-figure{
+  background:#1f2937;
+  border-color:#374151;
+}
+.dark .img-caption{ color:#d1d5db; }
+.dark .img-lightbox-backdrop{ background:rgba(0,0,0,0.86); }
+
+/* Giảm chuyển động nếu user chọn reduce motion */
+@media (prefers-reduced-motion: reduce){
+  .img-thumb,
+  .img-figure,
+  .img-lightbox-nav button{
+    transition:none !important;
+  }
 }
