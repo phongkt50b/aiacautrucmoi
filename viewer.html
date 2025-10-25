@@ -671,7 +671,7 @@
 
     // 2. Chèn ảnh công ty TRƯỚC TOÀN BỘ bảng minh họa
     const companyFiles = state.imageConfig['company-intro-image'] || [];
-    const companyImgs = companyFiles.map(file => `images/${file}`);
+    const companyImgs = companyFiles.map(file => `/images/${file}`);
     const companyBlock = renderImageBlock(companyImgs, true);
     if(companyBlock){
       main.insertBefore(companyBlock, container);
@@ -686,7 +686,7 @@
     const prodSlug = payload.productSlug || (payload.productKey || '').toLowerCase();
     const prodKey = slugToKeyMap[prodSlug];
     const productFiles = state.imageConfig[prodKey] || [];
-    const productImgs = productFiles.map(file => `images/${file}`);
+    const productImgs = productFiles.map(file => `/images/${file}`);
     if(productImgs.length){
       const prodBlock = renderImageBlock(productImgs);
       insertAfterNode.parentNode.insertBefore(prodBlock, insertAfterNode.nextSibling);
@@ -702,7 +702,7 @@
 
         const riderKey = slugToKeyMap[rSlug];
         const riderFiles = state.imageConfig[riderKey] || [];
-        const riderImgs = riderFiles.map(file => `images/${file}`);
+        const riderImgs = riderFiles.map(file => `/images/${file}`);
 
         if(riderImgs.length) {
             const riderBlock = renderImageBlock(riderImgs);
