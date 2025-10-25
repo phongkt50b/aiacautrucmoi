@@ -1338,6 +1338,7 @@ document.addEventListener('DOMContentLoaded', () => {
     runWorkflow();
     if (window.MDP3) MDP3.init();
     if (window.renderSection6V2) window.renderSection6V2();
+    initViewerModal();
 });
 function runWorkflow() {
   updateStateFromUI();
@@ -2007,20 +2008,6 @@ function hideGlobalErrors() {
     box.innerHTML = '';
   }
 }
-function generateSummaryTable() {
-    runWorkflow();
-    const errors = collectSimpleErrors();
-    if (errors.length) {
-        showGlobalErrors(errors);
-        const box = document.getElementById('global-error-box');
-        if (box) {
-          box.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        return false;
-    }
-    // Logic to build and show modal
-    return true;
-}
 
 function renderSuppList(){
   const box = document.getElementById('supp-insured-summaries');
@@ -2063,19 +2050,198 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     btn._bound = true;
   }
+});
 
-  const viewerBtn = document.getElementById('btnFullViewer');
-  if (viewerBtn) {
+
+// ===================================================================================
+// ===== MODULE: SUMMARY MODAL & VIEWER (RESTORED FROM V1)
+// ===================================================================================
+
+const PRODUCT_SLUG_MAP = {
+  PUL_TRON_DOI: 'khoe-tron-ven',
+  PUL_15NAM: 'khoe-tron-ven',
+  PUL_5NAM: 'khoe-tron-ven',
+  KHOE_BINH_AN: 'khoe-binh-an',
+  VUNG_TUONG_LAI: 'vung-tuong-lai',
+  TRON_TAM_AN: 'tron-tam-an',
+  AN_BINH_UU_VIET: 'an-binh-uu-viet'
+};
+const RIDER_SLUG_MAP = {
+  health_scl: 'bung-gia-luc',
+  bhn: 'benh-hiem-ngheo-20',
+  accident: 'tai-nan',
+  hospital_support: 'ho-tro-vien-phi'
+};
+
+function buildViewerPayload() {
+  const mainKey = appState.mainProduct.key;
+  const mainPerson = appState.mainPerson || {};
+
+  let paymentTermFinal = appState.mainProduct.paymentTerm || 0;
+  const mainProductConfig = PRODUCT_CATALOG[mainKey];
+  if (mainProductConfig) {
+      if (mainProductConfig.group === 'PACKAGE') {
+          paymentTermFinal = mainProductConfig.packageConfig.fixedValues.paymentTerm;
+      } else if (mainProductConfig.ui.options?.paymentTerm) {
+          paymentTermFinal = parseInt(appState.mainProduct.options.paymentTerm || '0', 10) || paymentTermFinal;
+      }
+  }
+
+  const riderList = [];
+  const allPersons = [appState.mainPerson, ...appState.supplementaryPersons].filter(p => p);
+  allPersons.forEach(person => {
+    const suppObj = person.supplements || {};
+    Object.keys(suppObj).forEach(rid => {
+      if (!riderList.some(r => r.slug === rid)) {
+        const data = suppObj[rid];
+        const premiumDetail = (appState.fees.byPerson?.[person.id]?.suppDetails?.[rid]) || 0;
+        riderList.push({
+          slug: rid,
+          selected: true,
+          stbh: data.stbh || (rid === 'health_scl' ? getHealthSclStbhByProgram(data.program) : 0),
+          program: data.program,
+          scope: data.scope,
+          outpatient: !!data.outpatient,
+          dental: !!data.dental,
+          premium: premiumDetail
+        });
+      }
+    });
+  });
+
+  let mdp3Obj = null;
+  if (window.MDP3?.isEnabled()) {
+    const premium = MDP3.getPremium() || 0;
+    const selId = MDP3.getSelectedId() || null;
+    if (premium > 0 && selId) {
+      let selectedName = '', selectedAge = '';
+      if (selId === 'other') {
+        const form = document.getElementById('person-container-mdp3-other');
+        if (form) {
+          const info = collectPersonData(form, false);
+          selectedName = info?.name || 'Người khác';
+          selectedAge = info?.age || '';
+        }
+      } else {
+        const cont = document.getElementById(selId);
+        if (cont) {
+          const info = collectPersonData(cont, false);
+          selectedName = info?.name || 'NĐBH bổ sung';
+          selectedAge = info?.age || '';
+        }
+      }
+      mdp3Obj = { selectedId: selId, premium, selectedName, selectedAge };
+      if (!riderList.some(r => r.slug === 'mdp3')) {
+        riderList.push({ slug: 'mdp3', selected: true, stbh: 0, premium });
+      }
+    }
+  }
+
+  const baseMain = appState.fees.baseMain || 0;
+  const extra = appState.fees.extra || 0;
+  const totalSupp = appState.fees.totalSupp || 0;
+  const targetAgeInputVal = parseInt(document.getElementById('target-age-input')?.value || '0', 10);
+  const targetAge = targetAgeInputVal || ((mainPerson.age || 0) + paymentTermFinal - 1);
+
+  // TODO: `__exportExactSummaryHtml` is a placeholder for a function that generates the summary HTML.
+  // This needs to be implemented or ported from the original logic.
+  const summaryHtml = `<h2>Summary not implemented yet.</h2>`;
+
+  return {
+    v: 3,
+    productKey: mainKey,
+    productSlug: PRODUCT_SLUG_MAP[mainKey] || (mainKey || '').toLowerCase(),
+    mainPersonName: mainPerson.name || '',
+    mainPersonDob: mainPerson.dob || '',
+    mainPersonAge: mainPerson.age || 0,
+    mainPersonGender: mainPerson.gender === 'Nữ' ? 'F' : 'M',
+    mainPersonRiskGroup: mainPerson.riskGroup,
+    sumAssured: (mainKey === 'TRON_TAM_AN') ? 100000000 : (appState.mainProduct.stbh || 0),
+    paymentFrequency: appState.paymentFrequency,
+    paymentTerm: appState.mainProduct.paymentTerm,
+    paymentTermFinal,
+    targetAge,
+    premiums: { baseMain, extra, totalSupp, riders: riderList },
+    mdp3: mdp3Obj,
+    summaryHtml: "HTML Summary content here" // This should be dynamically generated
+  };
+}
+
+function openFullViewer() {
+  try {
+    const payload = buildViewerPayload();
+    if (!payload.productKey) {
+      alert('Chưa chọn sản phẩm chính.');
+      return;
+    }
+    const json = JSON.stringify(payload);
+    const b64 = btoa(unescape(encodeURIComponent(json)));
+
+    const viewerUrl = new URL('viewer.html', location.href);
+    viewerUrl.hash = `#v=${b64}`;
+
+    const modal = document.getElementById('viewer-modal');
+    const iframe = document.getElementById('viewer-iframe');
+    
+    iframe.src = 'about:blank';
+    modal.classList.add('loading', 'visible');
+
+    iframe.onload = () => {
+        modal.classList.remove('loading');
+    };
+    
+    iframe.src = viewerUrl.toString();
+
+  } catch (e) {
+    console.error('[FullViewer] Lỗi tạo payload:', e);
+    alert('Không tạo được dữ liệu để mở bảng minh họa.');
+  }
+}
+
+function initViewerModal() {
+    const viewerBtn = document.getElementById('btnFullViewer');
+    const modal = document.getElementById('viewer-modal');
+    const iframe = document.getElementById('viewer-iframe');
+    const closeBtn = document.getElementById('close-viewer-modal-btn');
+
+    if (!viewerBtn || !modal || !iframe || !closeBtn) {
+        console.error('Không tìm thấy đủ các thành phần của viewer modal.');
+        return;
+    }
+
     viewerBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        runWorkflow(); // Ensure latest state
-        setTimeout(() => { // Let UI update after workflow
-            if (generateSummaryTable()) { // generateSummaryTable now returns true on success
-                // This part would be for building a payload and opening the viewer
-                // For now, we just validate and can proceed if valid
-                alert("Validation passed. Viewer would open here.");
+        runWorkflow();
+        setTimeout(() => {
+            const errors = collectSimpleErrors();
+            if (errors.length) {
+                showGlobalErrors(errors);
+                const box = document.getElementById('global-error-box');
+                if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
             }
+            showGlobalErrors([]);
+            openFullViewer();
         }, 50);
     });
-  }
-});
+
+    const closeModal = () => {
+        modal.classList.remove('visible', 'loading');
+        iframe.src = 'about:blank';
+        document.removeEventListener('keydown', handleKeydown);
+    };
+
+    closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+
+    const handleKeydown = (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('visible')) {
+            closeModal();
+        }
+    };
+    document.addEventListener('keydown', handleKeydown);
+}
