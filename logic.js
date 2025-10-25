@@ -1550,6 +1550,17 @@ function generateSupplementaryProductsHtml() {
                       </div>
                     </div>`;
             } else if (ui.inputs?.includes('stbh')) {
+                let hintText = '';
+                if (prodId === 'bhn') {
+                    hintText = 'STBH từ 200 triệu đến 5 tỷ.';
+                } else if (prodId === 'accident') {
+                    hintText = 'STBH từ 10 triệu đến 8 tỷ.';
+                }
+                
+                const hintHtml = (prodId === 'hospital_support') 
+                    ? `<p class="hospital-support-validation text-sm text-gray-500 mt-1"></p>`
+                    : (hintText ? `<p class="text-sm text-gray-500 mt-1">${hintText}</p>` : '');
+
                 optionsHtml = `<div>
                   <label class="font-medium text-gray-700 block mb-1">Số tiền bảo hiểm (STBH)</label>
                   <input type="text" class="form-input ${prodId}-stbh" placeholder="${
@@ -1558,7 +1569,7 @@ function generateSupplementaryProductsHtml() {
                     prodId === 'hospital_support' ? 'Bội số 100.000 (đ/ngày)' : 'Nhập STBH'
                   }">
                 </div>
-                <p class="hospital-support-validation text-sm text-gray-500 mt-1"></p>`;
+                ${hintHtml}`;
             }
 
             return `
@@ -1608,7 +1619,7 @@ function initOccupationAutocomplete(input, container) {
       autocompleteContainer.appendChild(item);
     });
     autocompleteContainer.classList.remove('hidden');
-  };
+  });
 
   input.addEventListener('input', () => {
     const value = input.value.trim().toLowerCase();
@@ -2699,7 +2710,16 @@ function bm_renderSchemaTables(schemaKey, columns, summaryData) {
         if (r.isHeader) {
             return `<tr><td colspan="${r.colspan}" class="border px-2 py-2 font-semibold bg-gray-50">${sanitizeHtml(r.benef.labelBase)}</td></tr>`;
         }
-        const labelHtml = `${sanitizeHtml(r.benef.labelBase)}${r.benef.formulaLabel ? ` - ${sanitizeHtml(r.benef.formulaLabel)}` : ''}`;
+        let labelHtml = `${sanitizeHtml(r.benef.labelBase)}${r.benef.formulaLabel ? ` - ${sanitizeHtml(r.benef.formulaLabel)}` : ''}`;
+        
+        if (r.benef.multiClaim) {
+            const firstCellWithValue = r.cellsData.find(c => c.singleValue > 0);
+            if (firstCellWithValue) {
+                const calculationStr = ` - ${formatDisplayCurrency(firstCellWithValue.singleValue)} x ${r.benef.multiClaim}`;
+                labelHtml += calculationStr;
+            }
+        }
+
         const cellsHtml = r.cellsData.map(c => `<td class="border px-2 py-1 text-right">${c.displayValue}</td>`).join('');
         return `<tr><td class="border px-2 py-1">${labelHtml}</td>${cellsHtml}</tr>`;
     }).join('');
