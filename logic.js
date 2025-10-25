@@ -1617,7 +1617,7 @@ function initOccupationAutocomplete(input, container) {
       autocompleteContainer.appendChild(item);
     });
     autocompleteContainer.classList.remove('hidden');
-  });
+  };
 
   input.addEventListener('input', () => {
     const value = input.value.trim().toLowerCase();
