@@ -1617,7 +1617,7 @@ function initOccupationAutocomplete(input, container) {
       autocompleteContainer.appendChild(item);
     });
     autocompleteContainer.classList.remove('hidden');
-  };
+  });
 
   input.addEventListener('input', () => {
     const value = input.value.trim().toLowerCase();
@@ -2408,6 +2408,137 @@ function bm_collectColumns(summaryData) {
     });
 
     return colsBySchema;
+}
+
+function bm_renderSchemaTables(schemaKey, columns, summaryData) {
+    const schema = BENEFIT_MATRIX_SCHEMAS.find(s => s.key === schemaKey);
+    if (!schema || !columns.length) return '';
+
+    const rows = [];
+    schema.benefits.forEach(benef => {
+        if (benef.headerCategory) {
+            let need = false;
+            if (benef.headerCategory === 'maternity') need = columns.some(c => c.flags && c.flags.maternity);
+            else if (benef.headerCategory === 'outpatient') need = columns.some(c => c.flags && c.flags.outpatient);
+            else if (benef.headerCategory === 'dental') need = columns.some(c => c.flags && c.flags.dental);
+            if (need) rows.push({ isHeader: true, benef, colspan: 1 + columns.length });
+            return;
+        }
+
+        const cellsData = [];
+        let anyVisible = false;
+
+        columns.forEach(col => {
+            const persons = col.persons || [];
+            if ((benef.productCond && benef.productCond !== col.productKey) ||
+                (benef.minAge && !bm_anyAge(persons, benef.minAge)) ||
+                (benef.childOnly && !persons.some(p => p.age < 21)) ||
+                (benef.elderOnly && !persons.some(p => p.age >= 55)) ||
+                (benef.maternityOnly && !(col.flags && col.flags.maternity)) ||
+                (benef.outpatientOnly && !(col.flags && col.flags.outpatient)) ||
+                (benef.dentalOnly && !(col.flags && col.flags.dental))) {
+                cellsData.push({ displayValue: '', singleValue: 0 });
+                return;
+            }
+
+            let displayValue = '', singleValue = 0;
+            if (benef.valueType === 'number') {
+                let raw = 0;
+                const sa = col.sumAssured || 0;
+                const daily = col.daily;
+                const progMap = col.program ? BM_SCL_PROGRAMS[col.program] : null;
+
+                if (benef.computeProg && progMap) raw = benef.computeProg(progMap) || 0;
+                else if (benef.computeDaily && daily != null) raw = benef.computeDaily(daily) || 0;
+                else if (benef.compute && sa) raw = benef.compute(sa);
+
+                if (benef.cap && raw > benef.cap) raw = benef.cap;
+                singleValue = bm_roundToThousand(raw);
+                let finalValue = singleValue;
+                if (benef.multiClaim) finalValue = singleValue * benef.multiClaim;
+                displayValue = finalValue ? bm_fmt(finalValue) : '';
+            } else {
+                const sa = col.sumAssured || 0;
+                const progMap = col.program ? BM_SCL_PROGRAMS[col.program] : null;
+                if (benef.computeProg && progMap) displayValue = benef.computeProg(progMap) || '';
+                else if (benef.computeRange && sa) displayValue = benef.computeRange(sa) || '';
+                else displayValue = benef.text || '';
+            }
+            if (displayValue) anyVisible = true;
+            cellsData.push({ displayValue, singleValue });
+        });
+        if (anyVisible) rows.push({ benef, cellsData });
+    });
+
+    if (!rows.length) return '';
+
+    const titleMap = {
+        'AN_BINH_UU_VIET': 'An Bình Ưu Việt', 'KHOE_BINH_AN': 'Khoẻ Bình An', 'VUNG_TUONG_LAI': 'Vững Tương Lai',
+        'PUL_FAMILY': 'Khoẻ Trọn Vẹn', 'HEALTH_SCL': 'Sức khỏe Bùng Gia Lực', 'BHN_2_0': 'Bệnh hiểm nghèo 2.0',
+        'HOSPITAL_SUPPORT': 'Hỗ trợ Chi phí Nằm viện', 'ACCIDENT': 'Tai nạn'
+    };
+    const title = titleMap[schema.key] || schema.key;
+    const headCols = columns.map(c => `<th class="border px-2 py-2 text-left align-top">${bm_escape(c.label)}</th>`).join('');
+
+    const bodyHtml = rows.map(r => {
+        if (r.isHeader) return `<tr class="benefit-subgroup-header"><td colspan="${r.colspan}" class="border px-2 py-2 font-semibold">${bm_escape(r.benef.labelBase)}</td></tr>`;
+        
+        const labelBase = bm_escape(r.benef.labelBase || '');
+        const formulaLabel = bm_escape(r.benef.formulaLabel || '');
+        let labelHtml = formulaLabel ? `${labelBase} - ${formulaLabel}` : labelBase;
+
+        if (r.benef.multiClaim) {
+            const firstCellWithValue = r.cellsData.find(c => c.singleValue > 0);
+            if (firstCellWithValue) labelHtml += ` - ${bm_fmt(firstCellWithValue.singleValue)} x ${r.benef.multiClaim}`;
+        }
+        
+        const cellsHtml = r.cellsData.map(cell => `<td class="border px-2 py-1 text-right">${cell.displayValue || ''}</td>`).join('');
+        return `<tr><td class="border px-2 py-1">${labelHtml}</td>${cellsHtml}</tr>`;
+    }).join('');
+
+    let totalRowHtml = '';
+    if (schema.hasTotal) {
+        const totalCellsSum = columns.map((_, colIndex) => {
+            let sum = 0;
+            rows.forEach(r => {
+                if (r.benef.valueType === 'number' && r.cellsData && r.cellsData[colIndex]) {
+                    const single = r.cellsData[colIndex].singleValue || 0;
+                    const multi = r.benef.multiClaim || 1;
+                    sum += (single * multi);
+                }
+            });
+            return sum;
+        });
+        const totalCellsHtml = totalCellsSum.map(s => `<td class="border px-2 py-1 text-right font-semibold">${s ? bm_fmt(s) : ''}</td>`).join('');
+        totalRowHtml = `<tr><td class="border px-2 py-1 font-semibold">Tổng quyền lợi</td>${totalCellsHtml}</tr>`;
+    }
+
+    return `
+      <div class="mb-6">
+        <h4 class="font-semibold mb-1">${bm_escape(title)}</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-sm">
+            <thead><tr><th class="border px-2 py-2 text-left" style="width:42%">Tên quyền lợi</th>${headCols}</tr></thead>
+            <tbody>${bodyHtml}${totalRowHtml}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+}
+
+function buildPart2BenefitsSection(summaryData) {
+    summaryData.mainProductSumAssured = appState.mainProduct.stbh || 0;
+    const colsBySchema = bm_collectColumns(summaryData);
+    const order = [
+        'AN_BINH_UU_VIET', 'KHOE_BINH_AN', 'VUNG_TUONG_LAI', 'PUL_FAMILY',
+        'HEALTH_SCL', 'BHN_2_0', 'HOSPITAL_SUPPORT', 'ACCIDENT'
+    ];
+    const blocks = order.map(sk => colsBySchema[sk] ? bm_renderSchemaTables(sk, colsBySchema[sk], summaryData) : '').filter(Boolean);
+    if (!blocks.length) {
+        return `<h3 class="text-lg font-bold mt-6 mb-3">Phần 2 · Tóm tắt quyền lợi sản phẩm</h3>
+                <div class="text-sm text-gray-500 italic mb-4">Không có quyền lợi nào được chọn.</div>`;
+    }
+    return `<h3 class="text-lg font-bold mt-6 mb-3">Phần 2 · Tóm tắt quyền lợi sản phẩm</h3>${blocks.join('')}`;
 }
 
 function buildIntroSection(data) {
