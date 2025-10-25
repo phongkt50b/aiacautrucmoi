@@ -805,7 +805,7 @@ function renderMainProductSection(customer, mainProductKey) {
                     const defaultTerm = termRule.default || '';
                     optionsHtml += `<div>
                         <label for="payment-term" class="font-medium text-gray-700 block mb-1">Thời gian đóng phí (năm) <span class="text-red-600">*</span></label>
-                        <input type="number" id="payment-term" class="form-input" value="${appState.mainProduct.paymentTerm || defaultTerm}" placeholder="VD: 20" min="${min}" max="${max}">
+                        <input type="number" id="payment-term" class="form-input" value="${(appState.mainProduct.paymentTerm > 0 ? appState.mainProduct.paymentTerm : '') || defaultTerm}" placeholder="VD: 20" min="${min}" max="${max}">
                         <div id="payment-term-hint" class="text-sm text-gray-500 mt-1">Nhập từ ${min} đến ${max} năm</div>
                     </div>`;
                     break;
@@ -1608,7 +1608,7 @@ function initOccupationAutocomplete(input, container) {
       autocompleteContainer.appendChild(item);
     });
     autocompleteContainer.classList.remove('hidden');
-  };
+  });
 
   input.addEventListener('input', () => {
     const value = input.value.trim().toLowerCase();
@@ -2376,7 +2376,9 @@ function buildPart1RowsData(ctx) {
         if (p.isMain && appState.mainProduct.key) {
             const baseAnnual = calculateMainPremium(p, appState.mainProduct);
             const stbhVal = appState.mainProduct.stbh;
-            pushRow(acc, p.name, getProductLabel(appState.mainProduct.key), formatDisplayCurrency(stbhVal), paymentTerm || '—', baseAnnual, false);
+            if(baseAnnual > 0){
+                pushRow(acc, p.name, getProductLabel(appState.mainProduct.key), formatDisplayCurrency(stbhVal), paymentTerm || '—', baseAnnual, false);
+            }
         }
         if (p.isMain && (appState.mainProduct.extraPremium || 0) > 0) {
             pushRow(acc, p.name, 'Phí đóng thêm', '—', paymentTerm || '—', appState.mainProduct.extraPremium || 0, false);
@@ -2518,7 +2520,7 @@ function buildPart3ScheduleSection(summaryData) {
     const rows = schedule.rows;
     if (!rows.length) return '';
     const activePersonIdx = persons.map((p, i) => rows.some(r => (r.perPersonSuppAnnualEq[i] || 0) > 0) ? i : -1).filter(i => i !== -1);
-    const header = ['<th class="p-2 border">Năm HĐ</th>', '<th class="p-2 border">Tuổi</th>', '<th class="p-2 border">Phí chính</th>', (schedule.extraAllZero ? '' : '<th class="p-2 border">Phí đóng thêm</th>'), ...activePersonIdx.map(i => `<th class="p-2 border">Phí BS (${sanitizeHtml(persons[i].name)})</th>`), '<th class="p-2 border">Tổng đóng/năm</th>', '<th class="p-2 border">Giá trị TK (Lãi suất cam kết)</th>', `<th class="p-2 border">Giá trị TK (Lãi suất ${customRateInput || "minh họa"}% trong 20 năm đầu, từ năm 21 là 0.5%)</th>`, `<th class="p-2 border">Giá trị TK (Lãi suất ${customRateInput || "minh họa"}% xuyên suốt hợp đồng)</th>`].filter(Boolean);
+    const header = ['<th class="p-2 border">Năm HĐ</th>', '<th class="p-2 border">Tuổi</th>', '<th class="p-2 border">Phí chính</th>', (schedule.extraAllZero ? '' : '<th class="p-2 border">Phí đóng thêm</th>'), ...activePersonIdx.map(i => `<th class="p-2 border">Phí BS (${sanitizeHtml(persons[i].name)})</th>`), '<th class="p-2 border">Tổng đóng/năm</th>', '<th class="p-2 border">Giá trị TK (Lãi suất cam kết)</th>', `<th class="p-2 border">Giá trị TK (Lãi suất ${customRateInput || "minh họa"}% trong 20 năm đầu, từ năm 21 là lãi suất cam kết)</th>`, `<th class="p-2 border">Giá trị TK (Lãi suất ${customRateInput || "minh họa"}% xuyên suốt hợp đồng)</th>`].filter(Boolean);
     let sums = { main: 0, extra: 0, supp: activePersonIdx.map(() => 0), totalBase: 0 };
     const body = rows.map((r, i) => {
         sums.main += r.mainYearBase; sums.extra += r.extraYearBase; sums.totalBase += r.totalYearBase;
