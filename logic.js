@@ -1615,7 +1615,7 @@ function initOccupationAutocomplete(input, container) {
       autocompleteContainer.appendChild(item);
     });
     autocompleteContainer.classList.remove('hidden');
-  };
+  });
 
   input.addEventListener('input', () => {
     const value = input.value.trim().toLowerCase();
@@ -2407,6 +2407,130 @@ function bm_collectColumns(summaryData) {
     return colsBySchema;
 }
 
+function buildIntroSection(data) {
+  const sel = document.getElementById('payment-frequency');
+  let freqLabel = data.freq;
+  if (sel && sel.selectedIndex >= 0) {
+    const txt = sel.options[sel.selectedIndex].text.trim();
+    if (txt) freqLabel = txt;
+  } else {
+    switch((freqLabel || '').toLowerCase()){
+      case 'year': freqLabel = 'Năm'; break;
+      case 'half': freqLabel = 'Nửa năm'; break;
+      case 'quarter': freqLabel = 'Quý'; break;
+    }
+  }
+
+  return `
+    <div class="mb-4" style="font-size: 14px;">
+      <h2 class="text-xl font-bold">BẢNG MINH HỌA PHÍ & QUYỀN LỢI</h2>
+      <div class="text-sm text-gray-700" style="font-size: 14px;">
+        Sản phẩm chính: <strong>${sanitizeHtml(getProductLabel(data.productKey) || data.productKey || '—')}</strong>
+        &nbsp;|&nbsp; Kỳ đóng: <strong>${sanitizeHtml(freqLabel)}</strong>
+        &nbsp;|&nbsp; Minh họa đến tuổi: <strong>${sanitizeHtml(data.targetAge)}</strong>
+      </div>
+    </div>
+  `;
+}
+
+function buildPart1Section(data) {
+  const { rows, perPersonTotals, grand, isAnnual, periods } = data.part1;
+
+  const formatDiffCell = n => !n ? '0' : `<span class="text-red-600 font-bold">${formatDisplayCurrency(Math.round(n))}</span>`;
+  
+  const headerHtml = isAnnual
+    ? `<tr>
+         <th class="p-2 border">Tên NĐBH</th>
+         <th class="p-2 border">Sản phẩm</th>
+         <th class="p-2 border">STBH</th>
+         <th class="p-2 border">Số năm đóng phí</th>
+         <th class="p-2 border">Phí theo năm</th>
+       </tr>`
+    : `<tr>
+         <th class="p-2 border">Tên NĐBH</th>
+         <th class="p-2 border">Sản phẩm</th>
+         <th class="p-2 border">STBH</th>
+         <th class="p-2 border">Số năm đóng phí</th>
+         <th class="p-2 border">Phí đóng theo kỳ</th>
+         <th class="p-2 border">Tổng phí đóng trong năm</th>
+         <th class="p-2 border">Chênh lệch so với đóng năm</th>
+       </tr>`;
+
+  const body = [];
+
+  perPersonTotals.forEach(agg => {
+    if (agg.base <= 0) return; // Bỏ qua nếu người này không có phí nào
+
+    body.push(isAnnual ? `
+      <tr class="bg-gray-50 font-bold">
+        <td class="p-2 border" colspan="4">${sanitizeHtml(agg.personName)} - TỔNG</td>
+        <td class="p-2 border text-right">${formatDisplayCurrency(agg.base)}</td>
+      </tr>
+    ` : `
+      <tr class="bg-gray-50 font-bold">
+        <td class="p-2 border" colspan="4">${sanitizeHtml(agg.personName)} - TỔNG</td>
+        <td class="p-2 border text-right">${formatDisplayCurrency(agg.per)}</td>
+        <td class="p-2 border text-right">${formatDisplayCurrency(agg.eq)}</td>
+        <td class="p-2 border text-right">${formatDiffCell(agg.diff)}</td>
+      </tr>
+    `);
+
+    rows.filter(r => r.personName === agg.personName).forEach(r => {
+      body.push(isAnnual ? `
+        <tr>
+          <td class="p-2 border"></td>
+          <td class="p-2 border">${sanitizeHtml(r.prodName)}</td>
+          <td class="p-2 border text-right">${r.stbhDisplay}</td>
+          <td class="p-2 border text-center">${r.years}</td>
+          <td class="p-2 border text-right">${formatDisplayCurrency(r.annualBase)}</td>
+        </tr>
+      ` : `
+        <tr>
+          <td class="p-2 border"></td>
+          <td class="p-2 border">${sanitizeHtml(r.prodName)}</td>
+          <td class="p-2 border text-right">${r.stbhDisplay}</td>
+          <td class="p-2 border text-center">${r.years}</td>
+          <td class="p-2 border text-right">${formatDisplayCurrency(r.perPeriod)}</td>
+          <td class="p-2 border text-right">${formatDisplayCurrency(r.annualEq)}</td>
+          <td class="p-2 border text-right">${formatDiffCell(r.diff)}</td>
+        </tr>
+      `);
+    });
+  });
+
+  body.push(isAnnual ? `
+    <tr class="bg-gray-100 font-bold">
+      <td class="p-2 border" colspan="4">TỔNG CỘNG</td>
+      <td class="p-2 border text-right">${formatDisplayCurrency(grand.base)}</td>
+    </tr>
+  ` : `
+    <tr class="bg-gray-100 font-bold">
+      <td class="p-2 border" colspan="4">TỔNG CỘNG</td>
+      <td class="p-2 border text-right">${formatDisplayCurrency(grand.per)}</td>
+      <td class="p-2 border text-right">${formatDisplayCurrency(grand.eq)}</td>
+      <td class="p-2 border text-right">${formatDiffCell(grand.diff)}</td>
+    </tr>
+  `);
+
+  return `
+    <h3 class="text-lg font-bold mb-2">Phần 1 · Tóm tắt sản phẩm</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse text-sm">
+        <thead>${headerHtml}</thead>
+        <tbody>${body.join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function buildFooterSection(data) {
+  return `
+    <div class="mt-6 text-xs text-gray-600 italic" style="font-size: 14px;">
+      (*) Công cụ này chỉ mang tính chất tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA. Quyền lợi và mức phí cụ thể sẽ được xác nhận trong hợp đồng do AIA phát hành.
+    </div>
+  `;
+}
+
 function __exportExactSummaryHtml() {
     try {
         const data = buildSummaryData();
@@ -2474,28 +2598,6 @@ function buildPart1RowsData(ctx) {
     const mainAge = persons.find(p => p.isMain)?.age || 0;
     const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
 
-    let mdp3StbhBase = 0;
-    if (mdpEnabled) {
-        try {
-            const feesModel = appState.fees;
-            for (const pid in window.personFees) {
-                if (pid === 'mdp3_other') continue;
-                const pf = window.personFees[pid];
-                const mdp3Part = feesModel?.byPerson?.[pid]?.suppDetails?.mdp3 || 0;
-                const suppNet = (pf.supp || 0) - mdp3Part;
-                mdp3StbhBase += (pf.mainBase || 0) + Math.max(0, suppNet);
-            }
-            if (mdpTargetId && mdpTargetId !== 'other' && window.personFees[mdpTargetId]) {
-                const mdp3Part = feesModel?.byPerson?.[mdpTargetId]?.suppDetails?.mdp3 || 0;
-                const suppNet = (window.personFees[mdpTargetId].supp || 0) - mdp3Part;
-                mdp3StbhBase -= Math.max(0, suppNet);
-            }
-            if (mdp3StbhBase < 0) mdp3StbhBase = 0;
-        } catch (e) {
-            console.warn("Lỗi tính mdp3StbhBase:", e);
-        }
-    }
-
     let rows = [], perPersonTotals = [], grand = { per: 0, eq: 0, base: 0, diff: 0 };
     
     const pushRow = (acc, personName, prodName, stbhDisplay, years, baseAnnual, isRider) => {
@@ -2511,6 +2613,8 @@ function buildPart1RowsData(ctx) {
                 annualEq = perPeriod * periods;
                 diff = annualEq - baseAnnual;
             }
+        } else {
+            annualEq = baseAnnual;
         }
         acc.per += perPeriod; acc.eq += annualEq; acc.base += baseAnnual; acc.diff += diff;
         rows.push({ personName, prodName, stbhDisplay, years, perPeriod, annualEq, diff, annualBase: baseAnnual, factorRider: !!isRider });
