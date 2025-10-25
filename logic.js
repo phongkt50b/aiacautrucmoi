@@ -1148,31 +1148,58 @@ function validateMainProductInputs(customer, productInfo, basePremium) {
         }
     }
     
-    // Premium validation
+    // Premium validation for calculated premiums (e.g., ABUV)
+    if (rules.premium?.min && basePremium > 0 && basePremium < rules.premium.min) {
+        // Find an appropriate element to attach the error to
+        const feeInput = document.getElementById('main-premium') || stbhEl;
+        if(feeInput) {
+            setFieldError(feeInput, `Phí chính tối thiểu ${formatCurrency(rules.premium.min)}`);
+            ok = false;
+        }
+    }
+
+    // Premium validation for input premiums (e.g., MUL)
     const premiumEl = document.getElementById('main-premium');
     if (premiumEl) {
-         if (productConfig.group === 'MUL' && !premium) {
-            setFieldError(premiumEl, 'Vui lòng nhập phí sản phẩm chính');
-            ok = false;
-         } else if (rules.premium?.min && premium > 0 && premium < rules.premium.min) {
-            setFieldError(premiumEl, `Phí tối thiểu ${formatCurrency(rules.premium.min)}`); ok = false;
-        } else if (rules.premium?.special === 'MUL_FACTOR_CHECK') {
+        // First, always handle the hint for MUL products if STBH is entered
+        if (productConfig.group === 'MUL' && rules.premium?.special === 'MUL_FACTOR_CHECK') {
             const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
             const rangeEl = document.getElementById('mul-fee-range');
             if (factorRow && stbh > 0) {
                 const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
                 const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
                 if(rangeEl) rangeEl.textContent = `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
-                if (premium > 0 && (premium < minFee || premium > maxFee)) {
-                    setFieldError(premiumEl, 'Phí không hợp lệ so với STBH'); ok = false;
-                } else { clearFieldError(premiumEl); }
-            } else if(rangeEl) {
+            } else if (rangeEl) {
                 rangeEl.textContent = '';
             }
-        } else {
+        }
+
+        // Now, perform validations
+        let premiumError = false;
+        if (productConfig.group === 'MUL') {
+            if (!premium) {
+                setFieldError(premiumEl, 'Vui lòng nhập phí sản phẩm chính');
+                ok = false; premiumError = true;
+            } else if (rules.premium?.special === 'MUL_FACTOR_CHECK' && stbh > 0) {
+                const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
+                const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
+                const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
+                if (premium < minFee || premium > maxFee) {
+                     setFieldError(premiumEl, 'Phí không hợp lệ so với STBH');
+                     ok = false; premiumError = true;
+                }
+            }
+        }
+        if (rules.premium?.min && premium > 0 && premium < rules.premium.min) {
+             setFieldError(premiumEl, `Phí tối thiểu ${formatCurrency(rules.premium.min)}`);
+             ok = false; premiumError = true;
+        }
+        
+        if (!premiumError) {
             clearFieldError(premiumEl);
         }
     }
+
 
     // Payment Term validation
     const termEl = document.getElementById('payment-term');
@@ -1568,8 +1595,8 @@ function generateSupplementaryProductsHtml() {
                     prodId === 'accident' ? 'VD: 500.000.000' :
                     prodId === 'hospital_support' ? 'Bội số 100.000 (đ/ngày)' : 'Nhập STBH'
                   }">
-                </div>
-                ${hintHtml}`;
+                  ${hintHtml}
+                </div>`;
             }
 
             return `
@@ -1619,7 +1646,7 @@ function initOccupationAutocomplete(input, container) {
       autocompleteContainer.appendChild(item);
     });
     autocompleteContainer.classList.remove('hidden');
-  };
+  });
 
   input.addEventListener('input', () => {
     const value = input.value.trim().toLowerCase();
@@ -2680,8 +2707,8 @@ function bm_renderSchemaTables(schemaKey, columns, summaryData) {
                 (benef.maternityOnly && !col.flags?.maternity) ||
                 (benef.outpatientOnly && !col.flags?.outpatient) ||
                 (benef.dentalOnly && !col.flags?.dental) ||
-                (benef.childOnly && !col.flags?.child) ||
-                (benef.elderOnly && !col.flags?.elder)) {
+                (benef.childOnly && !(col.flags && col.flags.child)) ||
+                (benef.elderOnly && !(col.flags && col.flags.elder))) {
                 cellsData.push({ displayValue: '', singleValue: 0 }); return;
             }
             
