@@ -1,12 +1,13 @@
 
 
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS, setDataHelpers } from './data.js';
 
 // ===================================================================================
 // ===== UTILITY FUNCTIONS
 // ===================================================================================
 
-function debounce(fn, wait = 40) {
+function debounce(fn, wait = 50) {
     let t = null;
     return function(...args) {
         clearTimeout(t);
@@ -40,8 +41,6 @@ function sanitizeHtml(str) {
     return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// Inject helper functions into data.js module to be used by hintFunctions, etc.
-// This is called once at initialization time.
 setDataHelpers({
     product_data,
     formatCurrency,
@@ -63,7 +62,7 @@ function initState() {
             premium: 0,
             paymentTerm: 0,
             extraPremium: 0,
-            program: '', // Key for the selected program
+            program: '',
         },
         paymentFrequency: 'year',
         mainPerson: {
@@ -79,10 +78,6 @@ function initState() {
             supplements: {}
         },
         supplementaryPersons: [],
-        mdpPerson: { // Store MDP target person separately
-            id: null, // can be personId or 'other'
-            info: null // if 'other', this holds {age, gender}
-        },
         fees: {
             baseMain: 0,
             extra: 0,
@@ -113,24 +108,9 @@ function updateStateFromUI() {
     appState.supplementaryPersons = Array.from(
         document.querySelectorAll('#supplementary-insured-container .person-container')
     ).map(container => collectPersonData(container, false));
-    
-    // Collect MDP data
-    const mdpRadio = document.querySelector('input[name="mdp3-person"]:checked');
-    if (mdpRadio) {
-        appState.mdpPerson.id = mdpRadio.value;
-        if (mdpRadio.value === 'other') {
-            const container = document.getElementById('mdp3-other-form');
-            appState.mdpPerson.info = container ? collectPersonData(container, false, true) : null;
-        } else {
-            appState.mdpPerson.info = null;
-        }
-    } else {
-        appState.mdpPerson.id = null;
-        appState.mdpPerson.info = null;
-    }
 }
 
-function collectPersonData(container, isMain, isMdpOther = false) {
+function collectPersonData(container, isMain) {
     if (!container) return null;
     const dobInput = container.querySelector('.dob-input');
     const dobStr = dobInput ? dobInput.value : '';
@@ -151,7 +131,10 @@ function collectPersonData(container, isMain, isMdpOther = false) {
     }
 
     const supplements = {};
-    const supplementsContainer = container.querySelector('.supplementary-products-container');
+    const supplementsContainer = isMain
+        ? document.querySelector('#main-supp-container .supplementary-products-container')
+        : container.querySelector('.supplementary-products-container');
+
     if (supplementsContainer) {
         supplementsContainer.querySelectorAll('.product-section input[type="checkbox"]').forEach(checkbox => {
             if (!checkbox.checked) return;
@@ -172,7 +155,6 @@ function collectPersonData(container, isMain, isMdpOther = false) {
         id: container.id,
         container: container,
         isMain: isMain,
-        isMdpOther,
         name: container.querySelector('.name-input')?.value || (isMain ? 'NĐBH Chính' : 'NĐBH Bổ sung'),
         dob: dobStr,
         age,
@@ -208,15 +190,17 @@ function performCalculations(state) {
         fees.byPerson[state.mainPerson.id].main = fees.baseMain + fees.extra;
     }
     
-    // Calculate rider premiums for all persons
+    let totalHospitalSupportStbh = allPersons.reduce((total, p) => {
+        return total + (p.supplements.HOSPITAL_SUPPORT?.stbh || 0);
+    }, 0);
+
     allPersons.forEach(person => {
         let personSuppFee = 0;
         Object.values(person.supplements).forEach(riderInfo => {
-            const currentTotalHospitalStbh = allPersons.reduce((total, p) => {
-                 return total + (p.supplements.HOSPITAL_SUPPORT?.stbh || 0);
-            }, 0) - (person.supplements.HOSPITAL_SUPPORT?.stbh || 0);
-
-            const fee = calculateRiderPremium(riderInfo.id, person, fees.baseMain, currentTotalHospitalStbh);
+            const currentRiderStbh = riderInfo.id === 'HOSPITAL_SUPPORT' ? (riderInfo.stbh || 0) : 0;
+            const totalOtherHospitalStbh = totalHospitalSupportStbh - currentRiderStbh;
+            
+            const fee = calculateRiderPremium(riderInfo.id, person, fees.baseMain, totalOtherHospitalStbh);
             personSuppFee += fee;
             fees.byPerson[person.id].suppDetails[riderInfo.id] = fee;
         });
@@ -224,20 +208,15 @@ function performCalculations(state) {
         fees.totalSupp += personSuppFee;
     });
 
-    // --- MDP 3.0 Calculation ---
-    const mdpRiderInfo = state.mainPerson.supplements.MDP_3_0;
-    if (mdpRiderInfo) {
-        const mdpTarget = mdpRiderInfo.insuredPerson === 'main' ? state.mainPerson : state.supplementaryPersons.find(p => p.id === mdpRiderInfo.insuredPerson);
-        if (mdpTarget) {
-            const mdpStbh = calculateMdpStbh(state, fees);
-            const mdpFee = calculateRiderPremium('MDP_3_0', mdpTarget, mdpStbh);
-            fees.totalSupp += mdpFee;
+    const mdpFee = calculateRiderPremium('MDP_3_0', state.mainPerson, fees.baseMain, 0);
+    if (mdpFee > 0) {
+        fees.totalSupp += mdpFee;
+        if(fees.byPerson[state.mainPerson.id]){
             fees.byPerson[state.mainPerson.id].supp += mdpFee;
             fees.byPerson[state.mainPerson.id].suppDetails.MDP_3_0 = mdpFee;
         }
     }
     
-    // --- Final Totals ---
     fees.totalMain = fees.baseMain + fees.extra;
     fees.total = fees.totalMain + fees.totalSupp;
 
@@ -248,7 +227,6 @@ function performCalculations(state) {
 
     return fees;
 }
-
 
 function calculateMainPremium(customer, productInfo) {
     const { key: productKey, stbh, premium: enteredPremium, program: programKey } = productInfo;
@@ -276,42 +254,39 @@ function calculateMainPremium(customer, productInfo) {
             if (!rateTable) return 0;
 
             const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
-            const rate = rateTable.find(r => r.age === customer.age)?.[genderKey] || 0;
+            const rateRow = rateTable.find(r => r.age === customer.age);
+            const rate = rateRow ? (rateRow[genderKey] ?? rateRow['nam']) : 0;
             premium = (stbh / 1000) * rate;
             break;
 
         case 'package':
             const { underlyingMainProduct, fixedValues, mandatoryRiders } = productConfig.packageConfig;
             
-            // Calculate main product part of package
             const underlyingMainConfig = PRODUCT_CATALOG[underlyingMainProduct];
-            const underlyingProgram = underlyingMainConfig.programs.options.find(p => p.key === fixedValues.program);
             const mainPackageInfo = {
                 key: underlyingMainProduct,
                 stbh: fixedValues.stbh,
-                program: underlyingProgram.key,
+                program: fixedValues.program,
             };
             let totalPackagePremium = calculateMainPremium(customer, mainPackageInfo);
 
-            // Add mandatory riders
             mandatoryRiders.forEach(rider => {
-                const riderCustomer = { ...customer, supplements: { [rider.id]: { stbh: rider.stbh } } };
-                totalPackagePremium += calculateRiderPremium(rider.id, riderCustomer, 0, 0);
+                 const riderCustomer = { ...customer, supplements: { [rider.id]: { stbh: rider.stbh } } };
+                 totalPackagePremium += calculateRiderPremium(rider.id, riderCustomer, 0, 0);
             });
             return roundDownTo1000(totalPackagePremium);
     }
     return roundDownTo1000(premium);
 }
 
-
-function calculateRiderPremium(prodId, customer, mainPremium, totalHospitalSupportStbh) {
+function calculateRiderPremium(prodId, customer, mainPremium, totalOtherHospitalStbh) {
     const prodConfig = PRODUCT_CATALOG[prodId];
-    if (!prodConfig || !customer) return 0;
+    if (!prodConfig || !customer || !customer.supplements[prodId]) return 0;
 
     if (!checkEligibility(customer, prodConfig.rules?.eligibility)) return 0;
 
     const { calculation } = prodConfig;
-    const riderInfo = customer.supplements[prodId] || {};
+    const riderInfo = customer.supplements[prodId];
     const { stbh = 0 } = riderInfo;
     const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
     let premium = 0;
@@ -321,8 +296,8 @@ function calculateRiderPremium(prodId, customer, mainPremium, totalHospitalSuppo
             const renewalMax = prodConfig.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 99;
             if (customer.age > renewalMax) return 0;
             
-            // For SCL sub-riders, the program is inherited from the parent
-            const sclProgram = customer.supplements.HEALTH_SCL?.program;
+            const parentRider = prodId === 'HEALTH_SCL' ? riderInfo : customer.supplements.HEALTH_SCL;
+            const sclProgram = parentRider?.program;
             if (!sclProgram) return 0;
             
             const ageBandIndex = product_data.health_scl_rates.age_bands.findIndex(b => customer.age >= b.min && customer.age <= b.max);
@@ -330,8 +305,8 @@ function calculateRiderPremium(prodId, customer, mainPremium, totalHospitalSuppo
             
             let rateData;
             if (prodId === 'HEALTH_SCL') rateData = product_data.health_scl_rates.main_vn;
-            if (prodId === 'OUTPATIENT_SCL') rateData = product_data.health_scl_rates.outpatient;
-            if (prodId === 'DENTAL_SCL') rateData = product_data.health_scl_rates.dental;
+            else if (prodId === 'OUTPATIENT_SCL') rateData = product_data.health_scl_rates.outpatient;
+            else if (prodId === 'DENTAL_SCL') rateData = product_data.health_scl_rates.dental;
             
             premium = rateData?.[ageBandIndex]?.[sclProgram] || 0;
             break;
@@ -340,7 +315,8 @@ function calculateRiderPremium(prodId, customer, mainPremium, totalHospitalSuppo
             const renewalMax = prodConfig.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 99;
             if (customer.age > renewalMax || !stbh) return 0;
             const rateTable = product_data[calculation.rateTableRef] || [];
-            const rate = rateTable.find(r => customer.age >= r.ageMin && customer.age <= r.ageMax)?.[genderKey] || 0;
+            const rateRow = rateTable.find(r => customer.age >= r.ageMin && customer.age <= r.ageMax);
+            const rate = rateRow ? (rateRow[genderKey] ?? rateRow['nam']) : 0;
             premium = (stbh / 1000) * rate;
             break;
         }
@@ -363,23 +339,31 @@ function calculateRiderPremium(prodId, customer, mainPremium, totalHospitalSuppo
         case 'ratePer1000StbhForMdp': {
             const stbhForMdp = calculateMdpStbh(appState);
             if (stbhForMdp <= 0) return 0;
+            const mdpTargetInfo = getMdpTargetInfo(appState);
+            if (!mdpTargetInfo) return 0;
+            
+            const mdpGenderKey = mdpTargetInfo.gender === 'Nữ' ? 'nu' : 'nam';
             const rateTable = product_data[calculation.rateTableRef] || [];
-            const rate = rateTable.find(r => customer.age >= r.ageMin && customer.age <= r.ageMax)?.[genderKey] || 0;
+            const rateRow = rateTable.find(r => mdpTargetInfo.age >= r.ageMin && mdpTargetInfo.age <= r.ageMax);
+            const rate = rateRow ? (rateRow[mdpGenderKey] ?? rateRow['nam']) : 0;
             premium = (stbhForMdp / 1000) * rate;
             break;
         }
     }
-
     return roundDownTo1000(premium);
 }
 
 function calculateMdpStbh(state) {
-    let stbhForMdp = state.fees.baseMain; // Start with main product premium
+    if (!state.mainPerson.supplements.MDP_3_0) return 0;
+    
+    let stbhForMdp = state.fees.baseMain;
+    const mdpTargetId = state.mainPerson.supplements.MDP_3_0.insuredPerson;
+    
     const allPersons = [state.mainPerson, ...state.supplementaryPersons].filter(p => p);
     
     allPersons.forEach(p => {
         Object.keys(p.supplements).forEach(riderId => {
-            if (riderId !== 'MDP_3_0') {
+            if (riderId !== 'MDP_3_0' && p.id !== mdpTargetId) {
                  stbhForMdp += state.fees.byPerson[p.id]?.suppDetails[riderId] || 0;
             }
         });
@@ -387,14 +371,34 @@ function calculateMdpStbh(state) {
     return stbhForMdp;
 }
 
+function getMdpTargetInfo(state){
+     const mdpRiderInfo = state.mainPerson.supplements.MDP_3_0;
+     if (!mdpRiderInfo || !mdpRiderInfo.insuredPerson) return null;
+     const targetId = mdpRiderInfo.insuredPerson;
+     if (targetId === 'main') return state.mainPerson;
+     return state.supplementaryPersons.find(p => p.id === targetId) || null;
+}
+
 
 // ===================================================================================
 // ===== UI RENDERING
 // ===================================================================================
 
-function renderUI(isMainProductValid) {
+function runWorkflow() {
+    updateStateFromUI();
+    appState.fees = performCalculations(appState);
+    renderUI();
+    const isFormGloballyValid = runAllValidations(appState);
+    document.getElementById('btnFullViewer').disabled = !isFormGloballyValid;
+}
+
+const runWorkflowDebounced = debounce(runWorkflow, 50);
+
+function renderUI() {
     const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+    const isMainProductSelected = !!mainProductConfig;
     const noSuppInsured = mainProductConfig?.rules?.noSupplementaryInsured || false;
+
     document.getElementById('supplementary-insured-section').classList.toggle('hidden', noSuppInsured);
     
     if (noSuppInsured) {
@@ -417,16 +421,17 @@ function renderUI(isMainProductValid) {
             ? document.querySelector('#main-supp-container .supplementary-products-container')
             : p.container.querySelector('.supplementary-products-container');
         if (suppContainer) {
-            renderSupplementaryProductsForPerson(p, appState.mainProduct.key, appState.fees.baseMain, suppContainer, isMainProductValid);
+            renderSupplementaryProductsForPerson(p, appState.mainProduct.key, appState.fees.baseMain, suppContainer, isMainProductSelected);
         }
     });
     
-    renderMdpSection(isMainProductValid, noSuppInsured);
-    updateSupplementaryAddButtonState(isMainProductValid);
-    updateSummaryUI(appState.fees, isMainProductValid);
+    renderMdpSection(isMainProductSelected, noSuppInsured);
+    updateSupplementaryAddButtonState(isMainProductSelected);
+    updateSummaryUI(appState.fees);
 }
 
 let lastRenderedMainProduct = { key: null, age: null };
+
 function renderMainProductSection(customer, mainProductKey) {
     document.querySelectorAll('#main-product option').forEach(option => {
         const productConfig = PRODUCT_CATALOG[option.value];
@@ -435,7 +440,10 @@ function renderMainProductSection(customer, mainProductKey) {
         }
     });
     
-    if (lastRenderedMainProduct.key === mainProductKey && lastRenderedMainProduct.age === customer.age) return;
+    if (lastRenderedMainProduct.key === mainProductKey && lastRenderedMainProduct.age === customer.age) {
+        updateHintsForProduct(customer, appState.mainProduct, PRODUCT_CATALOG[mainProductKey], appState.fees.baseMain, 0);
+        return;
+    };
     lastRenderedMainProduct = { key: mainProductKey, age: customer.age };
 
     const container = document.getElementById('main-product-options');
@@ -458,9 +466,9 @@ function renderMainProductSection(customer, mainProductKey) {
 
     let optionsHtml = '';
     if (productConfig.programs?.enabled) {
-        const programOptions = productConfig.programs.options
-            .filter(opt => !opt.eligibility || checkEligibility(customer, opt.eligibility))
-            .map(opt => `<option value="${opt.key}">${opt.label}</option>`).join('');
+        const filteredOptions = productConfig.programs.options
+            .filter(opt => !opt.eligibility || checkEligibility(customer, opt.eligibility));
+        const programOptions = filteredOptions.map(opt => `<option value="${opt.key}">${opt.label}</option>`).join('');
         optionsHtml += `<div>
             <label for="main-program" class="font-medium text-gray-700 block mb-1">${productConfig.programs.label} <span class="text-red-600">*</span></label>
             <select id="main-program" class="form-select">${programOptions}</select>
@@ -468,16 +476,15 @@ function renderMainProductSection(customer, mainProductKey) {
     }
 
     const rules = productConfig.rules.validationRules || {};
-    const stbhRule = rules.stbh || (rules.anyOf ? rules.anyOf.find(r => r.stbh)?.stbh : null);
-    if (stbhRule) {
+    if ('stbh' in rules || (rules.anyOf && rules.anyOf.some(r => r.stbh))) {
         optionsHtml += `<div>
             <label for="main-stbh" class="font-medium text-gray-700 block mb-1">Số tiền bảo hiểm (STBH) <span class="text-red-600">*</span></label>
             <input type="text" id="main-stbh" class="form-input" placeholder="VD: 1.000.000.000">
-            <div id="stbh-hint" class="text-sm text-gray-500 mt-1">${stbhRule.hint || ''}</div>
+            <div id="stbh-hint" class="text-sm text-gray-500 mt-1"></div>
         </div>`;
     }
     
-    if (rules.premium) {
+    if ('premium' in rules) {
          optionsHtml += `<div>
             <label for="main-premium" class="font-medium text-gray-700 block mb-1">Phí sản phẩm chính <span class="text-red-600">*</span></label>
             <input type="text" id="main-premium" class="form-input" placeholder="Nhập phí">
@@ -485,9 +492,9 @@ function renderMainProductSection(customer, mainProductKey) {
         </div>`;
     }
 
-    if (rules.paymentTerm) {
-        const min = rules.paymentTerm.min || 4;
-        const max = rules.paymentTerm.maxFunction ? rules.paymentTerm.maxFunction(customer.age) : (100 - customer.age);
+    if ('paymentTerm' in rules) {
+        const {min, maxFunction} = rules.paymentTerm;
+        const max = maxFunction ? maxFunction(customer.age) : (100 - customer.age);
         optionsHtml += `<div>
             <label for="payment-term" class="font-medium text-gray-700 block mb-1">Thời gian đóng phí (năm) <span class="text-red-600">*</span></label>
             <input type="number" id="payment-term" class="form-input" placeholder="VD: 20" min="${min}" max="${max}">
@@ -495,7 +502,7 @@ function renderMainProductSection(customer, mainProductKey) {
         </div>`;
     }
 
-    if (rules.extraPremium) {
+    if ('extraPremium' in rules) {
         optionsHtml += `<div>
             <label for="extra-premium" class="font-medium text-gray-700 block mb-1">Phí đóng thêm</label>
             <input type="text" id="extra-premium" class="form-input" placeholder="VD: 10.000.000">
@@ -504,23 +511,28 @@ function renderMainProductSection(customer, mainProductKey) {
     }
     
     container.innerHTML = optionsHtml;
-
-    if (productConfig.programs?.enabled) {
-        const programKey = appState.mainProduct.program || productConfig.programs.options[0]?.key;
-        const selectedProgram = productConfig.programs.options.find(p => p.key === programKey);
-        document.getElementById('main-program').value = programKey;
-        if (selectedProgram?.defaultPaymentTerm && !document.getElementById('payment-term').value) {
-            document.getElementById('payment-term').value = selectedProgram.defaultPaymentTerm;
+    
+    const programSelect = document.getElementById('main-program');
+    if (programSelect) {
+        const filteredOptions = productConfig.programs.options.filter(opt => !opt.eligibility || checkEligibility(customer, opt.eligibility));
+        const selectedProgramKey = appState.mainProduct.program || filteredOptions[0]?.key;
+        programSelect.value = selectedProgramKey;
+        const selectedProgram = productConfig.programs.options.find(p => p.key === selectedProgramKey);
+        
+        const paymentTermInput = document.getElementById('payment-term');
+        if (selectedProgram?.defaultPaymentTerm && paymentTermInput && !paymentTermInput.value) {
+            paymentTermInput.value = selectedProgram.defaultPaymentTerm;
         }
     }
+    updateHintsForProduct(customer, appState.mainProduct, productConfig, appState.fees.baseMain, 0);
 }
 
-function renderSupplementaryProductsForPerson(customer, mainProductKey, mainPremium, container, isMainProductValid) {
+function renderSupplementaryProductsForPerson(customer, mainProductKey, mainPremium, container, isMainProductSelected) {
     const mainProductConfig = PRODUCT_CATALOG[mainProductKey];
-    if (!mainProductConfig) return;
-
-    const riderLimits = mainProductConfig.rules.riderLimits;
-    const allowedRidersFromMain = riderLimits.enabled ? riderLimits.allowed : Object.keys(PRODUCT_CATALOG).filter(k => PRODUCT_CATALOG[k].type === 'rider' && k !== 'MDP_3_0');
+    if (!mainProductConfig) {
+        container.querySelectorAll('.product-section').forEach(s => s.classList.add('hidden'));
+        return;
+    }
 
     let anyStateChanged = false;
 
@@ -529,25 +541,22 @@ function renderSupplementaryProductsForPerson(customer, mainProductKey, mainPrem
         const section = container.querySelector(`.${prodId}-section`);
         if (!section) return;
 
-        let isVisible = allowedRidersFromMain.includes(prodId) || (prodConfig.dependencies?.parentRiderRequired && allowedRidersFromMain.includes(prodConfig.dependencies.parentRiderRequired));
-        
+        let isVisible = true;
         if (prodConfig.dependencies?.parentRiderRequired) {
-            const parentId = prodConfig.dependencies.parentRiderRequired;
-            const parentChecked = customer.supplements[parentId];
-            isVisible = isVisible && parentChecked;
+            isVisible = !!customer.supplements[prodConfig.dependencies.parentRiderRequired];
         }
 
-        section.classList.toggle('hidden', !isVisible);
-        if (!isVisible) return;
-        
         const isEligible = checkEligibility(customer, prodConfig.rules.eligibility);
+        section.classList.toggle('hidden', !isVisible || !isEligible);
+        if (!isVisible || !isEligible) return;
+        
         const checkbox = section.querySelector(`.${prodId}-checkbox`);
         const options = section.querySelector('.product-options');
 
-        checkbox.disabled = !isEligible || !isMainProductValid;
+        checkbox.disabled = !isMainProductSelected;
         section.classList.toggle('opacity-50', checkbox.disabled);
         
-        if ((checkbox.disabled && checkbox.checked)) {
+        if (checkbox.disabled && checkbox.checked) {
             checkbox.checked = false;
             anyStateChanged = true;
         }
@@ -556,11 +565,15 @@ function renderSupplementaryProductsForPerson(customer, mainProductKey, mainPrem
         
         const fee = appState.fees.byPerson[customer.id]?.suppDetails?.[prodId] || 0;
         section.querySelector('.fee-display').textContent = fee > 0 ? `Phí: ${formatCurrency(fee)}` : '';
+        
+        if (checkbox.checked) {
+            updateHintsForProduct(customer, customer.supplements[prodId], prodConfig, mainPremium, 0);
+        }
 
         if (prodId === 'HEALTH_SCL' && checkbox.checked) {
             const programSelect = section.querySelector(`.${prodId}-program`);
-            const thresholds = prodConfig.dependencies.mainPremiumThresholds.thresholds;
-            const applicableTier = thresholds.find(t => mainPremium >= t.minPremium && (!t.maxPremium || mainPremium <= t.maxPremium));
+            const thresholds = prodConfig.dependencies.mainPremiumThresholds;
+            const applicableTier = thresholds.thresholds.find(t => mainPremium >= t.minPremium && (!t.maxPremium || mainPremium <= t.maxPremium));
             const allowedPrograms = applicableTier ? applicableTier.allowed : [];
 
             programSelect.querySelectorAll('option').forEach(opt => {
@@ -568,8 +581,11 @@ function renderSupplementaryProductsForPerson(customer, mainProductKey, mainPrem
             });
 
             if (programSelect.options[programSelect.selectedIndex]?.disabled) {
-                programSelect.value = allowedPrograms[0] || '';
-                anyStateChanged = true;
+                const firstAllowed = allowedPrograms[0];
+                if(firstAllowed){
+                    programSelect.value = firstAllowed;
+                    anyStateChanged = true;
+                }
             }
         }
     });
@@ -577,15 +593,16 @@ function renderSupplementaryProductsForPerson(customer, mainProductKey, mainPrem
     if (anyStateChanged) runWorkflowDebounced();
 }
 
-function updateSummaryUI(fees, isValid = true) {
+function updateSummaryUI(fees) {
     const f = fees || {};
     const fmt = (n) => formatDisplayCurrency(roundDownTo1000(n));
-    const totalDisplay = isValid ? (f.total || 0) : 0;
 
-    document.getElementById('summary-total').textContent = fmt(totalDisplay);
+    document.getElementById('summary-total').textContent = fmt(f.total);
     document.getElementById('main-insured-main-fee').textContent = fmt(f.baseMain);
     document.getElementById('main-insured-extra-fee').textContent = fmt(f.extra);
     document.getElementById('summary-supp-fee').textContent = fmt(f.totalSupp);
+    
+    document.getElementById('main-product-fee-display').textContent = f.baseMain > 0 ? `Phí: ${fmt(f.baseMain)}` : '';
     
     const freqBox = document.getElementById('frequency-breakdown');
     const freqSelValue = document.getElementById('payment-frequency').value;
@@ -593,7 +610,7 @@ function updateSummaryUI(fees, isValid = true) {
     freqBox.classList.toggle('hidden', periods === 1);
 
     if (periods > 1) {
-        const factor = periods === 2 ? GLOBAL_CONFIG.paymentFrequencyFactors.half : GLOBAL_CONFIG.paymentFrequencyFactors.quarter;
+        const factor = periods === 2 ? 1.02 : 1.04;
         const mainPerPeriod = roundDownTo1000(f.baseMain / periods);
         const extraPerPeriod = roundDownTo1000(f.extra / periods);
         const suppPerPeriod = roundDownTo1000(f.totalSupp * factor / periods);
@@ -653,21 +670,27 @@ function runAllValidations(state) {
         for (const prodId in p.supplements) {
             const riderConfig = PRODUCT_CATALOG[prodId];
             const riderValues = p.supplements[prodId];
-            if (!validateProductInputs(p, riderValues, riderConfig, state.fees.baseMain, totalHospitalSupportStbh)) isValid = false;
-            if (prodId === 'HOSPITAL_SUPPORT') {
-                totalHospitalSupportStbh += riderValues.stbh;
-            }
+            const currentRiderStbh = prodId === 'HOSPITAL_SUPPORT' ? (riderValues.stbh || 0) : 0;
+            const totalOtherStbh = totalHospitalSupportStbh - currentRiderStbh;
+            if (!validateProductInputs(p, riderValues, riderConfig, state.fees.baseMain, totalOtherStbh)) isValid = false;
         }
+        totalHospitalSupportStbh += p.supplements.HOSPITAL_SUPPORT?.stbh || 0;
     });
 
     if (!validateTargetAge(state.mainPerson, state.mainProduct)) isValid = false;
+    
+    const mdpRiderInfo = state.mainPerson.supplements.MDP_3_0;
+    if (mdpRiderInfo) {
+        const mdpTarget = getMdpTargetInfo(state);
+        if(!mdpTarget) isValid = false;
+    }
     return isValid;
 }
 
-function validateProductInputs(person, values, config, baseMainPremium, totalHospitalSupportStbh = 0) {
+function validateProductInputs(person, values, config, baseMainPremium, totalOtherHospitalStbh = 0) {
     let ok = true;
     const rules = config.rules.validationRules || {};
-    const container = config.type === 'main' ? document.getElementById('main-product-options') : person.container;
+    const container = config.type === 'main' ? document.getElementById('main-product-options') : person.container.querySelector(`.${config.id}-section`);
     if (!container) return true;
 
     if (rules.anyOf) {
@@ -677,42 +700,51 @@ function validateProductInputs(person, values, config, baseMainPremium, totalHos
             const value = key === 'stbh' ? values.stbh : baseMainPremium;
             return value >= condition.min;
         });
-        if (!isMet) {
-            const stbhEl = container.querySelector('#main-stbh');
-            setFieldError(stbhEl, rules.anyOf[1].premium.message);
+        if (!isMet && (values.stbh > 0 || baseMainPremium > 0)) {
+            const el = container.querySelector('#main-stbh') || container.querySelector('#main-premium');
+            setFieldError(el, rules.anyOf[1].premium.message);
             ok = false;
         }
     }
 
     for (const key in rules) {
         if (key === 'anyOf') continue;
-        
         const rule = rules[key];
         const value = values[key];
-        const el = container.querySelector(`#${key}, .${config.id}-${key}, [data-product-id="${config.id}"]`);
-        if (!el) continue;
+        
+        const el = container.querySelector(`#${config.id}-${key}, .${config.id}-${key}, #${key}, [data-product-id="${config.id}"]`);
+        if (!el && key !== 'premium') continue; 
 
         let error = '';
-        if (rule.min != null && value < rule.min) error = rule.message || `Tối thiểu ${formatCurrency(rule.min)}`;
-        else if (rule.max != null && value > rule.max) error = rule.message || `Tối đa ${formatCurrency(rule.max)}`;
-        else if (rule.multipleOf && value % rule.multipleOf !== 0) error = rule.hint || `Phải là bội số của ${formatCurrency(rule.multipleOf)}`;
-        else if (rule.maxFunction) {
+        if (rule.min != null && value < rule.min) {
+            error = rule.message || `Tối thiểu ${formatCurrency(rule.min)}`;
+        } else if (rule.max != null && value > rule.max) {
+            error = rule.message || `Tối đa ${formatCurrency(rule.max)}`;
+        } else if (rule.multipleOf && value % rule.multipleOf !== 0) {
+            error = rule.hintFunction ? '' : (rule.hint || `Phải là bội số của ${formatCurrency(rule.multipleOf)}`);
+        } else if (rule.maxFunction) {
             const maxVal = rule.maxFunction(person.age);
-            if (value > maxVal) error = rule.message(rule.min, maxVal) || `Tối đa ${maxVal}`;
-        }
-        else if (rule.stbhFactorRef) {
+            if (value > maxVal || (rule.min != null && value < rule.min)) error = rule.message(rule.min, maxVal) || `Vui lòng nhập từ ${rule.min} đến ${maxVal}`;
+        } else if (rule.stbhFactorRef) {
             const factorRow = product_data[rule.stbhFactorRef]?.find(f => person.age >= f.ageMin && person.age <= f.ageMax);
             if (factorRow && values.stbh > 0) {
                 const minFee = roundDownTo1000(values.stbh / factorRow.maxFactor);
                 const maxFee = roundDownTo1000(values.stbh / factorRow.minFactor);
-                if (value < minFee || value > maxFee) error = rule.stbhFactorMessage || 'Phí không hợp lệ';
+                if (value > 0 && (value < minFee || value > maxFee)) error = rule.stbhFactorMessage || 'Phí không hợp lệ';
             }
         } else if (config.id === 'HOSPITAL_SUPPORT' && key === 'stbh') {
-            const maxFormula = config.calculation.stbhCalculation.config.maxFormula;
+            const { maxFormula } = config.calculation.stbhCalculation.config;
             const maxSupportTotal = maxFormula(baseMainPremium);
-            const maxByAge = person.age >= 18 ? rule.maxByAge.from18 : rule.maxByAge.under18;
-            const remaining = maxSupportTotal - totalHospitalSupportStbh;
+            const { under18, from18 } = rule.maxByAge;
+            const maxByAge = person.age >= 18 ? from18 : under18;
+            const remaining = maxSupportTotal - totalOtherHospitalStbh;
             if (value > maxByAge || value > remaining) error = 'Vượt quá giới hạn cho phép';
+        } else if (key === 'premium' && config.type === 'main') {
+            if (rule.min != null && baseMainPremium > 0 && baseMainPremium < rule.min) {
+                 const elToErr = container.querySelector('#main-stbh') || container.querySelector('#main-premium');
+                 setFieldError(elToErr, rule.message || `Phí tối thiểu ${formatCurrency(rule.min)}`);
+                 ok = false;
+            }
         }
 
         if (error) {
@@ -725,30 +757,30 @@ function validateProductInputs(person, values, config, baseMainPremium, totalHos
 
 function updateAllHints(state) {
     const allPersons = [state.mainPerson, ...state.supplementaryPersons].filter(p => p);
-    let totalHospitalSupportStbh = 0;
-
+    
     const mainConfig = PRODUCT_CATALOG[state.mainProduct.key];
     if (mainConfig?.rules.validationRules) {
         updateHintsForProduct(state.mainPerson, state.mainProduct, mainConfig, state.fees.baseMain, 0);
     }
     
+    let totalHospitalSupportStbh = allPersons.reduce((total, p) => total + (p.supplements.HOSPITAL_SUPPORT?.stbh || 0), 0);
+
     allPersons.forEach(p => {
         for (const prodId in p.supplements) {
             const riderConfig = PRODUCT_CATALOG[prodId];
             const riderValues = p.supplements[prodId];
             if (riderConfig?.rules.validationRules) {
-                updateHintsForProduct(p, riderValues, riderConfig, state.fees.baseMain, totalHospitalSupportStbh);
-            }
-            if (prodId === 'HOSPITAL_SUPPORT') {
-                totalHospitalSupportStbh += riderValues.stbh || 0;
+                const currentRiderStbh = prodId === 'HOSPITAL_SUPPORT' ? (riderValues.stbh || 0) : 0;
+                const totalOtherStbh = totalHospitalSupportStbh - currentRiderStbh;
+                updateHintsForProduct(p, riderValues, riderConfig, state.fees.baseMain, totalOtherStbh);
             }
         }
     });
 }
 
-function updateHintsForProduct(person, values, config, baseMainPremium, totalHospitalSupportStbh) {
+function updateHintsForProduct(person, values, config, baseMainPremium, totalOtherHospitalStbh) {
     const rules = config.rules.validationRules || {};
-    const container = config.type === 'main' ? document.getElementById('main-product-options') : person.container;
+    const container = config.type === 'main' ? document.getElementById('main-product-options') : person.container.querySelector(`.${config.id}-section`);
     if (!container) return;
 
     for (const key in rules) {
@@ -757,7 +789,7 @@ function updateHintsForProduct(person, values, config, baseMainPremium, totalHos
         if (!hintEl) continue;
 
         if (rule.hintFunction) {
-            const hintText = rule.hintFunction(values.stbh, person, baseMainPremium, totalHospitalSupportStbh);
+            const hintText = rule.hintFunction(values.stbh, person, baseMainPremium, totalOtherHospitalStbh);
             hintEl.innerHTML = hintText;
         } else if (rule.hint) {
             hintEl.innerHTML = rule.hint;
@@ -795,9 +827,8 @@ function validateTargetAge(mainPerson, mainProductInfo) {
   if (!age || !paymentTerm) { clearFieldError(input); return true; }
 
   const minAllowed = age + paymentTerm;
-  const maxAllowed = 99;
-  if (isNaN(val) || val < minAllowed || val > maxAllowed) {
-    setFieldError(input, `Tuổi minh họa phải từ ${minAllowed} đến ${maxAllowed}`);
+  if (val && (val < minAllowed || val > 99)) {
+    setFieldError(input, `Tuổi minh họa phải từ ${minAllowed} đến 99`);
     return false;
   }
   clearFieldError(input);
@@ -875,16 +906,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initViewerModal();
 });
 
-function runWorkflow() {
-    updateStateFromUI();
-    appState.fees = performCalculations(appState);
-    const isMainProductValid = runAllValidations(appState);
-    updateAllHints(appState);
-    renderUI(isMainProductValid);
-}
-
-const runWorkflowDebounced = debounce(runWorkflow, 50);
-
 function initMainProductSelect() {
     const select = document.getElementById('main-product');
     Object.values(PRODUCT_CATALOG)
@@ -901,24 +922,24 @@ function initMainProductSelect() {
 function attachGlobalListeners() {
     document.body.addEventListener('change', (e) => {
         if (e.target.id === 'main-product') {
-            lastRenderedMainProduct.key = null; // Force re-render of main product section
+            lastRenderedMainProduct.key = null;
         }
         runWorkflow();
     });
 
     document.body.addEventListener('input', (e) => {
-        if (e.target.matches('input[type="text"]:not(.dob-input):not(.name-input):not(.occupation-input)')) {
+        if (e.target.matches('input[type="text"]:not(.dob-input)')) {
             formatNumberInput(e.target);
         }
         runWorkflowDebounced();
     });
 
     document.body.addEventListener('focusout', (e) => {
-        if (e.target.matches('input[type="text"]')) {
+        if (e.target.matches('input[type="text"]:not(.occupation-input)')) {
             roundInputToThousand(e.target);
-            if (e.target.classList.contains('dob-input')) {
-                runWorkflow();
-            }
+        }
+        if (e.target.classList.contains('dob-input')) {
+            runWorkflow();
         }
     }, true);
 }
@@ -928,9 +949,12 @@ function initPerson(container, isMain = false) {
     initDateFormatter(container.querySelector('.dob-input'));
     initOccupationAutocomplete(container.querySelector('.occupation-input'), container);
     
-    const suppProductsContainer = container.querySelector('.supplementary-products-container');
-    if (suppProductsContainer) {
-        suppProductsContainer.innerHTML = generateSupplementaryProductsHtml();
+    const targetContainer = isMain 
+        ? document.querySelector('#main-supp-container .supplementary-products-container')
+        : container.querySelector('.supplementary-products-container');
+        
+    if (targetContainer) {
+        targetContainer.innerHTML = generateSupplementaryProductsHtml();
     }
 }
 
@@ -939,9 +963,12 @@ function initSupplementaryButton() {
         if (appState.supplementaryPersons.length >= GLOBAL_CONFIG.MAX_SUPPLEMENTARY_INSURED) return;
         const newPersonDiv = document.createElement('div');
         newPersonDiv.id = `person-container-supp${Date.now()}`;
-        newPersonDiv.innerHTML = document.getElementById('supplementary-person-template').innerHTML;
+        
+        const template = document.getElementById('supplementary-person-template');
+        newPersonDiv.innerHTML = template.innerHTML;
         const count = appState.supplementaryPersons.length + 1;
         newPersonDiv.querySelector('[data-template-id="title"]').textContent = `NĐBH Bổ Sung ${count}`;
+        
         document.getElementById('supplementary-insured-container').appendChild(newPersonDiv);
         initPerson(newPersonDiv, false);
         newPersonDiv.querySelector('.remove-supp-btn').addEventListener('click', () => {
@@ -952,11 +979,11 @@ function initSupplementaryButton() {
     });
 }
 
-function updateSupplementaryAddButtonState(isMainProductValid) {
+function updateSupplementaryAddButtonState(isMainProductSelected) {
     const btn = document.getElementById('add-supp-insured-btn');
     if (!btn) return;
     const count = appState.supplementaryPersons.length;
-    const disabled = count >= GLOBAL_CONFIG.MAX_SUPPLEMENTARY_INSURED || !isMainProductValid;
+    const disabled = count >= GLOBAL_CONFIG.MAX_SUPPLEMENTARY_INSURED || !isMainProductSelected;
     btn.disabled = disabled;
     btn.classList.toggle('opacity-50', disabled);
     btn.classList.toggle('cursor-not-allowed', disabled);
@@ -964,7 +991,7 @@ function updateSupplementaryAddButtonState(isMainProductValid) {
 
 function generateSupplementaryProductsHtml() {
     return Object.values(PRODUCT_CATALOG)
-        .filter(p => p.type === 'rider' && p.id !== 'MDP_3_0')
+        .filter(p => p.type === 'rider')
         .sort((a,b) => a.displayOrder - b.displayOrder)
         .map(prodConfig => {
             const prodId = prodConfig.id;
@@ -979,7 +1006,6 @@ function generateSupplementaryProductsHtml() {
             }
 
             if (prodConfig.rules?.validationRules?.stbh) {
-                const rule = prodConfig.rules.validationRules.stbh;
                 optionsHtml += `<div>
                   <label class="font-medium text-gray-700 block mb-1">Số tiền bảo hiểm (STBH)</label>
                   <input type="text" class="form-input ${prodId}-stbh" placeholder="Nhập STBH">
@@ -1012,8 +1038,7 @@ function initOccupationAutocomplete(input, container) {
     if (riskGroupSpan) riskGroupSpan.textContent = occ.group;
     clearFieldError(input);
     autocompleteContainer.classList.add('hidden');
-    // NOTE: runWorkflow() is intentionally omitted here;
-    // it will be reliably called by the 'blur' event handler.
+    runWorkflow();
   };
 
   const renderList = (filtered) => {
@@ -1026,11 +1051,10 @@ function initOccupationAutocomplete(input, container) {
       const item = document.createElement('div');
       item.className = 'p-2 hover:bg-gray-100 cursor-pointer';
       item.textContent = occ.name;
-      // Use mousedown instead of click to fire before blur
       item.addEventListener('mousedown', (ev) => {
         ev.preventDefault();
         applyOccupation(occ);
-        input.blur(); // Manually blur to trigger the final state update
+        input.blur();
       });
       autocompleteContainer.appendChild(item);
     });
@@ -1048,36 +1072,21 @@ function initOccupationAutocomplete(input, container) {
   });
 
   input.addEventListener('blur', () => {
-    // Use a short timeout to allow mousedown to fire first
     setTimeout(() => {
       autocompleteContainer.classList.add('hidden');
-      
       const match = product_data.occupations.find(o => o.group > 0 && o.name.trim().toLowerCase() === (input.value || '').trim().toLowerCase());
-      
       if (match) {
-        // If a valid match is found (from typing or clicking), normalize the input field and set data.
-        if (input.value !== match.name) {
-            input.value = match.name;
-        }
-        if (String(input.dataset.group) !== String(match.group)) {
-            input.dataset.group = match.group;
-        }
-        if (riskGroupSpan) {
-            riskGroupSpan.textContent = match.group;
-        }
+        if (input.value !== match.name) input.value = match.name;
+        if (String(input.dataset.group) !== String(match.group)) input.dataset.group = match.group;
+        if (riskGroupSpan) riskGroupSpan.textContent = match.group;
         clearFieldError(input);
       } else {
-        // If no match, clear the input to prevent inconsistent state.
-        // This indicates to the user that their input was not valid.
         input.value = '';
         input.dataset.group = '';
-        if (riskGroupSpan) {
-            riskGroupSpan.textContent = '...';
-        }
+        if (riskGroupSpan) riskGroupSpan.textContent = '...';
       }
-      // This is the single source of truth for updating the state after an occupation interaction.
       runWorkflow();
-    }, 150); // 150ms is enough for click events
+    }, 150);
   });
 }
 
@@ -1091,7 +1100,8 @@ function initDateFormatter(input) {
   });
 }
 function roundInputToThousand(input) {
-  if (!input || !input.classList.contains('form-input') || input.classList.contains('dob-input') || input.classList.contains('name-input') || input.classList.contains('occupation-input') || input.id === 'target-age-input' || input.id === 'custom-interest-rate-input') return;
+  if (!input || input.id === 'target-age-input' || input.id === 'custom-interest-rate-input') return;
+  if(input.classList.contains('name-input') || input.classList.contains('occupation-input') || input.classList.contains('dob-input')) return;
   const raw = parseFormattedNumber(input.value || '');
   if (!raw) { input.value = ''; return; }
   const isHospitalDaily = input.classList.contains('HOSPITAL_SUPPORT-stbh');
@@ -1117,38 +1127,61 @@ function formatNumberInput(input) {
 // ===================================================================================
 // ===== MDP 3.0 UI MODULE
 // ===================================================================================
-function renderMdpSection(isMainProductValid, noSuppInsured) {
+function renderMdpSection(isMainProductSelected, noSuppInsured) {
     const section = document.getElementById('mdp3-section');
-    const mdpConfig = PRODUCT_CATALOG.MDP_3_0;
-    const mainPersonCanHaveMdp = checkEligibility(appState.mainPerson, mdpConfig.rules.eligibility);
-
-    const isMdpPossible = mainPersonCanHaveMdp || appState.supplementaryPersons.some(p => checkEligibility(p, mdpConfig.rules.eligibility));
-    const shouldShowSection = isMdpPossible && !noSuppInsured;
-
-    section.classList.toggle('hidden', !shouldShowSection);
-    section.classList.toggle('opacity-50', !isMainProductValid);
-    section.classList.toggle('pointer-events-none', !isMainProductValid);
-    if (!shouldShowSection) return;
+    const riderConfig = PRODUCT_CATALOG.MDP_3_0;
+    const isMdpAdded = !!appState.mainPerson.supplements.MDP_3_0;
+    
+    const allPersons = [appState.mainPerson, ...appState.supplementaryPersons];
+    const eligiblePersons = allPersons.filter(p => checkEligibility(p, riderConfig.rules.eligibility));
+    
+    const shouldShow = isMainProductSelected && !noSuppInsured && eligiblePersons.length > 0;
+    section.classList.toggle('hidden', !shouldShow);
+    if (!shouldShow) return;
 
     const container = document.getElementById('mdp3-radio-list');
-    let optionsHtml = '';
-    const persons = [appState.mainPerson, ...appState.supplementaryPersons].filter(p => checkEligibility(p, mdpConfig.rules.eligibility));
-
-    persons.forEach(p => {
-        optionsHtml += `<label class="flex items-center space-x-2">
-            <input type="radio" name="mdp3-person" value="${p.id}">
+    let optionsHtml = eligiblePersons.map(p => {
+        const checked = isMdpAdded && appState.mainPerson.supplements.MDP_3_0.insuredPerson === (p.isMain ? 'main' : p.id);
+        return `<label class="flex items-center space-x-2">
+            <input type="radio" name="mdp3-person" value="${p.isMain ? 'main' : p.id}" ${checked ? 'checked' : ''}>
             <span>${sanitizeHtml(p.name)}</span>
-        </label>`;
-    });
+        </label>`
+    }).join('');
 
     const fee = appState.fees.byPerson[appState.mainPerson.id]?.suppDetails.MDP_3_0 || 0;
-    container.innerHTML = `<p class="font-medium text-gray-700 mb-2">Chọn Người được bảo hiểm cho Miễn Đóng Phí:</p><div class="space-y-2">${optionsHtml}</div>
-    <div class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2">${fee > 0 ? `Phí: ${formatCurrency(fee)}` : ''}</div>`;
     
-    if (appState.mainPerson.supplements.MDP_3_0?.insuredPerson) {
-        const radio = container.querySelector(`input[value="${appState.mainPerson.supplements.MDP_3_0.insuredPerson}"]`);
-        if (radio) radio.checked = true;
-    }
+    const checkboxHtml = `<label class="flex items-center space-x-3 cursor-pointer">
+        <input type="checkbox" data-product-id="MDP_3_0" class="form-checkbox MDP_3_0-checkbox" ${isMdpAdded ? 'checked' : ''}>
+        <span class="text-lg font-medium text-gray-800">Thêm ${riderConfig.displayName}</span>
+    </label>`;
+
+    container.innerHTML = `${checkboxHtml}
+    <div class="product-options ${isMdpAdded ? '' : 'hidden'} mt-3 pl-8 space-y-3">
+        <p class="font-medium text-gray-700 mb-2">Chọn Người được bảo hiểm cho Miễn Đóng Phí:</p>
+        <div class="space-y-2">${optionsHtml}</div>
+        <div class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2">${fee > 0 ? `Phí: ${formatCurrency(fee)}` : ''}</div>
+    </div>`;
+
+    container.querySelector('.MDP_3_0-checkbox')?.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            const firstEligible = eligiblePersons[0];
+            appState.mainPerson.supplements.MDP_3_0 = {
+                insuredPerson: firstEligible.isMain ? 'main' : firstEligible.id
+            };
+        } else {
+            delete appState.mainPerson.supplements.MDP_3_0;
+        }
+        runWorkflow();
+    });
+
+    container.querySelectorAll('input[name="mdp3-person"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if(e.target.checked) {
+                appState.mainPerson.supplements.MDP_3_0.insuredPerson = e.target.value;
+                runWorkflow();
+            }
+        });
+    });
 }
 
 
@@ -1174,23 +1207,23 @@ function updateTargetAgeDisplay() {
     const mainProductInfo = appState.mainProduct;
     const input = document.getElementById('target-age-input');
     const productConfig = PRODUCT_CATALOG[mainProductInfo.key];
+    const block = document.getElementById('target-age-block');
 
-    if (!input || !mainPerson || typeof mainPerson.age !== 'number' || !productConfig || !productConfig.cashValueConfig?.enabled) {
-        document.getElementById('target-age-block').classList.add('hidden');
+    if (!input || !block || !mainPerson || typeof mainPerson.age !== 'number' || !productConfig || !productConfig.cashValueConfig?.enabled) {
+        if(block) block.classList.add('hidden');
         return;
     }
-    document.getElementById('target-age-block').classList.remove('hidden');
+    block.classList.remove('hidden');
 
     const paymentTerm = mainProductInfo.paymentTerm;
     const minAge = mainPerson.age + paymentTerm;
-    const maxAge = 99;
     
     if (!paymentTerm || paymentTerm <= 0) {
         input.value = '';
     } else {
         const curVal = parseInt(input.value, 10) || 0;
-        if (!curVal || curVal < minAge || curVal > maxAge) {
-            input.value = maxAge;
+        if (!curVal || curVal < minAge || curVal > 99) {
+            input.value = 99;
         }
     }
 }
@@ -1202,6 +1235,10 @@ function initViewerModal() {
         setTimeout(() => { 
             if (runAllValidations(appState)) {
                 openFullViewer();
+            } else {
+                const errorBox = document.getElementById('error-message');
+                errorBox.textContent = 'Vui lòng sửa các lỗi được đánh dấu đỏ.';
+                setTimeout(() => errorBox.textContent = '', 3000);
             }
         }, 50);
     });
@@ -1222,7 +1259,7 @@ function openFullViewer() {
     try {
         const payload = {
             ...appState,
-            productCatalog: PRODUCT_CATALOG, // Pass catalog and data for viewer-side calculations
+            productCatalog: PRODUCT_CATALOG,
             product_data: product_data,
             investment_data: investment_data,
             benefitMatrixSchemas: BENEFIT_MATRIX_SCHEMAS,
