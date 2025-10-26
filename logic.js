@@ -1,3 +1,4 @@
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, product_data, investment_data, BENEFIT_MATRIX_SCHEMAS } from './data.js';
 
 // ===================================================================================
@@ -126,29 +127,19 @@ function collectPersonData(container, isMain) {
             if (!checkbox || !checkbox.checked) return;
             
             supplements[prodId] = {};
-            const allInputs = ['stbh', 'program', 'scope']; // Add any future input types here
+            const allInputs = ['stbh', 'program', 'scope'];
             
-            // Generic input collector
             allInputs.forEach(inputType => {
                 const inputEl = section.querySelector(`.${prodId}-${inputType}`);
                 if(inputEl) {
-                    if (inputType === 'stbh') {
-                        supplements[prodId][inputType] = parseFormattedNumber(inputEl.value);
-                    } else {
-                         supplements[prodId][inputType] = inputEl.value;
-                    }
+                    supplements[prodId][inputType] = (inputType === 'stbh') ? parseFormattedNumber(inputEl.value) : inputEl.value;
                 }
             });
-
-            // Handle child riders (checkboxes without dedicated sections)
-            if (prodConfig.parentRider === 'health_scl') {
-                const childCheckbox = section.querySelector(`.${prodId}-checkbox`);
-                if(childCheckbox) { // This is redundant but safe
-                    const parentData = supplements[prodConfig.parentRider];
-                    if(parentData) {
-                        supplements[prodId] = { ...parentData, ...supplements[prodId] };
-                    }
-                }
+            
+            // Handle child riders that inherit properties
+            const parentRiderKey = prodConfig.parentRider;
+            if (parentRiderKey && supplements[parentRiderKey]) {
+                supplements[prodId] = { ...supplements[parentRiderKey], ...supplements[prodId] };
             }
         });
     }
@@ -237,14 +228,20 @@ function calculateMainPremium(customer, productInfo) {
             if (stbh === 0) return 0;
             const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
             let rate = 0;
-            const selectedProgramKey = options?.program;
-            if (!productConfig.programs.enabled || !selectedProgramKey) return 0;
+            let rateTableRefStr = '';
             
-            const programConfig = productConfig.programs.options.find(p => p.key === selectedProgramKey);
-            if (!programConfig || !programConfig.rateTableRef) return 0;
-            
+            if (productConfig.programs?.enabled) {
+                const selectedProgramKey = options?.program;
+                if (!selectedProgramKey) return 0;
+                const programConfig = productConfig.programs.options.find(p => p.key === selectedProgramKey);
+                if (!programConfig || !programConfig.rateTableRef) return 0;
+                rateTableRefStr = programConfig.rateTableRef;
+            } else {
+                return 0; // Should not happen for this method type
+            }
+
             let rateTable = product_data;
-            programConfig.rateTableRef.split('.').forEach(p => rateTable = rateTable ? rateTable[p] : undefined);
+            rateTableRefStr.split('.').forEach(p => rateTable = rateTable ? rateTable[p] : undefined);
             
             if (rateTable) rate = rateTable.find(r => r.age === customer.age)?.[genderKey] || 0;
             premium = Math.round((stbh / 1000) * rate);
@@ -269,7 +266,8 @@ function calculateRiderPremium(prodId, customer, mainPremium, ageOverride = null
     if (!customerForCalc) return 0;
     const ageToUse = ageOverride ?? customerForCalc.age;
     
-    const renewalMaxRule = prodConfig.rules.eligibility.find(r => r.renewalMax);
+    const eligibilityRules = prodConfig.rules.eligibility || [];
+    const renewalMaxRule = eligibilityRules.find(r => r.renewalMax);
     if (renewalMaxRule && ageToUse > renewalMaxRule.renewalMax) return 0;
 
     switch (calcConfig.method) {
@@ -279,9 +277,8 @@ function calculateRiderPremium(prodId, customer, mainPremium, ageOverride = null
 
             if (!stbh && !prodId.startsWith('health_scl')) return 0;
 
-            // Resolve dynamic rate table reference (e.g., for SCL scope)
             let rateTableRefStr = calcConfig.rateTableRef.replace(/\${(.*?)}/g, (match, p1) => supplementData[p1] || '');
-            if (rateTableRefStr.includes('undefined')) return 0; // Missing data for template
+            if (rateTableRefStr.includes('undefined')) return 0;
 
             let rateTable = product_data;
             rateTableRefStr.split('.').forEach(p => rateTable = rateTable ? rateTable[p] : undefined);
@@ -298,7 +295,7 @@ function calculateRiderPremium(prodId, customer, mainPremium, ageOverride = null
             } else if (lookupBy.includes('age')) {
                  rateRecord = Array.isArray(rateTable) ? rateTable.find(r => ageToUse === r.age) : null;
             } else {
-                rateRecord = rateTable; // For cases like accident insurance where there's no age lookup
+                rateRecord = rateTable;
             }
 
             if (!rateRecord && !lookupBy.includes('riskGroup')) return 0;
@@ -339,8 +336,11 @@ function calculateRiderPremium(prodId, customer, mainPremium, ageOverride = null
             
             let rate = 0;
             const rateTable = product_data[calcConfig.rateTableRef];
-            const rateRecord = rateTable.find(r => ageToUse >= r.ageMin && ageToUse <= r.ageMax);
-            if (rateRecord) rate = rateRecord[customerForCalc.gender === 'Nữ' ? 'nu' : 'nam'] || 0;
+            const genderKey = customerForCalc.gender === 'Nữ' ? 'nu' : 'nam';
+            if (calcConfig.lookupBy.includes('ageBand')) {
+                 const rateRecord = rateTable.find(r => ageToUse >= r.ageMin && ageToUse <= r.ageMax);
+                 if (rateRecord) rate = rateRecord[genderKey] || 0;
+            }
             
             if (!rate) return 0;
             return roundDownTo1000((stbhBase / (calcConfig.divisor || 1000)) * rate);
@@ -454,7 +454,6 @@ function renderMainProductSection(customer, mainProductKey) {
     });
     container.innerHTML = optionsHtml;
     
-    // Generic auto-set payment term
     const programSelect = document.getElementById('main-product-program');
     if (programSelect) {
         programSelect.addEventListener('change', (e) => {
@@ -474,6 +473,7 @@ function renderSupplementaryProductsForPerson(customer, container, isMainProduct
     const mainPremium = appState.fees.baseMain;
     const ridersDisabled = !isMainProductValid;
     const ridersReason = ridersDisabled ? 'Vui lòng hoàn tất thông tin sản phẩm chính.' : '';
+    let anyUncheckedByRule = false;
 
     Object.entries(PRODUCT_CATALOG).forEach(([prodId, prodConfig]) => {
         if (prodConfig.type !== 'rider' || prodConfig.riderType === 'waiver') return;
@@ -483,18 +483,14 @@ function renderSupplementaryProductsForPerson(customer, container, isMainProduct
 
         let isEligible = checkEligibility(customer, prodConfig.rules.eligibility);
         
-        // Parent-child & dependency logic
         const parentIsSelected = prodConfig.parentRider ? !!customer.supplements[prodConfig.parentRider] : true;
         const dependenciesMet = prodConfig.dependsOn ? prodConfig.dependsOn.every(depKey => !!customer.supplements[depKey]) : true;
         isEligible = isEligible && parentIsSelected && dependenciesMet;
         
         section.classList.toggle('hidden', !isEligible);
         
-        // Hide child riders if parent is not selected
-        if (prodConfig.parentRider) {
-            section.classList.toggle('hidden', !parentIsSelected);
-        }
-
+        if (prodConfig.parentRider) section.classList.toggle('hidden', !parentIsSelected);
+        
         const checkbox = section.querySelector(`.${prodId}-checkbox`);
         if (!checkbox) return;
         
@@ -510,8 +506,15 @@ function renderSupplementaryProductsForPerson(customer, container, isMainProduct
         section.querySelector('.product-options')?.classList.toggle('hidden', !checkbox.checked);
         const fee = appState.fees.byPerson[customer.id]?.suppDetails?.[prodId] || 0;
         section.querySelector('.fee-display').textContent = fee > 0 ? `Phí: ${formatCurrency(fee)}` : '';
+        
+        // Handle dental dependency on outpatient for SCL
+        if (prodId === 'health_scl_dental' && checkbox.checked) {
+            if(!dependenciesMet) {
+                checkbox.checked = false;
+                anyUncheckedByRule = true;
+            }
+        }
 
-        // Program eligibility logic (e.g., for SCL)
         if (prodConfig.rules.programEligibility) {
             const programSelect = section.querySelector(`.${prodId}-program`);
             if (programSelect && checkbox.checked) {
@@ -529,7 +532,7 @@ function renderSupplementaryProductsForPerson(customer, container, isMainProduct
                 });
                 
                 if (currentVal && !allowed.includes(currentVal)) {
-                    programSelect.value = allowed.length > 0 ? allowed[0] : '';
+                    programSelect.value = 'nang_cao'; // Default back to 'nang_cao'
                     wasChanged = true;
                 }
                 
@@ -537,41 +540,338 @@ function renderSupplementaryProductsForPerson(customer, container, isMainProduct
             }
         }
     });
+
+    if (anyUncheckedByRule) runWorkflowDebounced();
 }
-function renderWaiverSection(allPersons, isValid) { /* ... */ }
-function updateSupplementaryAddButtonState(isValid) { /* ... */ }
+
+function renderWaiverSection(allPersons, isValid) {
+    const section = document.getElementById('mdp3-section');
+    if (!section) return;
+
+    const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+    const noSuppInsured = mainProductConfig?.rules?.noSupplementaryInsured || false;
+    section.classList.toggle('hidden', noSuppInsured);
+
+    if (noSuppInsured) return;
+
+    const container = document.getElementById('mdp3-radio-list');
+    container.innerHTML = '';
+    
+    let optionsHtml = '';
+    const waiverRiders = Object.entries(PRODUCT_CATALOG).filter(([,p]) => p.riderType === 'waiver');
+    
+    waiverRiders.forEach(([prodId, prodConfig]) => {
+        const checked = appState.waiver.selectedRider === prodId ? 'checked' : '';
+        optionsHtml += `
+            <label class="flex items-center space-x-2">
+                <input type="radio" name="waiver-rider-select" value="${prodId}" class="form-checkbox" ${checked}>
+                <span>${prodConfig.name}</span>
+            </label>
+        `;
+    });
+
+    if (optionsHtml) {
+        optionsHtml += `<div id="waiver-options-container" class="mt-2 pl-6 ${!appState.waiver.selectedRider ? 'hidden' : ''}">`;
+
+        let personOptions = '';
+        allPersons.forEach(p => {
+            const waiverConfig = PRODUCT_CATALOG[appState.waiver.selectedRider];
+            const isEligible = waiverConfig ? checkEligibility(p, waiverConfig.rules.eligibility) : false;
+            if (isEligible) {
+                const selected = appState.waiver.policyHolderId === p.id ? 'selected' : '';
+                personOptions += `<option value="${p.id}" ${selected}>${sanitizeHtml(p.name)} (tuổi ${p.age})</option>`;
+            }
+        });
+
+        optionsHtml += `
+            <label class="font-medium block mb-1">Người được bảo hiểm cho quyền lợi này:</label>
+            <select id="waiver-policy-holder-select" class="form-select">
+                <option value="">-- Chọn --</option>
+                ${personOptions}
+            </select>
+        `;
+        optionsHtml += '</div>';
+
+        const waiverFee = appState.waiver.fee;
+        if (waiverFee > 0) {
+             optionsHtml += `<div class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2">Phí: ${formatCurrency(waiverFee)}</div>`;
+        }
+    }
+
+    container.innerHTML = optionsHtml;
+    section.classList.toggle('opacity-50', !isValid);
+    section.querySelectorAll('input, select').forEach(el => el.disabled = !isValid);
+}
+
+function updateSupplementaryAddButtonState(isValid) { 
+    const btn = document.getElementById('add-supp-insured-btn');
+    if (!btn) return;
+    const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+    const noSuppInsured = mainProductConfig?.rules?.noSupplementaryInsured || false;
+    const count = appState.supplementaryPersons.length;
+    
+    const disabled = noSuppInsured || (count >= GLOBAL_CONFIG.MAX_SUPPLEMENTARY_INSURED) || !isValid;
+    btn.disabled = disabled;
+    btn.classList.toggle('opacity-50', disabled);
+}
+
 function updateSummaryUI(fees, isValid) { 
-    document.getElementById('summary-total').textContent = formatDisplayCurrency(isValid ? fees.total : 0);
-    document.getElementById('main-insured-main-fee').textContent = formatDisplayCurrency(isValid ? fees.totalMain - fees.extra : 0);
-    document.getElementById('main-insured-extra-fee').textContent = formatDisplayCurrency(isValid ? fees.extra : 0);
-    document.getElementById('summary-supp-fee').textContent = formatDisplayCurrency(isValid ? fees.totalSupp : 0);
+    const f = fees || { baseMain: 0, extra: 0, totalSupp: 0, total: 0 };
+    const fmt = (n) => formatDisplayCurrency(Math.round((Number(n) || 0) / 1000) * 1000);
+
+    const displayTotal = isValid ? f.total : 0;
+    const displayTotalSupp = isValid ? f.totalSupp : 0;
+
+    document.getElementById('summary-total').textContent = fmt(displayTotal);
+    document.getElementById('main-insured-main-fee').textContent  = fmt(f.baseMain);
+    document.getElementById('main-insured-extra-fee').textContent = fmt(f.extra);
+    document.getElementById('summary-supp-fee').textContent  = fmt(displayTotalSupp);
+
+    const freqSel = document.getElementById('payment-frequency');
+    const freqBox = document.getElementById('frequency-breakdown');
+    const v = freqSel ? freqSel.value : 'year';
+    const periods = v === 'half' ? 2 : (v === 'quarter' ? 4 : 1);
+    
+    if (freqBox) freqBox.classList.toggle('hidden', periods === 1);
+    if(periods === 1) return;
+
+    const factor = GLOBAL_CONFIG.PAYMENT_FREQUENCY_FACTORS[v] || 1;
+    const perMain = roundDownTo1000(f.baseMain / periods);
+    const perExtra = roundDownTo1000(f.extra / periods);
+    const perSupp = roundDownTo1000((displayTotalSupp * factor) / periods);
+    const perTotal = perMain + perExtra + perSupp;
+    const annualEquivalent = perTotal * periods;
+    const annualOriginal = f.baseMain + f.extra + displayTotalSupp;
+    const diff = annualEquivalent - annualOriginal;
+
+    const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = fmt(val); };
+    set('freq-main', perMain);
+    set('freq-extra', perExtra);
+    set('freq-supp-total', perSupp);
+    set('freq-total-period', perTotal);
+    set('freq-total-year', annualOriginal);
+    set('freq-diff', diff);
+    set('freq-total-year-equivalent', annualEquivalent);
+    renderSuppList();
 }
+
 function updateMainProductFeeDisplay(base, extra) { 
     const el = document.getElementById('main-product-fee-display');
     if (el) {
         el.textContent = base > 0 ? `Phí cơ bản: ${formatCurrency(base)}` : '';
     }
 }
-function updatePaymentFrequencyOptions(base) { /* ... */ }
-function runAllValidations(state) { 
-    // This would call the generic validateField for all relevant inputs
-    return true; 
+
+function updatePaymentFrequencyOptions(base) {
+    const sel = document.getElementById('payment-frequency');
+    if (!sel) return;
+    const optHalf = sel.querySelector('option[value="half"]');
+    const optQuarter = sel.querySelector('option[value="quarter"]');
+    
+    const allowHalf = base >= GLOBAL_CONFIG.PAYMENT_FREQUENCY_THRESHOLDS.half;
+    const allowQuarter = base >= GLOBAL_CONFIG.PAYMENT_FREQUENCY_THRESHOLDS.quarter;
+
+    if (optHalf) { optHalf.disabled = !allowHalf; optHalf.classList.toggle('hidden', !allowHalf); }
+    if (optQuarter) { optQuarter.disabled = !allowQuarter; optQuarter.classList.toggle('hidden', !allowQuarter); }
+  
+    if ((sel.value === 'quarter' && !allowQuarter) || (sel.value === 'half' && !allowHalf)) {
+      sel.value = 'year';
+    }
 }
-function validateField(el, value, rules, context) {
-    // This is the new generic validation engine
+
+// ===================================================================================
+// ===== MODULE: VALIDATION ENGINE
+// ===================================================================================
+
+function runAllValidations(state) {
+    clearAllErrors();
+    let errors = [];
+    const addError = msg => { if(msg && !errors.includes(msg)) errors.push(msg); };
+
+    // Validate main person
+    if (!validateDobField(state.mainPerson.container.querySelector('.dob-input'))) addError('Ngày sinh NĐBH chính không hợp lệ.');
+    if (!state.mainPerson.name) addError('Vui lòng nhập tên NĐBH chính.');
+    if (!state.mainPerson.riskGroup) addError('Vui lòng chọn nghề nghiệp NĐBH chính.');
+
+    // Validate main product
+    const mainProductKey = state.mainProduct.key;
+    const mainProductConfig = PRODUCT_CATALOG[mainProductKey];
+    const mainProductSelect = document.getElementById('main-product');
+
+    if (!mainProductKey || !mainProductConfig) {
+        addError('Vui lòng chọn sản phẩm chính.');
+    } else {
+        const mainProductRules = mainProductConfig.rules.validationRules;
+        if(mainProductRules) {
+            const context = { person: state.mainPerson, product: state.mainProduct, fees: state.fees };
+            const [isValid, msg] = validateField(state.mainProduct, mainProductRules, context, mainProductSelect);
+            if (!isValid) addError(msg);
+        }
+        
+        const termInput = document.getElementById('payment-term');
+        if(termInput) {
+            const termRule = mainProductConfig.rules.paymentTerm || {};
+            const min = termRule.min || 4;
+            const max = termRule.maxFunction ? eval(termRule.maxFunction)(state.mainPerson.age) : (100 - state.mainPerson.age);
+            if (!state.mainProduct.paymentTerm || state.mainProduct.paymentTerm < min || state.mainProduct.paymentTerm > max) {
+                 addError(`Thời gian đóng phí SP chính phải từ ${min} đến ${max} năm.`);
+            }
+        }
+    }
+    
+    // Validate extra premium
+    if (state.mainProduct.extraPremium > 0 && state.fees.baseMain > 0 && state.mainProduct.extraPremium > GLOBAL_CONFIG.EXTRA_PREMIUM_MAX_FACTOR * state.fees.baseMain) {
+        addError(`Phí đóng thêm tối đa ${GLOBAL_CONFIG.EXTRA_PREMIUM_MAX_FACTOR} lần phí chính.`);
+    }
+
+    // Validate supplementary persons and products
+    let totalHospitalSupportStbh = 0;
+    const allPersons = [state.mainPerson, ...state.supplementaryPersons];
+    allPersons.forEach(p => {
+        if (!p.isMain) {
+            if (!validateDobField(p.container.querySelector('.dob-input'))) addError(`Ngày sinh của ${p.name || 'NĐBH bổ sung'} không hợp lệ.`);
+            if (!p.riskGroup) addError(`Vui lòng chọn nghề nghiệp cho ${p.name || 'NĐBH bổ sung'}.`);
+        }
+        for (const prodId in p.supplements) {
+            const prodConfig = PRODUCT_CATALOG[prodId];
+            if (!prodConfig || !prodConfig.rules.validationRules) continue;
+            
+            const context = { person: p, product: p.supplements[prodId], fees: state.fees, policy: { totalHospitalSupportStbh }};
+            const suppSection = (p.isMain ? state.mainPerson.container : p.container).querySelector(`.${prodId}-section`);
+            const inputEl = suppSection?.querySelector(`.${prodId}-stbh`);
+            
+            const [isValid, msg] = validateField(p.supplements[prodId], prodConfig.rules.validationRules, context, inputEl);
+            if (!isValid) addError(`${prodConfig.name} (${p.name}): ${msg}`);
+
+            if (prodId === 'hospital_support') {
+                totalHospitalSupportStbh += p.supplements[prodId].stbh;
+            }
+        }
+    });
+
+    if (errors.length > 0) {
+        showGlobalErrors(errors);
+        return false;
+    }
     return true;
 }
-function validateSupplementaryProduct(p, prodId, state) { return true; }
-function validateMainPersonInputs(p) { return true; }
-function validateSupplementaryPersonInputs(p) { return true; }
-function validateTargetAge(p, prodInfo) { return true; }
-function validateDobField(input) { return true; }
-function setFieldError(input, msg) {}
-function clearFieldError(input) {}
-function clearAllErrors() {}
+
+function validateField(data, rules, context, elementToAttachError) {
+    for (const ruleType in rules) {
+        const ruleValue = rules[ruleType];
+        switch (ruleType) {
+            case 'anyOf': {
+                const results = ruleValue.map(r => validateField(data, r, context));
+                if (results.every(([isValid]) => !isValid)) {
+                    return [false, `Phải thỏa mãn 1 trong các điều kiện: STBH >= ${formatCurrency(ruleValue[0].stbh.min)} hoặc Phí >= ${formatCurrency(ruleValue[1].premium.min)}`];
+                }
+                break;
+            }
+            case 'stbh':
+            case 'premium': {
+                const value = data[ruleType];
+                if(ruleValue.min && value < ruleValue.min) return [false, `${ruleType === 'stbh' ? 'STBH' : 'Phí'} tối thiểu ${formatCurrency(ruleValue.min)}`];
+                if(ruleValue.max && value > ruleValue.max) return [false, `${ruleType === 'stbh' ? 'STBH' : 'Phí'} tối đa ${formatCurrency(ruleValue.max)}`];
+                
+                if(ruleValue.stbhFactorRef) {
+                    const factorTable = product_data[ruleValue.stbhFactorRef] || [];
+                    const factorRow = factorTable.find(f => context.person.age >= f.ageMin && context.person.age <= f.ageMax);
+                    if(factorRow && data.stbh > 0) {
+                        const minFee = roundDownTo1000(data.stbh / factorRow.maxFactor);
+                        const maxFee = roundDownTo1000(data.stbh / factorRow.minFactor);
+                        if(value < minFee || value > maxFee) return [false, `Phí không hợp lệ. Với STBH này, phí phải từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}`];
+                        
+                        const rangeEl = document.getElementById('mul-fee-range');
+                        if (rangeEl) rangeEl.textContent = `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
+                    }
+                }
+                if(ruleValue.multipleOf && value % ruleValue.multipleOf !== 0) return [false, `Phải là bội số của ${formatCurrency(ruleValue.multipleOf)}`];
+
+                if(ruleValue.maxConditions) {
+                     const limits = ruleValue.maxConditions.map(cond => {
+                        if (cond.scope === 'policy') {
+                            const sourceValue = context.fees.baseMain;
+                            return eval(cond.value.formula.replace('source', sourceValue));
+                        }
+                        if (cond.scope === 'person') {
+                             const sourceValue = context.person.age;
+                             const matchingCase = cond.value.cases.find(c => eval(c.condition.replace('source', sourceValue)));
+                             return matchingCase ? matchingCase.result : Infinity;
+                        }
+                        return Infinity;
+                    });
+                    const finalLimit = Math.min(...limits);
+                    const remainingForPolicy = (ruleValue.maxConditions.some(c=>c.scope==='policy')) 
+                        ? (finalLimit - context.policy.totalHospitalSupportStbh)
+                        : Infinity;
+
+                    const trueMax = Math.min(finalLimit, remainingForPolicy);
+                    
+                    const validationEl = elementToAttachError?.parentElement.querySelector('.hospital-support-validation');
+                    if (validationEl) validationEl.textContent = `Tối đa: ${formatCurrency(trueMax, 'đ/ngày')}.`;
+
+                    if (value > trueMax) return [false, 'Vượt quá giới hạn cho phép'];
+                }
+
+                break;
+            }
+        }
+    }
+    return [true, ''];
+}
+
+function validateDobField(input) {
+    if (!input) return false;
+    clearFieldError(input);
+    const v = (input.value || '').trim();
+    if (!v) { setFieldError(input, 'Vui lòng nhập ngày sinh'); return false; }
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
+        setFieldError(input, 'Nhập DD/MM/YYYY'); return false;
+    }
+    const [dd, mm, yyyy] = v.split('/').map(n => parseInt(n, 10));
+    const d = new Date(yyyy, mm - 1, dd);
+    const valid = d.getFullYear() === yyyy && d.getMonth() === (mm - 1) && d.getDate() === dd && d <= GLOBAL_CONFIG.REFERENCE_DATE;
+    if (!valid) { setFieldError(input, 'Ngày sinh không hợp lệ'); return false; }
+    return true;
+}
+
+function setFieldError(input, msg) {
+    if (!input) return;
+    input.classList.toggle('border-red-500', !!msg);
+    let errEl = input.parentElement.querySelector('.field-error');
+    if(!errEl) {
+        errEl = document.createElement('div');
+        errEl.className = 'field-error text-xs text-red-600 mt-1';
+        input.parentElement.appendChild(errEl);
+    }
+    errEl.textContent = msg;
+}
+function clearFieldError(input) { setFieldError(input, ''); }
+function clearAllErrors() {
+    document.querySelectorAll('.field-error').forEach(el => el.remove());
+    document.querySelectorAll('.border-red-500').forEach(el => el.classList.remove('border-red-500'));
+    hideGlobalErrors();
+}
+function showGlobalErrors(errors) {
+    const box = document.getElementById('global-error-box');
+    if (!box || !errors || errors.length === 0) return;
+    box.innerHTML = `<div class="p-3 bg-red-50 border border-red-200 text-red-800 text-sm rounded-md space-y-1">
+        <p class="font-bold">Vui lòng kiểm tra lại thông tin:</p>
+        <ul class="list-disc pl-5">${errors.map(e => `<li>${sanitizeHtml(e)}</li>`).join('')}</ul>
+    </div>`;
+    box.classList.remove('hidden');
+}
+function hideGlobalErrors() {
+    const box = document.getElementById('global-error-box');
+    if(box) box.classList.add('hidden');
+}
+
 function checkEligibility(person, rules) { 
     if (!person || !rules) return false;
     return rules.every(rule => {
+        // Handle conditional rules (e.g., different age limits for Nam/Nữ)
+        if (rule.condition && !rule.condition(person)) return true;
+
         switch (rule.type) {
             case 'age':
                 return (!rule.min || person.age >= rule.min) && (!rule.max || person.age <= rule.max);
@@ -581,12 +881,13 @@ function checkEligibility(person, rules) {
                 if (rule.required && (person.riskGroup === 0 || !person.riskGroup)) return false;
                 if (rule.exclude && rule.exclude.includes(person.riskGroup)) return false;
                 return true;
-            case 'condition':
-                 return rule.condition(person);
             default: return true;
         }
     });
 }
+// ===================================================================================
+// ===== MODULE: INITIALIZATION & EVENT BINDING
+// ===================================================================================
 function initMainProductSelect() {
     const select = document.getElementById('main-product');
     Object.entries(PRODUCT_CATALOG).forEach(([key, config]) => {
@@ -603,7 +904,7 @@ function attachGlobalListeners() {
         if (e.target.matches('.form-input, .form-select')) {
             runWorkflowDebounced();
         }
-        if (e.target.matches('input[type="text"]')) {
+        if (e.target.matches('input[type="text"]') && !e.target.classList.contains('dob-input') && !e.target.classList.contains('name-input') && !e.target.classList.contains('occupation-input')) {
             formatNumberInput(e.target);
         }
     });
@@ -612,10 +913,21 @@ function attachGlobalListeners() {
             runWorkflow();
         }
     });
+    document.body.addEventListener('click', e => {
+        if (e.target.matches('.remove-supp-btn')) {
+            e.target.closest('.person-container').remove();
+            runWorkflow();
+        }
+    });
 }
 function initPerson(container, isMain) {
     initDateFormatter(container.querySelector('.dob-input'));
     initOccupationAutocomplete(container.querySelector('.occupation-input'), container);
+    
+    const suppProductsContainer = isMain 
+        ? document.querySelector('#main-supp-container .supplementary-products-container') 
+        : container.querySelector('.supplementary-products-container');
+    if (suppProductsContainer) suppProductsContainer.innerHTML = generateSupplementaryProductsHtml();
 }
 function initSupplementaryButton() {
     document.getElementById('add-supp-insured-btn').addEventListener('click', () => {
@@ -625,7 +937,11 @@ function initSupplementaryButton() {
             return;
         }
         const id = `supp-person-${Date.now()}`;
-        const html = generateSupplementaryPersonHtml(id, count + 1);
+        const template = document.getElementById('supplementary-person-template').innerHTML;
+        const html = template.replace(/data-template-id="title"/g, `data-id="${id}"`)
+                   .replace('NĐBH Bổ Sung', `NĐBH Bổ Sung ${count + 1}`)
+                   .replace(/class="person-container/g, `class="person-container" id="${id}"`);
+
         const container = document.getElementById('supplementary-insured-container');
         const div = document.createElement('div');
         div.innerHTML = html;
@@ -635,21 +951,16 @@ function initSupplementaryButton() {
         runWorkflow();
     });
 }
-function generateSupplementaryPersonHtml(id, count) {
-    const template = document.getElementById('supplementary-person-template').innerHTML;
-    return template.replace(/data-template-id="title"/g, `data-id="${id}"`)
-                   .replace('NĐBH Bổ Sung', `NĐBH Bổ Sung ${count}`)
-                   .replace(/class="person-container/g, `class="person-container" id="${id}"`);
-}
 
 function generateSupplementaryProductsHtml() {
      let html = '';
     const riderEntries = Object.entries(PRODUCT_CATALOG).filter(([, config]) => config.type === 'rider' && config.riderType !== 'waiver');
     
-    // Sort to ensure parent comes before child
     riderEntries.sort(([, a], [, b]) => {
         if (a.parentRider && !b.parentRider) return 1;
         if (!a.parentRider && b.parentRider) return -1;
+        if (a.dependsOn && !b.dependsOn) return 1;
+        if (!a.dependsOn && b.dependsOn) return -1;
         return 0;
     });
 
@@ -657,14 +968,14 @@ function generateSupplementaryProductsHtml() {
         let optionsHtml = '';
         const ui = prodConfig.ui;
 
-        // Generic input renderer
         ui.inputs?.forEach(inputType => {
              if (inputType === 'stbh') {
                 optionsHtml += `<div>
                   <label class="font-medium text-gray-700 block mb-1">Số tiền bảo hiểm (STBH)</label>
                   <input type="text" class="form-input ${prodId}-stbh" placeholder="Nhập STBH">
+                   <p class="hospital-support-validation text-sm text-gray-500 mt-1"></p>
                 </div>`;
-            } else if (inputType === 'scope') { // Special case for SCL scope
+            } else if (inputType === 'scope') {
                  optionsHtml += `<div>
                     <label class="font-medium text-gray-700 block mb-1">Phạm vi địa lý</label>
                     <select class="form-select ${prodId}-scope">
@@ -675,7 +986,6 @@ function generateSupplementaryProductsHtml() {
             }
         });
 
-        // Generic program selector
         if (prodConfig.programs?.enabled) {
             const programConf = prodConfig.programs;
             let progOptions = programConf.options.map(opt => `<option value="${opt.key}">${opt.label}</option>`).join('');
@@ -716,7 +1026,7 @@ function initOccupationAutocomplete(input, container) {
 
         const filtered = product_data.occupations
             .filter(occ => occ.name.toLowerCase().includes(searchTerm.toLowerCase()))
-            .slice(0, 50); // Limit results to avoid performance issues
+            .slice(0, 50);
 
         if (filtered.length === 0) {
             autocompleteContainer.innerHTML = '<div class="autocomplete-item p-3 text-gray-500">Không tìm thấy kết quả.</div>';
@@ -724,160 +1034,172 @@ function initOccupationAutocomplete(input, container) {
         }
 
         filtered.forEach(occ => {
-            if (occ.group === 0) return; // Do not show the placeholder option
+            if (occ.group === 0) return;
             const item = document.createElement('div');
             item.className = 'autocomplete-item p-3 cursor-pointer hover:bg-gray-100';
             item.textContent = occ.name;
             item.addEventListener('click', () => {
                 input.value = occ.name;
                 input.dataset.group = occ.group;
-                const riskGroupSpan = container.querySelector('.risk-group-span');
-                if (riskGroupSpan) {
-                    riskGroupSpan.textContent = occ.group;
-                }
+                clearFieldError(input);
                 autocompleteContainer.classList.add('hidden');
-                runWorkflow(); // A new risk group can affect eligibility and premiums
+                runWorkflow();
             });
             autocompleteContainer.appendChild(item);
         });
     };
 
-    input.addEventListener('input', () => {
-        renderResults(input.value);
-    });
-
-    input.addEventListener('focus', () => {
-        if (input.value) {
-            renderResults(input.value);
-        }
-    });
-
-    // Hide results when clicking outside
+    input.addEventListener('input', () => { renderResults(input.value); });
+    input.addEventListener('focus', () => { if (input.value) renderResults(input.value); });
     document.addEventListener('click', (e) => {
-        if (!container.contains(e.target)) {
-            autocompleteContainer.classList.add('hidden');
-        }
+        if (!container.contains(e.target)) autocompleteContainer.classList.add('hidden');
     });
 }
 function initDateFormatter(input) {
     if (!input) return;
     input.addEventListener('input', (e) => {
         let value = input.value.replace(/\D/g, '');
-        if (value.length > 2) {
-            value = value.substring(0, 2) + '/' + value.substring(2);
-        }
-        if (value.length > 5) {
-            value = value.substring(0, 5) + '/' + value.substring(5, 9);
-        }
+        if (value.length > 2) value = value.substring(0, 2) + '/' + value.substring(2);
+        if (value.length > 5) value = value.substring(0, 5) + '/' + value.substring(5, 9);
         input.value = value;
     });
 }
-function formatNumberInput(input) {}
-function initSummaryModal() {}
-function updateTargetAge() {}
-function attachTermListenersForTargetAge() {}
-function showGlobalErrors(errors) {}
-function hideGlobalErrors() {}
-function renderSuppList() {}
-
-// ===================================================================================
-// ===== MODULE: VIEWER PAYLOAD & INTEGRATION
-// ===================================================================================
-function bm_buildHtml(state) {
-    let html = `<h3>Phần 1: Tóm tắt sản phẩm tham gia</h3>`;
-    let totalAnnualFee = state.fees.totalMain + state.fees.totalSupp;
-
-    html += `
-        <table>
-            <thead>
-                <tr>
-                    <th>Sản phẩm</th><th>Người được bảo hiểm</th><th>Số tiền bảo hiểm</th><th>Phí bảo hiểm năm</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
-    // Main Product
-    const mainProductConfig = PRODUCT_CATALOG[state.mainProduct.key];
-    html += `
-        <tr>
-            <td><strong>${mainProductConfig?.name || 'Sản phẩm chính'}</strong></td>
-            <td>${sanitizeHtml(state.mainPerson.name)}</td>
-            <td>${formatCurrency(state.mainProduct.stbh)}</td>
-            <td>${formatCurrency(state.fees.totalMain)}</td>
-        </tr>
-    `;
-
-    // Supplementary Products
-    const allPersons = [state.mainPerson, ...state.supplementaryPersons];
-    allPersons.forEach(person => {
-        Object.entries(person.supplements).forEach(([prodId, suppData]) => {
-            const suppConfig = PRODUCT_CATALOG[prodId];
-            if (!suppConfig) return;
-            const fee = state.fees.byPerson[person.id]?.suppDetails?.[prodId] || 0;
-            if (fee <= 0) return;
-
-            let stbhText = '-';
-            if (suppConfig.ui.inputs?.includes('stbh')) {
-                stbhText = formatCurrency(suppData.stbh);
-            } else if (prodId.startsWith('health_scl')) {
-                const programMap = BENEFIT_MATRIX_SCHEMAS.find(s => s.key === 'HEALTH_SCL')?.programMap;
-                stbhText = formatCurrency(programMap?.[suppData.program]?.core || 0);
-            }
-
-            html += `
-                <tr>
-                    <td>${suppConfig.name}</td>
-                    <td>${sanitizeHtml(person.name)}</td>
-                    <td>${stbhText}</td>
-                    <td>${formatCurrency(fee)}</td>
-                </tr>
-            `;
-        });
-    });
-     // Waiver (MDP3)
-    if (state.waiver.selectedRider && state.waiver.fee > 0) {
-        const waiverConfig = PRODUCT_CATALOG[state.waiver.selectedRider];
-        const policyHolder = allPersons.find(p => p.id === state.waiver.policyHolderId);
-        html += `
-            <tr>
-                <td>${waiverConfig.name}</td>
-                <td>${policyHolder ? `BMBH: ${sanitizeHtml(policyHolder.name)}` : 'Bên mua bảo hiểm'}</td>
-                <td>-</td>
-                <td>${formatCurrency(state.waiver.fee)}</td>
-            </tr>
-        `;
+function formatNumberInput(input) {
+    if (!input || !input.value) return;
+    let value = input.value.replace(/[.,]/g, '');
+    if (!isNaN(value) && value.length > 0) {
+      input.value = parseInt(value, 10).toLocaleString('vi-VN');
+    } else if (input.value !== '') {
+      input.value = '';
     }
-
-    html += `
-            </tbody>
-            <tfoot>
-                <tr>
-                    <td colspan="3"><strong>Tổng phí bảo hiểm năm</strong></td>
-                    <td><strong>${formatCurrency(totalAnnualFee)}</strong></td>
-                </tr>
-            </tfoot>
-        </table>
-    `;
-    return html;
 }
 
+function updateTargetAge() {
+    const targetAgeInput = document.getElementById('target-age-input');
+    if(!targetAgeInput) return;
+    const isUL = ['PUL', 'MUL'].includes(PRODUCT_CATALOG[appState.mainProduct.key]?.group);
+    targetAgeInput.parentElement.classList.toggle('hidden', !isUL);
 
+    if(!isUL) return;
+
+    const term = appState.mainProduct.paymentTerm || 0;
+    const age = appState.mainPerson.age || 0;
+    const hintEl = document.getElementById('target-age-hint');
+    if (!term || term <= 0 || !age) {
+        if (hintEl) hintEl.textContent = 'Nhập tuổi NĐBH và thời gian đóng phí.';
+        return;
+    }
+
+    const minAge = age + term - 1;
+    const maxAge = 99;
+    targetAgeInput.min = String(minAge);
+    targetAgeInput.max = String(maxAge);
+
+    const curVal = parseInt(targetAgeInput.value || '0', 10);
+    if (!curVal || curVal < minAge) targetAgeInput.value = 99;
+    else if (curVal > maxAge) targetAgeInput.value = maxAge;
+
+    if (hintEl) hintEl.innerHTML = `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+}
+
+function attachTermListenersForTargetAge() {
+    const paymentTermInput = document.getElementById('payment-term');
+    if (paymentTermInput) paymentTermInput.addEventListener('change', updateTargetAge);
+}
+
+function renderSuppList() {
+    const box = document.getElementById('supp-insured-summaries');
+    const btn = document.getElementById('toggle-supp-list-btn');
+    if (!box || !btn) return;
+
+    const persons = [appState.mainPerson, ...appState.supplementaryPersons].filter(p => p);
+    const feesMap = window.personFees || {};
+    let totalSuppFee = 0;
+
+    const rows = persons.map(p => {
+        const fee = feesMap[p.id]?.supp || 0;
+        totalSuppFee += fee;
+        if (fee <= 0) return '';
+        return `<div class="flex justify-between text-sm">
+                  <span>${sanitizeHtml(p.name)}</span>
+                  <span>${formatDisplayCurrency(fee)}</span>
+                </div>`;
+    }).filter(Boolean);
+
+    if (rows.length > 0) {
+        box.innerHTML = rows.join('');
+        btn.parentElement.classList.remove('hidden');
+    } else {
+        box.innerHTML = '';
+        btn.parentElement.classList.add('hidden');
+        box.classList.add('hidden');
+    }
+}
+// ===================================================================================
+// ===== MODULE: VIEWER PAYLOAD & INTEGRATION (PORTED FROM LOGIC-1.JS)
+// ===================================================================================
 function buildViewerPayload() {
-    const payload = { ...appState }; // Deep clone might be better if state is more complex
-    payload.summaryHtml = bm_buildHtml(appState);
+    const payload = __buildSummaryDataForViewer();
+    payload.summaryHtml = __exportExactSummaryHtml();
     
-    // Clean up non-serializable data
-    delete payload.mainPerson.container;
-    payload.supplementaryPersons.forEach(p => delete p.container);
+    // Clean up non-serializable data from the state snapshot
+    if (payload.appStateSnapshot) {
+        delete payload.appStateSnapshot.mainPerson.container;
+        payload.appStateSnapshot.supplementaryPersons.forEach(p => delete p.container);
+    }
     
     return payload;
 }
 
+function __buildSummaryDataForViewer() {
+    const mainKey = appState.mainProduct.key;
+    const mainPerson = appState.mainPerson || {};
+    const productConfig = PRODUCT_CATALOG[mainKey];
+    let paymentTermFinal = appState.mainProduct.paymentTerm || 0;
+    if (productConfig?.programs?.enabled) {
+        const progKey = appState.mainProduct.options.program;
+        const progConf = productConfig.programs.options.find(p=>p.key===progKey);
+        if (progConf?.defaultPaymentTerm) paymentTermFinal = progConf.defaultPaymentTerm;
+    }
+
+    const allPersons = [appState.mainPerson, ...appState.supplementaryPersons].filter(p => p);
+    const riderList = [];
+    allPersons.forEach(person => {
+        Object.entries(person.supplements).forEach(([rid, data]) => {
+            const premiumDetail = appState.fees.byPerson?.[person.id]?.suppDetails?.[rid] || 0;
+            if (premiumDetail > 0) riderList.push({ key: rid, personId: person.id, ...data });
+        });
+    });
+
+    const targetAgeInputVal = parseInt(document.getElementById('target-age-input')?.value || '0', 10);
+    const targetAge = targetAgeInputVal || ((mainPerson.age || 0) + paymentTermFinal - 1);
+
+    return {
+        productKey: mainKey,
+        mainPerson: { name: mainPerson.name, dob: mainPerson.dob, age: mainPerson.age, gender: mainPerson.gender, riskGroup: mainPerson.riskGroup },
+        allPersons: allPersons.map(p => ({id: p.id, name: p.name, age: p.age, gender: p.gender})),
+        productInfo: { stbh: appState.mainProduct.stbh, paymentTerm: paymentTermFinal, extraPremium: appState.mainProduct.extraPremium, options: appState.mainProduct.options },
+        fees: appState.fees,
+        riders: riderList,
+        waiver: appState.waiver,
+        targetAge: targetAge,
+        paymentFrequency: appState.paymentFrequency,
+        customInterestRate: document.getElementById('custom-interest-rate-input')?.value || '4.7',
+        appStateSnapshot: JSON.parse(JSON.stringify(appState)) // For debugging or reprocessing
+    };
+}
+function __exportExactSummaryHtml() { return "Bảng minh họa chi tiết đang được xây dựng."; }
+
 function openFullViewer() {
   try {
+    if (!runAllValidations(appState)) {
+        console.warn("Validation failed. Viewer not opened.");
+        const box = document.getElementById('global-error-box');
+        if(box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+    }
     const payload = buildViewerPayload();
-    if (!payload.mainProduct.key) {
+    if (!payload.productKey) {
       alert('Chưa chọn sản phẩm chính.');
       return;
     }
@@ -904,34 +1226,25 @@ function initViewerModal() {
      const modal = document.getElementById('viewer-modal');
      const closeBtn = document.getElementById('close-viewer-modal-btn');
      
-     viewerBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (!appState.mainProduct.key) {
-            showGlobalErrors(['Vui lòng chọn sản phẩm chính và điền đủ thông tin.']);
-            return;
-        }
-        showGlobalErrors([]);
-        openFullViewer();
-     });
-     
+     viewerBtn.addEventListener('click', (e) => { e.preventDefault(); openFullViewer(); });
      closeBtn.addEventListener('click', () => {
          modal.classList.remove('visible');
-         const iframe = document.getElementById('viewer-iframe');
-         iframe.src = 'about:blank'; // Clear content to stop any processing
+         document.getElementById('viewer-iframe').src = 'about:blank';
      });
 }
 
+// ===================================================================================
+// ===== WORKFLOW & MAIN
+// ===================================================================================
 document.addEventListener('DOMContentLoaded', () => {
     initState();
     initMainProductSelect();
-    
-    const mainSuppContainer = document.querySelector('#main-supp-container .supplementary-products-container');
-    if(mainSuppContainer) mainSuppContainer.innerHTML = generateSupplementaryProductsHtml();
-
     initPerson(appState.mainPerson.container, true);
     initSupplementaryButton();
     initViewerModal();
     attachGlobalListeners();
+    const btn = document.getElementById('toggle-supp-list-btn');
+    if (btn) btn.addEventListener('click', () => document.getElementById('supp-insured-summaries').classList.toggle('hidden'));
     runWorkflow();
 });
 
@@ -940,6 +1253,155 @@ const runWorkflowDebounced = debounce(runWorkflow, 50);
 function runWorkflow() {
   updateStateFromUI();
   appState.fees = performCalculations(appState);
-  const isMainProductValid = runAllValidations(appState); // Assume this runs generic validation
+  const isMainProductValid = runAllValidations(appState);
   renderUI(isMainProductValid);
+  updateTargetAge();
+}
+
+// ===================================================================================
+// ===== VIEWER HTML GENERATION LOGIC (PORTED & ADAPTED FROM LOGIC-1.JS)
+// ===================================================================================
+// This function will overwrite the placeholder `__exportExactSummaryHtml`
+function bm_buildHtml(payload) {
+    const { productKey, mainPerson, productInfo, fees, riders, waiver, targetAge, paymentFrequency, customInterestRate, allPersons } = payload;
+    
+    const freqMap = { year: 'Năm', half: 'Nửa năm', quarter: 'Quý'};
+    let html = `<div class="mb-4">
+        <h2 class="text-xl font-bold">BẢNG MINH HỌA PHÍ & QUYỀN LỢI</h2>
+        <div class="text-sm text-gray-700">
+            Sản phẩm chính: <strong>${sanitizeHtml(PRODUCT_CATALOG[productKey]?.name || '—')}</strong>&nbsp;|&nbsp;
+            Kỳ đóng: <strong>${sanitizeHtml(freqMap[paymentFrequency] || paymentFrequency)}</strong>&nbsp;|&nbsp;
+            Minh họa đến tuổi: <strong>${targetAge}</strong>
+        </div>
+    </div>`;
+
+    // PART 1: SUMMARY TABLE
+    html += bm_buildPart1_SummaryTable(payload);
+
+    // PART 2: BENEFITS TABLE
+    html += bm_buildPart2_Benefits(payload);
+    
+    // PART 3: SCHEDULE TABLE
+    html += bm_buildPart3_Schedule(payload);
+
+    html += `<div class="mt-6 text-xs text-gray-600 italic">(*) Công cụ này chỉ mang tính chất tham khảo. Quyền lợi và mức phí cụ thể sẽ được xác nhận trong hợp đồng do AIA phát hành.</div>`;
+    return html;
+}
+__exportExactSummaryHtml = () => bm_buildHtml(__buildSummaryDataForViewer()); // Connect the real function
+
+function bm_buildPart1_SummaryTable(payload) {
+    const { fees, paymentFrequency, allPersons, riders, waiver } = payload;
+    const totalAnnualFee = fees.baseMain + fees.extra + fees.totalSupp;
+
+    let rows = `
+        <tr>
+            <td><strong>${sanitizeHtml(PRODUCT_CATALOG[payload.productKey]?.name)}</strong></td>
+            <td>${sanitizeHtml(payload.mainPerson.name)}</td>
+            <td>${formatCurrency(payload.productInfo.stbh)}</td>
+            <td>${formatCurrency(fees.totalMain)}</td>
+        </tr>
+    `;
+
+    allPersons.forEach(person => {
+        riders.filter(r => r.personId === person.id).forEach(rider => {
+            const riderConfig = PRODUCT_CATALOG[rider.key];
+            if (!riderConfig) return;
+            const fee = fees.byPerson[person.id]?.suppDetails[rider.key] || 0;
+            if (fee <= 0) return;
+            
+            let stbhText = '-';
+            if(riderConfig.ui.inputs?.includes('stbh')) {
+                stbhText = formatCurrency(rider.stbh);
+            } else if (rider.key.startsWith('health_scl')) {
+                const schema = BENEFIT_MATRIX_SCHEMAS.find(s => s.key === 'HEALTH_SCL');
+                const stbh = schema?.programMap?.[rider.program]?.core || 0;
+                stbhText = formatCurrency(stbh);
+            }
+
+             rows += `<tr>
+                <td>${sanitizeHtml(riderConfig.name)}</td>
+                <td>${sanitizeHtml(person.name)}</td>
+                <td>${stbhText}</td>
+                <td>${formatCurrency(fee)}</td>
+            </tr>`;
+        });
+    });
+
+    if (waiver.selectedRider && waiver.fee > 0) {
+        const waiverConfig = PRODUCT_CATALOG[waiver.selectedRider];
+        const policyHolder = allPersons.find(p => p.id === waiver.policyHolderId);
+        rows += `<tr>
+            <td>${sanitizeHtml(waiverConfig.name)}</td>
+            <td>${policyHolder ? `BMBH: ${sanitizeHtml(policyHolder.name)}` : 'Bên mua bảo hiểm'}</td>
+            <td>-</td>
+            <td>${formatCurrency(waiver.fee)}</td>
+        </tr>`;
+    }
+
+    return `<h3 class="text-lg font-bold mb-2">Phần 1 · Tóm tắt sản phẩm</h3>
+    <div class="overflow-x-auto"><table class="w-full border-collapse text-sm">
+        <thead><tr><th>Sản phẩm</th><th>Người được bảo hiểm</th><th>Số tiền bảo hiểm</th><th>Phí bảo hiểm năm</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="3"><strong>Tổng phí bảo hiểm năm</strong></td><td><strong>${formatCurrency(totalAnnualFee)}</strong></td></tr></tfoot>
+    </table></div>`;
+}
+
+function bm_buildPart2_Benefits(payload) {
+    // This is a simplified version for now. A full implementation would be more complex.
+    return `<h3 class="text-lg font-bold mt-6 mb-3">Phần 2 · Tóm tắt quyền lợi sản phẩm</h3>
+            <div class="text-sm text-gray-500 italic mb-4">Phần tóm tắt quyền lợi chi tiết đang được xây dựng.</div>`;
+}
+
+function bm_buildPart3_Schedule(payload) {
+    const { productKey, mainPerson, productInfo, fees, riders, targetAge, customInterestRate, paymentFrequency } = payload;
+    const productConfig = PRODUCT_CATALOG[productKey];
+    const isUL = productConfig?.investmentConfig?.enabled;
+    if (!isUL) return '<h3 class="text-lg font-bold mt-6 mb-2">Phần 3 · Lịch trình phí</h3><div class="text-sm text-gray-500 italic mb-4">Bảng lịch trình phí cho sản phẩm truyền thống đang được xây dựng.</div>';
+
+    const projection = calculateAccountValueProjection(mainPerson, productInfo, fees.baseMain, productInfo.extraPremium, targetAge, customInterestRate, paymentFrequency);
+    
+    let header = '<tr><th>Năm HĐ</th><th>Tuổi</th><th>Phí đóng</th><th>Giá trị TK (Lãi suất cam kết)</th><th>Giá trị TK (Lãi suất minh họa)</th></tr>';
+    let body = '';
+    const totalYears = targetAge - mainPerson.age + 1;
+    let totalPremiumPaid = 0;
+
+    for (let i = 0; i < totalYears; i++) {
+        const year = i + 1;
+        const age = mainPerson.age + i;
+        const premiumThisYear = (year <= productInfo.paymentTerm) ? (fees.baseMain + productInfo.extraPremium) : 0;
+        totalPremiumPaid += premiumThisYear;
+        body += `<tr>
+            <td>${year}</td>
+            <td>${age}</td>
+            <td>${formatCurrency(premiumThisYear)}</td>
+            <td>${formatCurrency(projection.guaranteed[i] || 0)}</td>
+            <td>${formatCurrency(projection.customCapped[i] || 0)}</td>
+        </tr>`;
+    }
+    const footer = `<tr><td colspan="2"><strong>Tổng</strong></td><td><strong>${formatCurrency(totalPremiumPaid)}</strong></td><td></td><td></td></tr>`;
+    
+    return `<h3 class="text-lg font-bold mt-6 mb-2">Phần 3 · Bảng phí & Minh họa giá trị tài khoản</h3>
+        <div class="overflow-x-auto"><table class="w-full border-collapse text-sm text-center">
+            <thead>${header}</thead><tbody>${body}</tbody><tfoot>${footer}</tfoot>
+        </table></div>`;
+}
+
+// Dummy function for now, will be implemented with full logic
+function calculateAccountValueProjection(mainPerson, mainProduct, basePremium, extraPremium, targetAge, customInterestRate, paymentFrequency) {
+    const years = targetAge - mainPerson.age + 1;
+    // This is a placeholder. A real implementation would be very complex.
+    const mockProjection = (rate) => {
+        let av = 0;
+        const results = [];
+        for(let i=1; i<= years; i++) {
+            const premium = (i <= mainProduct.paymentTerm) ? (basePremium + extraPremium) : 0;
+            av = (av + premium) * (1 + rate);
+            results.push(Math.round(av));
+        }
+        return results;
+    }
+    return {
+        guaranteed: mockProjection(0.02),
+        customCapped: mockProjection(parseFloat(customInterestRate)/100 || 0.047)
+    }
 }
