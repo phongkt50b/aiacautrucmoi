@@ -669,6 +669,7 @@ function runAllValidations(state) {
         
         for (const prodId in p.supplements) {
             const riderConfig = PRODUCT_CATALOG[prodId];
+            if (!riderConfig) continue;
             const riderValues = p.supplements[prodId];
             const currentRiderStbh = prodId === 'HOSPITAL_SUPPORT' ? (riderValues.stbh || 0) : 0;
             const totalOtherStbh = totalHospitalSupportStbh - currentRiderStbh;
