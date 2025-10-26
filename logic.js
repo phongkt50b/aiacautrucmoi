@@ -1031,7 +1031,7 @@ function initOccupationAutocomplete(input, container) {
   input.addEventListener('blur', () => {
     setTimeout(() => {
       autocompleteContainer.classList.add('hidden');
-      const match = product_data.occupations.find(o => o.group > 0 && o.name.toLowerCase() === (input.value || '').trim().toLowerCase());
+      const match = product_data.occupations.find(o => o.group > 0 && o.name.trim().toLowerCase() === (input.value || '').trim().toLowerCase());
       if (!match) { input.dataset.group = ''; if(riskGroupSpan) riskGroupSpan.textContent = '...'; }
       runWorkflow();
     }, 200);
