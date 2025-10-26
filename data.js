@@ -37,7 +37,7 @@ export const PRODUCT_CATALOG = {
         displayOrder: 1,
         programs: {
             enabled: true,
-            label: 'Lựa chọn bảo vệ',
+            label: 'Lựa chọn kế hoạch',
             options: [
                 {
                     key: 'TRON_DOI',
@@ -47,14 +47,14 @@ export const PRODUCT_CATALOG = {
                 },
                 {
                     key: '15_NAM',
-                    label: '15 năm',
+                    label: 'Toàn diện - 15 năm',
                     rateTableRef: 'pul_rates.PUL_15NAM',
                     defaultPaymentTerm: 15,
                     benefitSchemaText: 'Đóng đủ phí tối thiểu 15 năm - Cam kết bảo vệ tối thiểu 30 năm'
                 },
                 {
                     key: '5_NAM',
-                    label: '5 năm',
+                    label: 'Bền Vững - 5 năm',
                     rateTableRef: 'pul_rates.PUL_5NAM',
                     defaultPaymentTerm: 5,
                     benefitSchemaText: 'Đóng đủ phí tối thiểu 5 năm - Cam kết bảo vệ tối thiểu 30 năm'
@@ -102,7 +102,7 @@ export const PRODUCT_CATALOG = {
     'KHOE_BINH_AN': {
         id: 'KHOE_BINH_AN',
         type: 'main',
-        displayName: 'MUL - Khoẻ Bình An',
+        displayName: 'Khoẻ Bình An',
         viewerSlug: 'khoe-binh-an',
         displayOrder: 2,
         rules: {
@@ -140,7 +140,7 @@ export const PRODUCT_CATALOG = {
     'VUNG_TUONG_LAI': {
         id: 'VUNG_TUONG_LAI',
         type: 'main',
-        displayName: 'MUL - Vững Tương Lai',
+        displayName: 'Vững Tương Lai',
         viewerSlug: 'vung-tuong-lai',
         displayOrder: 3,
         rules: {
@@ -212,7 +212,7 @@ export const PRODUCT_CATALOG = {
     'TRON_TAM_AN': {
         id: 'TRON_TAM_AN',
         type: 'main',
-        displayName: 'Gói Trọn Tâm An',
+        displayName: 'Trọn Tâm An',
         viewerSlug: 'tron-tam-an',
         displayOrder: 5,
         packageConfig: {
