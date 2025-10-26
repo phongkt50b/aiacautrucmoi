@@ -33,7 +33,6 @@ export const PRODUCT_CATALOG = {
         id: 'KHOE_TRON_VEN',
         type: 'main',
         displayName: 'Khoẻ Trọn Vẹn',
-        category: 'UL',
         viewerSlug: 'khoe-tron-ven',
         displayOrder: 1,
         programs: {
@@ -44,8 +43,7 @@ export const PRODUCT_CATALOG = {
                     key: 'TRON_DOI',
                     label: 'Trọn đời',
                     rateTableRef: 'pul_rates.PUL_TRON_DOI',
-                    defaultPaymentTerm: 20,
-                    benefitSchemaText: 'Đóng đủ phí tối thiểu 20 năm - Cam kết bảo vệ trọn đời'
+                    defaultPaymentTerm: 20
                 },
                 {
                     key: '15_NAM',
@@ -73,9 +71,12 @@ export const PRODUCT_CATALOG = {
                     { stbh: { min: 1000000000, message: "STBH tối thiểu 1 tỷ" } },
                     { premium: { min: 20000000, message: "Hoặc phí tối thiểu 20 triệu" } }
                 ],
+                stbh: {
+                    hint: "Phí tối thiểu 20.000.000 hoặc STBH từ 1 tỷ trở lên."
+                },
                 extraPremium: {
                     maxFactorOfBase: 5,
-                    hint: "Phí đóng thêm không vượt quá 5 lần phí cơ bản của năm đầu tiên."
+                    hintFunction: "(basePremium) => `Tối đa ${formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`"
                 },
                 paymentTerm: {
                     min: 4,
@@ -84,8 +85,7 @@ export const PRODUCT_CATALOG = {
                 }
             },
             riderLimits: {
-                enabled: true,
-                allowed: ['HEALTH_SCL', 'BHN_2_0', 'ACCIDENT', 'HOSPITAL_SUPPORT', 'MDP_3_0']
+                enabled: false
             }
         },
         calculation: {
@@ -103,7 +103,6 @@ export const PRODUCT_CATALOG = {
         id: 'KHOE_BINH_AN',
         type: 'main',
         displayName: 'MUL - Khoẻ Bình An',
-        category: 'UL',
         viewerSlug: 'khoe-binh-an',
         displayOrder: 2,
         rules: {
@@ -118,12 +117,53 @@ export const PRODUCT_CATALOG = {
                     message: "Phí tối thiểu 5 triệu",
                     stbhFactorRef: 'mul_factors',
                     stbhFactorMessage: "Phí không hợp lệ so với STBH",
-                    hint: "Phí hợp lệ được xác định trong một khoảng dựa trên STBH và tuổi của NĐBH."
+                    hintFunction: "(stbh, customer) => { const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax); if (!factorRow || !stbh) return ''; const minFee = roundDownTo1000(stbh / factorRow.maxFactor); const maxFee = roundDownTo1000(stbh / factorRow.minFactor); return `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`; }"
                 },
                 paymentTerm: { min: 4, maxFunction: "(age) => 100 - age", default: 20, message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm` },
-                extraPremium: { maxFactorOfBase: 5, hint: "Tối đa 5 lần phí cơ bản." }
+                extraPremium: { 
+                    maxFactorOfBase: 5, 
+                    hintFunction: "(basePremium) => `Tối đa ${formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`"
+                }
             },
-             riderLimits: { enabled: false } // Cho phép tất cả
+             riderLimits: { enabled: false }
+        },
+        calculation: {
+            method: 'fromInput'
+        },
+        cashValueConfig: {
+            enabled: true,
+            sarIncludesExtraPremium: false,
+            useGuaranteedInterest: true
+        }
+    },
+
+    'VUNG_TUONG_LAI': {
+        id: 'VUNG_TUONG_LAI',
+        type: 'main',
+        displayName: 'MUL - Vững Tương Lai',
+        viewerSlug: 'vung-tuong-lai',
+        displayOrder: 3,
+        rules: {
+            eligibility: [
+                { type: 'daysFromBirth', min: 30 },
+                { type: 'age', max: 70 },
+            ],
+            validationRules: {
+                stbh: { min: 100000000, message: "STBH tối thiểu 100 triệu" },
+                premium: {
+                    min: 5000000,
+                    message: "Phí tối thiểu 5 triệu",
+                    stbhFactorRef: 'mul_factors',
+                    stbhFactorMessage: "Phí không hợp lệ so với STBH",
+                    hintFunction: "(stbh, customer) => { const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax); if (!factorRow || !stbh) return ''; const minFee = roundDownTo1000(stbh / factorRow.maxFactor); const maxFee = roundDownTo1000(stbh / factorRow.minFactor); return `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`; }"
+                },
+                paymentTerm: { min: 4, maxFunction: "(age) => 100 - age", default: 20, message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm` },
+                extraPremium: {
+                    maxFactorOfBase: 5,
+                    hintFunction: "(basePremium) => `Tối đa ${formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`"
+                }
+            },
+            riderLimits: { enabled: false }
         },
         calculation: {
             method: 'fromInput'
@@ -139,7 +179,6 @@ export const PRODUCT_CATALOG = {
         id: 'AN_BINH_UU_VIET',
         type: 'main',
         displayName: 'An Bình Ưu Việt',
-        category: 'TRADITIONAL',
         viewerSlug: 'an-binh-uu-viet',
         displayOrder: 4,
         programs: {
@@ -170,7 +209,33 @@ export const PRODUCT_CATALOG = {
             enabled: false
         }
     },
-
+    'TRON_TAM_AN': {
+        id: 'TRON_TAM_AN',
+        type: 'main',
+        displayName: 'Gói Trọn Tâm An',
+        viewerSlug: 'tron-tam-an',
+        displayOrder: 5,
+        packageConfig: {
+            underlyingMainProduct: 'AN_BINH_UU_VIET',
+            fixedValues: {
+                stbh: 100000000,
+                paymentTerm: 10
+            },
+            mandatoryRiders: ['HOSPITAL_SUPPORT', 'ACCIDENT']
+        },
+        rules: {
+            eligibility: [
+                { type: 'age', min: 28, max: 60 }
+            ],
+            noSupplementaryInsured: true
+        },
+        calculation: {
+            method: 'package'
+        },
+        cashValueConfig: {
+            enabled: false
+        }
+    },
     // =======================================================================
     // ===== SẢN PHẨM BỔ SUNG (RIDERS)
     // =======================================================================
@@ -179,7 +244,6 @@ export const PRODUCT_CATALOG = {
         id: 'HEALTH_SCL',
         type: 'rider',
         displayName: 'Sức khỏe Bùng Gia Lực',
-        category: 'health',
         viewerSlug: 'bung-gia-luc',
         displayOrder: 10,
         dependencies: {
@@ -187,8 +251,9 @@ export const PRODUCT_CATALOG = {
             mainPremiumThresholds: {
                 label: "chương trình",
                 thresholds: [
-                    { minPremium: 5000000,  allowed: ['co_ban', 'nang_cao'] },
-                    { minPremium: 10000000, allowed: ['co_ban', 'nang_cao', 'toan_dien'] }
+                    { minPremium: 5000000,  maxPremium: 9999999, allowed: ['co_ban', 'nang_cao'] },
+                    { minPremium: 10000000, maxPremium: 14999999, allowed: ['co_ban', 'nang_cao', 'toan_dien'] },
+                    { minPremium: 15000000, allowed: ['co_ban', 'nang_cao', 'toan_dien', 'hoan_hao'] }
                 ]
             }
         },
@@ -217,7 +282,6 @@ export const PRODUCT_CATALOG = {
         id: 'OUTPATIENT_SCL',
         type: 'rider',
         displayName: 'Quyền lợi ngoại trú',
-        category: 'health',
         dependencies: {
             parentRiderRequired: 'HEALTH_SCL',
             allowDifferentProgram: true
@@ -227,7 +291,6 @@ export const PRODUCT_CATALOG = {
         id: 'DENTAL_SCL',
         type: 'rider',
         displayName: 'Quyền lợi nha khoa',
-        category: 'health',
         dependencies: {
             parentRiderRequired: 'OUTPATIENT_SCL',
             allowDifferentProgram: true
@@ -237,7 +300,6 @@ export const PRODUCT_CATALOG = {
         id: 'BHN_2_0',
         type: 'rider',
         displayName: 'Bệnh Hiểm Nghèo 2.0',
-        category: 'criticalIllness',
         viewerSlug: 'benh-hiem-ngheo-20',
         displayOrder: 11,
         rules: {
@@ -258,7 +320,6 @@ export const PRODUCT_CATALOG = {
         id: 'ACCIDENT',
         type: 'rider',
         displayName: 'Bảo hiểm Tai nạn',
-        category: 'accident',
         viewerSlug: 'tai-nan',
         displayOrder: 13,
         rules: {
@@ -280,7 +341,6 @@ export const PRODUCT_CATALOG = {
         id: 'HOSPITAL_SUPPORT',
         type: 'rider',
         displayName: 'Hỗ trợ chi phí nằm viện',
-        category: 'hospitalSupport',
         viewerSlug: 'ho-tro-vien-phi',
         displayOrder: 12,
         rules: {
@@ -291,7 +351,13 @@ export const PRODUCT_CATALOG = {
             validationRules: {
                 stbh: {
                     multipleOf: 100000,
-                    hint: "STBH phải là bội số của 100,000 đ/ngày",
+                    hintFunction: `(mainPremium, totalHospitalSupportStbh, customer) => { 
+                        const maxSupportTotal = Math.floor(mainPremium / 4000000) * 100000;
+                        const maxByAge = customer.age >= 18 ? 1000000 : 300000;
+                        const remaining = maxSupportTotal - totalHospitalSupportStbh;
+                        const finalMax = Math.min(maxByAge, remaining);
+                        return \`Tối đa: \${formatCurrency(finalMax, 'đ/ngày')}. Phải là bội số của 100.000.\`;
+                    }`,
                     maxByAge: { under18: 300000, from18: 1000000 }
                 }
             }
@@ -311,7 +377,6 @@ export const PRODUCT_CATALOG = {
         id: 'MDP_3_0',
         type: 'rider',
         displayName: 'Miễn Đóng Phí 3.0',
-        category: 'waiver',
         viewerSlug: 'mien-dong-phi',
         displayOrder: 20,
         rules: {
@@ -578,6 +643,7 @@ export const investment_data = {
     initial_fees: {
         KHOE_TRON_VEN: { 1: 0.50, 2: 0.30, 3: 0.20, 4: 0.20, 5: 0.20, 6: 0.02, 7: 0.02, 8: 0.02, 9: 0.02, 10: 0.02 },
         KHOE_BINH_AN: { 1: 0.50, 2: 0.30, 3: 0.20, 4: 0.20, 5: 0.20, 6: 0.02, 7: 0.02, 8: 0.02, 9: 0.02, 10: 0.02 },
+        VUNG_TUONG_LAI: { 1: 0.50, 2: 0.30, 3: 0.20, 4: 0.20, 5: 0.20, 6: 0.02, 7: 0.02, 8: 0.02, 9: 0.02, 10: 0.02 },
         EXTRA: 0.02
     },
     guaranteed_interest_rates: {
@@ -706,6 +772,18 @@ export const BENEFIT_MATRIX_SCHEMAS = [
       { id:'kba_tangcuong', labelBase:'Gia tăng bảo vệ mỗi năm 5% từ năm thứ 2 đến năm thứ 11', formulaLabel:'Tối đa 50% STBH', valueType:'number', compute:(sa)=>sa*0.50},      
       { id:'kba_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'tối đa 30% STBH', valueType:'number', minAge:18, compute:(sa)=>sa*0.30 },
       { id:'kba_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', compute:(sa)=>sa*0.50, cap:500000000 }
+    ]
+  },
+   {
+    key:'VUNG_TUONG_LAI',
+    type:'main',
+    hasTotal:true,
+    benefits:[
+      { id:'vtl_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
+      { id:'vtl_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
+      { id:'vtl_tangcuong', labelBase:'Gia tăng bảo vệ mỗi năm 5% từ năm thứ 2 đến năm thứ 11', formulaLabel:'Tối đa 50% STBH', valueType:'number', compute:(sa)=>sa*0.50},      
+      { id:'vtl_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'tối đa 30% STBH', valueType:'number', minAge:18, compute:(sa)=>sa*0.30 },
+      { id:'vtl_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', compute:(sa)=>sa*0.50, cap:500000000 }
     ]
   },
   {
