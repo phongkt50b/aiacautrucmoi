@@ -1131,7 +1131,7 @@ function updateTargetAgeDisplay() {
     const input = document.getElementById('target-age-input');
     const productConfig = PRODUCT_CATALOG[mainProductInfo.key];
 
-    if (!input || !mainPerson || typeof mainPerson.age !== 'number' || !productConfig || !productConfig.cashValueConfig.enabled) {
+    if (!input || !mainPerson || typeof mainPerson.age !== 'number' || !productConfig || !productConfig.cashValueConfig?.enabled) {
         document.getElementById('target-age-block').classList.add('hidden');
         return;
     }
