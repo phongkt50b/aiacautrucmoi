@@ -787,7 +787,7 @@ function validateSupplementaryPersonInputs(person) {
 function validateTargetAge(mainPerson, mainProductInfo) {
   const input = document.getElementById('target-age-input');
   const productConfig = PRODUCT_CATALOG[mainProductInfo.key];
-  if (!input || !productConfig || !productConfig.cashValueConfig.enabled) { if(input) clearFieldError(input); return true; }
+  if (!input || !productConfig || !productConfig.cashValueConfig?.enabled) { if(input) clearFieldError(input); return true; }
   
   const val = parseInt((input.value || '').trim(), 10);
   const age = mainPerson?.age || 0;
