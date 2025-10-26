@@ -1,6 +1,8 @@
 
 
 
+
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS, setDataHelpers } from './data.js';
 
 // ===================================================================================
@@ -669,7 +671,6 @@ function runAllValidations(state) {
         
         for (const prodId in p.supplements) {
             const riderConfig = PRODUCT_CATALOG[prodId];
-            if (!riderConfig) continue;
             const riderValues = p.supplements[prodId];
             const currentRiderStbh = prodId === 'HOSPITAL_SUPPORT' ? (riderValues.stbh || 0) : 0;
             const totalOtherStbh = totalHospitalSupportStbh - currentRiderStbh;
@@ -1101,8 +1102,15 @@ function initDateFormatter(input) {
   });
 }
 function roundInputToThousand(input) {
-  if (!input || input.id === 'target-age-input' || input.id === 'custom-interest-rate-input') return;
-  if(input.classList.contains('name-input') || input.classList.contains('occupation-input') || input.classList.contains('dob-input')) return;
+  // Explicitly ignore non-numeric fields first to prevent them from being cleared.
+  if (!input || input.classList.contains('name-input') || input.classList.contains('occupation-input') || input.classList.contains('dob-input')) {
+    return;
+  }
+  // Also ignore special-cased number inputs that shouldn't be rounded this way.
+  if (input.id === 'target-age-input' || input.id === 'custom-interest-rate-input') {
+    return;
+  }
+  
   const raw = parseFormattedNumber(input.value || '');
   if (!raw) { input.value = ''; return; }
   const isHospitalDaily = input.classList.contains('HOSPITAL_SUPPORT-stbh');
