@@ -9,6 +9,17 @@
  */
 
 // ===================================================================================
+// ===== HELPER INJECTION (for functions below)
+// ===================================================================================
+
+// This object will be populated by logic.js with helper functions (formatCurrency, etc.)
+// This pattern avoids circular dependencies between data.js and logic.js.
+let HELPERS = {};
+export function setDataHelpers(helpers) {
+    HELPERS = helpers;
+}
+
+// ===================================================================================
 // ===== CẤU HÌNH TOÀN CỤC (GLOBAL CONFIG & BUSINESS RULES)
 // ===================================================================================
 export const GLOBAL_CONFIG = {
@@ -37,7 +48,7 @@ export const PRODUCT_CATALOG = {
         displayOrder: 1,
         programs: {
             enabled: true,
-            label: 'Lựa chọn kế hoạch',
+            label: 'Lựa chọn bảo vệ',
             options: [
                 {
                     key: 'TRON_DOI',
@@ -47,14 +58,14 @@ export const PRODUCT_CATALOG = {
                 },
                 {
                     key: '15_NAM',
-                    label: 'Toàn diện - 15 năm',
+                    label: '15 năm',
                     rateTableRef: 'pul_rates.PUL_15NAM',
                     defaultPaymentTerm: 15,
                     benefitSchemaText: 'Đóng đủ phí tối thiểu 15 năm - Cam kết bảo vệ tối thiểu 30 năm'
                 },
                 {
                     key: '5_NAM',
-                    label: 'Bền Vững - 5 năm',
+                    label: '5 năm',
                     rateTableRef: 'pul_rates.PUL_5NAM',
                     defaultPaymentTerm: 5,
                     benefitSchemaText: 'Đóng đủ phí tối thiểu 5 năm - Cam kết bảo vệ tối thiểu 30 năm'
@@ -76,16 +87,16 @@ export const PRODUCT_CATALOG = {
                 },
                 extraPremium: {
                     maxFactorOfBase: 5,
-                    hintFunction: "(basePremium) => `Tối đa ${formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`"
+                    hintFunction: (stbh, customer, basePremium) => `Tối đa ${HELPERS.formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`
                 },
                 paymentTerm: {
                     min: 4,
-                    maxFunction: "(age) => 100 - age",
+                    maxFunction: (age) => 100 - age,
                     message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm`
                 }
             },
             riderLimits: {
-                enabled: false
+                enabled: false // Mặc định cho phép tất cả rider hợp lệ
             }
         },
         calculation: {
@@ -102,7 +113,7 @@ export const PRODUCT_CATALOG = {
     'KHOE_BINH_AN': {
         id: 'KHOE_BINH_AN',
         type: 'main',
-        displayName: 'Khoẻ Bình An',
+        displayName: 'MUL - Khoẻ Bình An',
         viewerSlug: 'khoe-binh-an',
         displayOrder: 2,
         rules: {
@@ -117,12 +128,19 @@ export const PRODUCT_CATALOG = {
                     message: "Phí tối thiểu 5 triệu",
                     stbhFactorRef: 'mul_factors',
                     stbhFactorMessage: "Phí không hợp lệ so với STBH",
-                    hintFunction: "(stbh, customer) => { const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax); if (!factorRow || !stbh) return ''; const minFee = roundDownTo1000(stbh / factorRow.maxFactor); const maxFee = roundDownTo1000(stbh / factorRow.minFactor); return `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`; }"
+                    hintFunction: (stbh, customer) => {
+                        const { product_data, roundDownTo1000, formatCurrency } = HELPERS;
+                        const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
+                        if (!factorRow || !stbh) return '';
+                        const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
+                        const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
+                        return `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
+                    }
                 },
-                paymentTerm: { min: 4, maxFunction: "(age) => 100 - age", default: 20, message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm` },
-                extraPremium: { 
-                    maxFactorOfBase: 5, 
-                    hintFunction: "(basePremium) => `Tối đa ${formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`"
+                paymentTerm: { min: 4, maxFunction: (age) => 100 - age, default: 20, message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm` },
+                extraPremium: {
+                    maxFactorOfBase: 5,
+                    hintFunction: (stbh, customer, basePremium) => `Tối đa ${HELPERS.formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`
                 }
             },
              riderLimits: { enabled: false }
@@ -140,7 +158,7 @@ export const PRODUCT_CATALOG = {
     'VUNG_TUONG_LAI': {
         id: 'VUNG_TUONG_LAI',
         type: 'main',
-        displayName: 'Vững Tương Lai',
+        displayName: 'MUL - Vững Tương Lai',
         viewerSlug: 'vung-tuong-lai',
         displayOrder: 3,
         rules: {
@@ -155,12 +173,19 @@ export const PRODUCT_CATALOG = {
                     message: "Phí tối thiểu 5 triệu",
                     stbhFactorRef: 'mul_factors',
                     stbhFactorMessage: "Phí không hợp lệ so với STBH",
-                    hintFunction: "(stbh, customer) => { const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax); if (!factorRow || !stbh) return ''; const minFee = roundDownTo1000(stbh / factorRow.maxFactor); const maxFee = roundDownTo1000(stbh / factorRow.minFactor); return `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`; }"
+                    hintFunction: (stbh, customer) => {
+                        const { product_data, roundDownTo1000, formatCurrency } = HELPERS;
+                        const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
+                        if (!factorRow || !stbh) return '';
+                        const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
+                        const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
+                        return `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
+                    }
                 },
-                paymentTerm: { min: 4, maxFunction: "(age) => 100 - age", default: 20, message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm` },
+                paymentTerm: { min: 4, maxFunction: (age) => 100 - age, default: 20, message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm` },
                 extraPremium: {
                     maxFactorOfBase: 5,
-                    hintFunction: "(basePremium) => `Tối đa ${formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`"
+                    hintFunction: (stbh, customer, basePremium) => `Tối đa ${HELPERS.formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`
                 }
             },
             riderLimits: { enabled: false }
@@ -174,7 +199,7 @@ export const PRODUCT_CATALOG = {
             useGuaranteedInterest: true
         }
     },
-    
+
     'AN_BINH_UU_VIET': {
         id: 'AN_BINH_UU_VIET',
         type: 'main',
@@ -212,16 +237,19 @@ export const PRODUCT_CATALOG = {
     'TRON_TAM_AN': {
         id: 'TRON_TAM_AN',
         type: 'main',
-        displayName: 'Trọn Tâm An',
+        displayName: 'Gói Trọn Tâm An',
         viewerSlug: 'tron-tam-an',
         displayOrder: 5,
         packageConfig: {
             underlyingMainProduct: 'AN_BINH_UU_VIET',
             fixedValues: {
                 stbh: 100000000,
-                paymentTerm: 10
+                program: '10' // The key for the 10-year program
             },
-            mandatoryRiders: ['HOSPITAL_SUPPORT', 'ACCIDENT']
+            mandatoryRiders: [
+                { id: 'HOSPITAL_SUPPORT', stbh: 200000 },
+                { id: 'ACCIDENT', stbh: 100000000 }
+            ]
         },
         rules: {
             eligibility: [
@@ -285,6 +313,9 @@ export const PRODUCT_CATALOG = {
         dependencies: {
             parentRiderRequired: 'HEALTH_SCL',
             allowDifferentProgram: true
+        },
+        calculation: {
+            method: 'healthSclLookup' // It uses the same lookup method
         }
     },
     'DENTAL_SCL': {
@@ -292,8 +323,11 @@ export const PRODUCT_CATALOG = {
         type: 'rider',
         displayName: 'Quyền lợi nha khoa',
         dependencies: {
-            parentRiderRequired: 'OUTPATIENT_SCL',
+            parentRiderRequired: 'OUTPATIENT_SCL', // Requires Outpatient to be selected
             allowDifferentProgram: true
+        },
+        calculation: {
+            method: 'healthSclLookup' // It uses the same lookup method
         }
     },
     'BHN_2_0': {
@@ -351,13 +385,15 @@ export const PRODUCT_CATALOG = {
             validationRules: {
                 stbh: {
                     multipleOf: 100000,
-                    hintFunction: `(mainPremium, totalHospitalSupportStbh, customer) => { 
-                        const maxSupportTotal = Math.floor(mainPremium / 4000000) * 100000;
+                    hintFunction: (stbh, customer, mainPremium, totalHospitalSupportStbh) => {
+                        const { formatCurrency } = HELPERS;
+                        const maxFormula = PRODUCT_CATALOG.HOSPITAL_SUPPORT.calculation.stbhCalculation.config.maxFormula;
+                        const maxSupportTotal = maxFormula(mainPremium);
                         const maxByAge = customer.age >= 18 ? 1000000 : 300000;
                         const remaining = maxSupportTotal - totalHospitalSupportStbh;
                         const finalMax = Math.min(maxByAge, remaining);
-                        return \`Tối đa: \${formatCurrency(finalMax, 'đ/ngày')}. Phải là bội số của 100.000.\`;
-                    }`,
+                        return `Tối đa: ${formatCurrency(finalMax, 'đ/ngày')}. Phải là bội số của 100.000.`;
+                    },
                     maxByAge: { under18: 300000, from18: 1000000 }
                 }
             }
@@ -368,7 +404,7 @@ export const PRODUCT_CATALOG = {
             stbhCalculation: {
                 method: 'aggregateAcrossAllInsureds',
                 config: {
-                    maxFormula: "(mainPremium) => Math.floor(mainPremium / 4000000) * 100000"
+                    maxFormula: (mainPremium) => Math.floor(mainPremium / 4000000) * 100000
                 }
             }
         }
@@ -385,7 +421,7 @@ export const PRODUCT_CATALOG = {
             ]
         },
         calculation: {
-            method: 'ratePer1000Stbh',
+            method: 'ratePer1000StbhForMdp', // A specific method for clarity
             rateTableRef: 'mdp3_rates',
             stbhCalculation: {
                 method: 'sumPremiumsOfPolicy',
@@ -769,7 +805,7 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     benefits:[
       { id:'kba_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
       { id:'kba_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
-      { id:'kba_tangcuong', labelBase:'Gia tăng bảo vệ mỗi năm 5% từ năm thứ 2 đến năm thứ 11', formulaLabel:'Tối đa 50% STBH', valueType:'number', compute:(sa)=>sa*0.50},      
+      { id:'kba_tangcuong', labelBase:'Gia tăng bảo vệ mỗi năm 5% từ năm thứ 2 đến năm thứ 11', formulaLabel:'Tối đa 50% STBH', valueType:'number', compute:(sa)=>sa*0.50},
       { id:'kba_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'tối đa 30% STBH', valueType:'number', minAge:18, compute:(sa)=>sa*0.30 },
       { id:'kba_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', compute:(sa)=>sa*0.50, cap:500000000 }
     ]
@@ -781,7 +817,7 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     benefits:[
       { id:'vtl_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
       { id:'vtl_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
-      { id:'vtl_tangcuong', labelBase:'Gia tăng bảo vệ mỗi năm 5% từ năm thứ 2 đến năm thứ 11', formulaLabel:'Tối đa 50% STBH', valueType:'number', compute:(sa)=>sa*0.50},      
+      { id:'vtl_tangcuong', labelBase:'Gia tăng bảo vệ mỗi năm 5% từ năm thứ 2 đến năm thứ 11', formulaLabel:'Tối đa 50% STBH', valueType:'number', compute:(sa)=>sa*0.50},
       { id:'vtl_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'tối đa 30% STBH', valueType:'number', minAge:18, compute:(sa)=>sa*0.30 },
       { id:'vtl_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', compute:(sa)=>sa*0.50, cap:500000000 }
     ]
