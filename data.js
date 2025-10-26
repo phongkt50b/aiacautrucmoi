@@ -3,21 +3,9 @@
  * @description
  * Tệp này chứa tất cả dữ liệu cấu hình cho các sản phẩm bảo hiểm, được thiết kế theo kiến trúc "hướng dữ liệu".
  * - GLOBAL_CONFIG: Chứa tất cả các hằng số và quy tắc nghiệp vụ toàn cục.
- * - PRODUCT_CATALOG: "Bộ não" của ứng dụng, định nghĩa tất cả sản phẩm (chính, bổ sung).
+ * - PRODUCT_CATALOG: "Bộ não" của ứng dụng, định nghĩa tất cả sản phẩm (chính, bổ sung, gói).
  *   Mỗi sản phẩm là một "bản thiết kế" chi tiết mà logic.js sẽ đọc để tự động render UI, áp dụng quy tắc và tính phí.
- *   Đây là cấu trúc đã được tái cấu trúc hoàn toàn để loại bỏ logic cứng khỏi mã nguồn.
  */
-
-// ===================================================================================
-// ===== HELPER INJECTION (for functions below)
-// ===================================================================================
-
-// This object will be populated by logic.js with helper functions (formatCurrency, etc.)
-// This pattern avoids circular dependencies between data.js and logic.js.
-let HELPERS = {};
-export function setDataHelpers(helpers) {
-    HELPERS = helpers;
-}
 
 // ===================================================================================
 // ===== CẤU HÌNH TOÀN CỤC (GLOBAL CONFIG & BUSINESS RULES)
@@ -25,11 +13,16 @@ export function setDataHelpers(helpers) {
 export const GLOBAL_CONFIG = {
     REFERENCE_DATE: new Date(),
     MAX_SUPPLEMENTARY_INSURED: 10,
-    // Hệ số nhân phí khi thay đổi kỳ đóng phí
-    paymentFrequencyFactors: {
-        half: 1.02,   // Nửa năm
-        quarter: 1.04 // Quý
+    MAIN_PRODUCT_MIN_PREMIUM: 5000000,
+    MAIN_PRODUCT_MIN_STBH: 100000000,
+    PUL_MIN_PREMIUM_OR: 20000000,
+    PUL_MIN_STBH_OR: 1000000000,
+    EXTRA_PREMIUM_MAX_FACTOR: 5,
+    PAYMENT_FREQUENCY_THRESHOLDS: {
+        half: 7000000,
+        quarter: 8000000,
     },
+    HOSPITAL_SUPPORT_STBH_MULTIPLE: 100000,
 };
 
 // ===================================================================================
@@ -40,406 +33,359 @@ export const PRODUCT_CATALOG = {
     // ===== SẢN PHẨM CHÍNH (MAIN PRODUCTS)
     // =======================================================================
 
-    'KHOE_TRON_VEN': {
-        id: 'KHOE_TRON_VEN',
+    'PUL_TRON_DOI': {
         type: 'main',
-        displayName: 'Khoẻ Trọn Vẹn',
+        name: 'Khoẻ trọn vẹn - Trọn đời',
+        group: 'PUL',
         viewerSlug: 'khoe-tron-ven',
-        displayOrder: 1,
-        benefitSchemaKey: 'KHOE_TRON_VEN',
-        programs: {
-            enabled: true,
-            label: 'Lựa chọn bảo vệ',
-            options: [
-                {
-                    key: 'TRON_DOI',
-                    label: 'Trọn đời',
-                    rateTableRef: 'pul_rates.PUL_TRON_DOI',
-                    defaultPaymentTerm: 20,
-                    benefitSchemaText: 'Bảo vệ đến năm 100 tuổi.'
-                },
-                {
-                    key: '15_NAM',
-                    label: '15 năm',
-                    rateTableRef: 'pul_rates.PUL_15NAM',
-                    defaultPaymentTerm: 15,
-                    benefitSchemaText: 'Đóng đủ phí tối thiểu 15 năm - Cam kết bảo vệ tối thiểu 30 năm'
-                },
-                {
-                    key: '5_NAM',
-                    label: '5 năm',
-                    rateTableRef: 'pul_rates.PUL_5NAM',
-                    defaultPaymentTerm: 5,
-                    benefitSchemaText: 'Đóng đủ phí tối thiểu 5 năm - Cam kết bảo vệ tối thiểu 30 năm'
-                }
-            ]
+        benefitSchemaKey: 'PUL_FAMILY',
+        ui: {
+            inputs: ['stbh', 'paymentTerm', 'extraPremium']
         },
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 70 },
             ],
-            validationRules: {
-                anyOf: [
-                    { stbh: { min: 1000000000 } },
-                    { premium: { min: 20000000 } }
-                ],
-                anyOfMessage: "Phí tối thiểu 20.000.000 hoặc STBH từ 1 tỷ trở lên.",
-                extraPremium: {
-                    maxFactorOfBase: 5,
-                    hintFunction: (stbh, customer, basePremium) => `Tối đa ${HELPERS.formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`
-                },
-                paymentTerm: {
-                    min: 4,
-                    maxFunction: (age) => 100 - age,
-                    message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm`
-                }
-            },
-            riderLimits: { enabled: false }
+            stbh: { special: 'PUL_ELIGIBILITY' },
+            premium: { special: 'PUL_ELIGIBILITY' },
+            paymentTerm: { min: 4, maxFn: (age) => 100 - age, default: 20 },
+            extraPremium: { maxFactorOfBase: 5 }
         },
         calculation: {
-            method: 'ratePer1000StbhByProgram',
-            rateTableRef: 'pul_rates'
+            method: 'ratePer1000Stbh',
+            rateTableRef: 'pul_rates.PUL_TRON_DOI'
         },
-        cashValueConfig: {
-            enabled: true,
-            sarIncludesExtraPremium: true,
-            useGuaranteedInterest: true
+        investmentConfig: {
+            costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+            initialFeesRef: 'PUL_TRON_DOI',
+            stbhGrowth: null,
+            persistencyBonusRef: 'persistency_bonus',
+            bonusRule: {
+                type: 'persistency_milestone'
+            }
+        }
+    },
+
+    'PUL_15NAM': {
+        type: 'main',
+        name: 'Khoẻ trọn vẹn - 15 năm',
+        group: 'PUL',
+        viewerSlug: 'khoe-tron-ven',
+        benefitSchemaKey: 'PUL_FAMILY',
+        ui: {
+            inputs: ['stbh', 'paymentTerm', 'extraPremium']
+        },
+        rules: {
+            eligibility: [
+                { type: 'daysFromBirth', min: 30 },
+                { type: 'age', max: 70 },
+            ],
+            stbh: { special: 'PUL_ELIGIBILITY' },
+            premium: { special: 'PUL_ELIGIBILITY' },
+            paymentTerm: { min: 15, maxFn: (age) => 100 - age, default: 15 },
+            extraPremium: { maxFactorOfBase: 5 }
+        },
+        calculation: {
+            method: 'ratePer1000Stbh',
+            rateTableRef: 'pul_rates.PUL_15NAM'
+        },
+        investmentConfig: {
+            costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+            initialFeesRef: 'PUL_15NAM',
+            stbhGrowth: null,
+            persistencyBonusRef: 'persistency_bonus',
+            bonusRule: {
+                type: 'persistency_milestone'
+            }
+        }
+    },
+
+    'PUL_5NAM': {
+        type: 'main',
+        name: 'Khoẻ trọn vẹn - 5 năm',
+        group: 'PUL',
+        viewerSlug: 'khoe-tron-ven',
+        benefitSchemaKey: 'PUL_FAMILY',
+        ui: {
+            inputs: ['stbh', 'paymentTerm', 'extraPremium']
+        },
+        rules: {
+            eligibility: [
+                { type: 'daysFromBirth', min: 30 },
+                { type: 'age', max: 70 },
+            ],
+            stbh: { special: 'PUL_ELIGIBILITY' },
+            premium: { special: 'PUL_ELIGIBILITY' },
+            paymentTerm: { min: 5, maxFn: (age) => 100 - age, default: 5 },
+            extraPremium: { maxFactorOfBase: 5 }
+        },
+        calculation: {
+            method: 'ratePer1000Stbh',
+            rateTableRef: 'pul_rates.PUL_5NAM'
+        },
+        investmentConfig: {
+            costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+            initialFeesRef: 'PUL_5NAM',
+            stbhGrowth: null,
+            persistencyBonusRef: 'persistency_bonus',
+            bonusRule: {
+                type: 'persistency_milestone'
+            }
         }
     },
 
     'KHOE_BINH_AN': {
-        id: 'KHOE_BINH_AN',
         type: 'main',
-        displayName: 'MUL - Khoẻ Bình An',
+        name: 'MUL - Khoẻ Bình An',
+        group: 'MUL',
         viewerSlug: 'khoe-binh-an',
-        displayOrder: 2,
         benefitSchemaKey: 'KHOE_BINH_AN',
+        ui: {
+            inputs: ['stbh', 'premium', 'paymentTerm', 'extraPremium']
+        },
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 70 },
             ],
-            validationRules: {
-                stbh: { min: 100000000, message: "STBH tối thiểu 100 triệu" },
-                premium: {
-                    min: 5000000,
-                    message: "Phí tối thiểu 5 triệu",
-                    stbhFactorRef: 'mul_factors',
-                    stbhFactorMessage: "Phí không hợp lệ so với STBH",
-                    hintFunction: (stbh, customer) => {
-                        const { product_data, roundDownTo1000, formatCurrency } = HELPERS;
-                        const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
-                        if (!factorRow || !stbh) return '';
-                        const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
-                        const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
-                        return `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
-                    }
-                },
-                paymentTerm: { min: 4, maxFunction: (age) => 100 - age, default: 20, message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm` },
-                extraPremium: {
-                    maxFactorOfBase: 5,
-                    hintFunction: (stbh, customer, basePremium) => `Tối đa ${HELPERS.formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`
-                }
-            },
-             riderLimits: { enabled: false }
+            stbh: { min: 100000000 },
+            premium: { min: 5000000, special: 'MUL_FACTOR_CHECK' },
+            paymentTerm: { min: 4, maxFn: (age) => 100 - age, default: 20 },
+            extraPremium: { maxFactorOfBase: 5 }
         },
         calculation: {
             method: 'fromInput'
         },
-        cashValueConfig: {
-            enabled: true,
-            sarIncludesExtraPremium: false,
-            useGuaranteedInterest: true
+        investmentConfig: {
+            costOfInsuranceRef: 'mul_cost_of_insurance_rates',
+            initialFeesRef: 'KHOE_BINH_AN',
+            stbhGrowth: {
+                type: 'linear_capped',
+                rate: 0.05,
+                startYear: 2,
+                endYear: 11
+            },
+            bonusRule: {
+                type: 'annual_premium',
+                rate: 0.03,
+                startYear: 5
+            }
         }
     },
 
     'VUNG_TUONG_LAI': {
-        id: 'VUNG_TUONG_LAI',
         type: 'main',
-        displayName: 'MUL - Vững Tương Lai',
+        name: 'MUL - Vững Tương Lai',
+        group: 'MUL',
         viewerSlug: 'vung-tuong-lai',
-        displayOrder: 3,
         benefitSchemaKey: 'VUNG_TUONG_LAI',
+        ui: {
+            inputs: ['stbh', 'premium', 'paymentTerm', 'extraPremium']
+        },
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 70 },
             ],
-            validationRules: {
-                stbh: { min: 100000000, message: "STBH tối thiểu 100 triệu" },
-                premium: {
-                    min: 5000000,
-                    message: "Phí tối thiểu 5 triệu",
-                    stbhFactorRef: 'mul_factors',
-                    stbhFactorMessage: "Phí không hợp lệ so với STBH",
-                    hintFunction: (stbh, customer) => {
-                        const { product_data, roundDownTo1000, formatCurrency } = HELPERS;
-                        const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
-                        if (!factorRow || !stbh) return '';
-                        const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
-                        const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
-                        return `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
-                    }
-                },
-                paymentTerm: { min: 4, maxFunction: (age) => 100 - age, default: 20, message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm` },
-                extraPremium: {
-                    maxFactorOfBase: 5,
-                    hintFunction: (stbh, customer, basePremium) => `Tối đa ${HELPERS.formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`
-                }
-            },
-            riderLimits: { enabled: false }
+            stbh: { min: 100000000 },
+            premium: { min: 5000000, special: 'MUL_FACTOR_CHECK' },
+            paymentTerm: { min: 4, maxFn: (age) => 100 - age, default: 20 },
+            extraPremium: { maxFactorOfBase: 5 }
         },
         calculation: {
             method: 'fromInput'
         },
-        cashValueConfig: {
-            enabled: true,
-            sarIncludesExtraPremium: false,
-            useGuaranteedInterest: true
+        investmentConfig: {
+            costOfInsuranceRef: 'mul_cost_of_insurance_rates',
+            initialFeesRef: 'VUNG_TUONG_LAI',
+            stbhGrowth: null,
+            bonusRule: {
+                type: 'annual_premium',
+                rate: 0.03,
+                startYear: 5
+            }
         }
     },
-
-    'AN_BINH_UU_VIET': {
-        id: 'AN_BINH_UU_VIET',
+    
+    'TRON_TAM_AN': {
         type: 'main',
-        displayName: 'An Bình Ưu Việt',
+        name: 'Trọn tâm an',
+        group: 'PACKAGE',
+        viewerSlug: 'tron-tam-an',
+        benefitSchemaKey: null, // Không có schema riêng, dùng includes
+        includesBenefitSchema: 'AN_BINH_UU_VIET', // Thêm quyền lợi của sản phẩm này
+        packageConfig: {
+            underlyingMainProduct: 'AN_BINH_UU_VIET', 
+            fixedValues: {
+                stbh: 100000000,
+                paymentTerm: 10,
+            },
+            mandatoryRiders: ['health_scl'] 
+        },
+        ui: {
+            inputs: []
+        },
+        rules: {
+            eligibility: [
+                { type: 'age', min: 12, max: 60, condition: (p) => p.gender === 'Nam' },
+                { type: 'age', min: 28, max: 60, condition: (p) => p.gender === 'Nữ' },
+                { type: 'riskGroup', exclude: [4], required: true }
+            ],
+            noSupplementaryInsured: true
+        },
+        calculation: {
+            method: 'none'
+        }
+    },
+    
+    'AN_BINH_UU_VIET': {
+        type: 'main',
+        name: 'An Bình Ưu Việt',
+        group: 'TRADITIONAL',
         viewerSlug: 'an-binh-uu-viet',
-        displayOrder: 4,
         benefitSchemaKey: 'AN_BINH_UU_VIET',
-        programs: {
-            enabled: true,
-            label: 'Thời hạn đóng phí',
-            options: [
-                { key: '15', label: '15 năm', rateTableRef: 'an_binh_uu_viet_rates.15', eligibility: [{ type: 'age', max: 55 }] },
-                { key: '10', label: '10 năm', rateTableRef: 'an_binh_uu_viet_rates.10', eligibility: [{ type: 'age', max: 60 }] },
-                { key: '5', label: '5 năm', rateTableRef: 'an_binh_uu_viet_rates.5', eligibility: [{ type: 'age', max: 65 }] }
-            ]
+        ui: {
+            inputs: ['stbh'],
+            options: {
+                paymentTerm: {
+                    id: 'abuv-term',
+                    label: 'Thời hạn đóng phí',
+                    values: [
+                        { value: '15', label: '15 năm', condition: (p) => p.age <= 55 },
+                        { value: '10', label: '10 năm', condition: (p) => p.age <= 60 },
+                        { value: '5', label: '5 năm', condition: (p) => p.age <= 65 },
+                    ]
+                }
+            }
         },
         rules: {
             eligibility: [
                 { type: 'age', min: 12, max: 65, condition: (p) => p.gender === 'Nam' },
                 { type: 'age', min: 28, max: 65, condition: (p) => p.gender === 'Nữ' },
             ],
-            validationRules: {
-                stbh: { min: 100000000, message: "STBH tối thiểu 100 triệu" },
-                premium: { min: 5000000, message: "Phí chính tối thiểu 5 triệu" }
-            },
-            riderLimits: { enabled: false }
+            stbh: { min: 100000000 },
+            premium: { min: 5000000 }
         },
         calculation: {
-            method: 'ratePer1000StbhByProgram',
+            method: 'ratePer1000StbhWithTerm',
             rateTableRef: 'an_binh_uu_viet_rates'
-        },
-        cashValueConfig: {
-            enabled: false
         }
     },
-    'TRON_TAM_AN': {
-        id: 'TRON_TAM_AN',
-        type: 'main',
-        displayName: 'Gói Trọn Tâm An',
-        viewerSlug: 'tron-tam-an',
-        displayOrder: 5,
-        packageConfig: {
-            underlyingMainProduct: 'AN_BINH_UU_VIET',
-            fixedValues: {
-                stbh: 100000000,
-                program: '10' // The key for the 10-year program in ABUV
-            },
-            mandatoryRiders: [
-                { id: 'HOSPITAL_SUPPORT', fixedValues: { stbh: 200000 } },
-                { id: 'ACCIDENT', fixedValues: { stbh: 100000000 } }
-            ]
-        },
-        rules: {
-            eligibility: [
-                { type: 'age', min: 28, max: 60 }
-            ],
-            noSupplementaryInsured: true
-        },
-        calculation: {
-            method: 'package'
-        },
-        cashValueConfig: {
-            enabled: false
-        }
-    },
+
     // =======================================================================
     // ===== SẢN PHẨM BỔ SUNG (RIDERS)
     // =======================================================================
 
-    'HEALTH_SCL': {
-        id: 'HEALTH_SCL',
+    'health_scl': {
+        id: 'health_scl',
         type: 'rider',
-        displayName: 'Sức khỏe Bùng Gia Lực',
+        name: 'Sức khỏe Bùng Gia Lực',
         viewerSlug: 'bung-gia-luc',
-        displayOrder: 10,
         benefitSchemaKey: 'HEALTH_SCL',
-        dependencies: {
-            subRiders: ['OUTPATIENT_SCL', 'DENTAL_SCL'],
-            mainPremiumThresholds: {
-                label: "chương trình",
-                thresholds: [
-                    { minPremium: 5000000,  maxPremium: 9999999, allowed: ['co_ban', 'nang_cao'] },
-                    { minPremium: 10000000, maxPremium: 14999999, allowed: ['co_ban', 'nang_cao', 'toan_dien'] },
-                    { minPremium: 15000000, allowed: ['co_ban', 'nang_cao', 'toan_dien', 'hoan_hao'] }
-                ]
-            }
-        },
-        programs: {
-            enabled: true,
-            label: "Chương trình",
-            options: [
-                { key: 'co_ban', label: 'Cơ bản'},
-                { key: 'nang_cao', label: 'Nâng cao' },
-                { key: 'toan_dien', label: 'Toàn diện' },
-                { key: 'hoan_hao', label: 'Hoàn hảo' }
-            ]
+        ui: {
+            options: ['program', 'scope', 'outpatient', 'dental']
         },
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 65, renewalMax: 74 },
                 { type: 'riskGroup', exclude: [4], required: true }
-            ]
+            ],
+            dependencies: {
+                premiumThresholdForProgram: true,
+                dentalRequiresOutpatient: true
+            },
+            stbhByProgram: {
+                co_ban: 100000000,
+                nang_cao: 250000000,
+                toan_dien: 500000000,
+                hoan_hao: 1000000000,
+            }
         },
         calculation: {
             method: 'healthSclLookup'
         }
     },
-    'OUTPATIENT_SCL': {
-        id: 'OUTPATIENT_SCL',
+    
+    'bhn': {
+        id: 'bhn',
         type: 'rider',
-        displayName: 'Quyền lợi ngoại trú',
-        benefitSchemaKey: 'OUTPATIENT_SCL',
-        dependencies: {
-            parentRiderRequired: 'HEALTH_SCL',
-            allowDifferentProgram: true
-        },
-        calculation: {
-            method: 'healthSclLookup'
-        }
-    },
-    'DENTAL_SCL': {
-        id: 'DENTAL_SCL',
-        type: 'rider',
-        displayName: 'Quyền lợi nha khoa',
-        benefitSchemaKey: 'DENTAL_SCL',
-        dependencies: {
-            parentRiderRequired: 'OUTPATIENT_SCL',
-            allowDifferentProgram: true
-        },
-        calculation: {
-            method: 'healthSclLookup'
-        }
-    },
-    'BHN_2_0': {
-        id: 'BHN_2_0',
-        type: 'rider',
-        displayName: 'Bệnh Hiểm Nghèo 2.0',
+        name: 'Bệnh Hiểm Nghèo 2.0',
         viewerSlug: 'benh-hiem-ngheo-20',
-        displayOrder: 11,
         benefitSchemaKey: 'BHN_2_0',
+        ui: {
+            inputs: ['stbh']
+        },
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 70, renewalMax: 85 },
             ],
-            validationRules: {
-                stbh: { min: 200000000, max: 5000000000, hint: 'STBH từ 200 triệu đến 5 tỷ.' }
-            }
+            stbh: { min: 200000000, max: 5000000000 }
         },
         calculation: {
-            method: 'ratePer1000Stbh',
-            rateTableRef: 'bhn_rates'
+            method: 'rateLookup',
+            rateTableRef: 'bhn_rates',
+            lookupBy: ['ageBand', 'gender'],
+            divisor: 1000
         }
     },
-    'ACCIDENT': {
-        id: 'ACCIDENT',
+
+    'accident': {
+        id: 'accident',
         type: 'rider',
-        displayName: 'Bảo hiểm Tai nạn',
+        name: 'Bảo hiểm Tai nạn',
         viewerSlug: 'tai-nan',
-        displayOrder: 13,
         benefitSchemaKey: 'ACCIDENT',
+        ui: {
+            inputs: ['stbh']
+        },
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 64, renewalMax: 65 },
                 { type: 'riskGroup', required: true }
             ],
-            validationRules: {
-                stbh: { min: 10000000, max: 8000000000, hint: 'STBH từ 10 triệu đến 8 tỷ.' }
-            }
+            stbh: { min: 10000000, max: 8000000000 }
         },
         calculation: {
-            method: 'ratePer1000StbhByRiskGroup',
-            rateTableRef: 'accident_rates'
+            method: 'rateLookup',
+            rateTableRef: 'accident_rates',
+            lookupBy: ['riskGroup'],
+            divisor: 1000
         }
     },
-    'HOSPITAL_SUPPORT': {
-        id: 'HOSPITAL_SUPPORT',
+
+    'hospital_support': {
+        id: 'hospital_support',
         type: 'rider',
-        displayName: 'Hỗ trợ chi phí nằm viện',
+        name: 'Hỗ trợ chi phí nằm viện',
         viewerSlug: 'ho-tro-vien-phi',
-        displayOrder: 12,
         benefitSchemaKey: 'HOSPITAL_SUPPORT',
+        ui: {
+            inputs: ['stbh']
+        },
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 55, renewalMax: 59 },
             ],
-            validationRules: {
-                stbh: {
-                    multipleOf: 100000,
-                    hintFunction: (stbh, customer, mainPremium, totalHospitalSupportStbh) => {
-                        const { formatCurrency } = HELPERS;
-                        const maxFormula = PRODUCT_CATALOG.HOSPITAL_SUPPORT.calculation.stbhCalculation.config.maxFormula;
-                        const maxSupportTotal = maxFormula(mainPremium);
-                        const maxByAge = customer.age >= 18 ? 1000000 : 300000;
-                        const remaining = maxSupportTotal - totalHospitalSupportStbh;
-                        const finalMax = Math.min(maxByAge, remaining);
-                        return `Tối đa: ${formatCurrency(finalMax, 'đ/ngày')}. Phải là bội số của 100.000.`;
-                    },
-                    maxByAge: { under18: 300000, from18: 1000000 }
-                }
+            stbh: { 
+                multipleOf: 100000,
+                maxByAge: { under18: 300000, from18: 1000000 },
+                special: 'HOSPITAL_SUPPORT_MAX_BY_MAIN_PREMIUM'
             }
         },
         calculation: {
-            method: 'ratePer100Stbh',
+            method: 'rateLookup',
             rateTableRef: 'hospital_fee_support_rates',
-            stbhCalculation: {
-                method: 'aggregateAcrossAllInsureds',
-                config: {
-                    maxFormula: (mainPremium) => Math.floor(mainPremium / 4000000) * 100000
-                }
-            }
-        }
-    },
-    'MDP_3_0': {
-        id: 'MDP_3_0',
-        type: 'rider',
-        displayName: 'Miễn Đóng Phí 3.0',
-        viewerSlug: 'mien-dong-phi',
-        displayOrder: 20,
-        rules: {
-            eligibility: [
-                { type: 'age', min: 18, max: 60 }
-            ]
-        },
-        calculation: {
-            method: 'ratePer1000StbhForMdp', // A specific method for clarity
-            rateTableRef: 'mdp3_rates',
-            stbhCalculation: {
-                method: 'sumPremiumsOfPolicy',
-                config: {
-                    includePolicyOwnerRiders: false
-                }
-            }
+            lookupBy: ['ageBand'],
+            valueKey: 'rate',
+            divisor: 100
         }
     }
 };
-
 
 // =======================================================================
 // ===== CÁC BẢNG DỮ LIỆU THÔ (RAW DATA TABLES)
@@ -640,9 +586,10 @@ export const product_data = {
         ]
     },
     an_binh_uu_viet_rates: {
-        '5': [ { age: 12, nam: 4.20, nu: null }, { age: 13, nam: 4.19, nu: null }, { age: 14, nam: 4.17, nu: null }, { age: 15, nam: 4.16, nu: null }, { age: 16, nam: 4.16, nu: null }, { age: 17, nam: 4.17, nu: null }, { age: 18, nam: 4.17, nu: null }, { age: 19, nam: 4.17, nu: null }, { age: 20, nam: 4.22, nu: null }, { age: 21, nam: 4.26, nu: null }, { age: 22, nam: 4.28, nu: null }, { age: 23, nam: 4.29, nu: null }, { age: 24, nam: 4.31, nu: null }, { age: 25, nam: 4.33, nu: null }, { age: 26, nam: 4.34, nu: null }, { age: 27, nam: 4.36, nu: null }, { age: 28, nam: 4.39, nu: 3.71 }, { age: 29, nam: 4.44, nu: 3.73 }, { age: 30, nam: 4.52, nu: 3.75 }, { age: 31, nam: 4.62, nu: 3.78 }, { age: 32, nam: 4.77, nu: 3.84 }, { age: 33, nam: 4.96, nu: 3.93 }, { age: 34, nam: 5.16, nu: 4.05 }, { age: 35, nam: 5.37, nu: 4.20 }, { age: 36, nam: 5.55, nu: 4.37 }, { age: 37, nam: 5.79, nu: 4.55 }, { age: 38, nam: 6.02, nu: 4.70 }, { age: 39, nam: 6.27, nu: 4.88 }, { age: 40, nam: 6.54, nu: 5.08 }, { age: 41, nam: 6.85, nu: 5.30 }, { age: 42, nam: 7.18, nu: 5.52 }, { age: 43, nam: 7.54, nu: 5.76 }, { age: 44, nam: 7.93, nu: 6.03 }, { age: 45, nam: 8.36, nu: 6.31 }, { age: 46, nam: 8.81, nu: 6.62 }, { age: 47, nam: 9.31, nu: 6.94 }, { age: 48, nam: 9.88, nu: 7.30 }, { age: 49, nam: 10.49, nu: 7.69 }, { age: 50, nam: 11.32, nu: 8.23 }, { age: 51, nam: 12.21, nu: 8.82 }, { age: 52, nam: 13.24, nu: 9.48 }, { age: 53, nam: 14.41, nu: 10.22 }, { age: 54, nam: 15.77, nu: 11.15 }, { age: 55, nam: 17.43, nu: 12.33 }, { age: 56, nam: 18.82, nu: 13.19 }, { age: 57, nam: 20.41, nu: 14.15 }, { age: 58, nam: 22.29, nu: 15.32 }, { age: 59, nam: 24.15, nu: 16.49 }, { age: 60, nam: 26.19, nu: 17.83 }, { age: 61, nam: 28.51, nu: 19.36 }, { age: 62, nam: 31.13, nu: 21.05 }, { age: 63, nam: 34.09, nu: 22.97 }, { age: 64, nam: 37.02, nu: 24.87 }, { age: 65, nam: 40.21, nu: 27.03 } ],
-        '10': [ { age: 12, nam: 3.55, nu: null }, { age: 13, nam: 3.66, nu: null }, { age: 14, nam: 3.77, nu: null }, { age: 15, nam: 3.87, nu: null }, { age: 16, nam: 3.96, nu: null }, { age: 17, nam: 4.06, nu: null }, { age: 18, nam: 4.20, nu: null }, { age: 19, nam: 4.22, nu: null }, { age: 20, nam: 4.28, nu: null }, { age: 21, nam: 4.32, nu: null }, { age: 22, nam: 4.35, nu: null }, { age: 23, nam: 4.35, nu: null }, { age: 24, nam: 4.36, nu: null }, { age: 25, nam: 4.38, nu: null }, { age: 26, nam: 4.40, nu: null }, { age: 27, nam: 4.42, nu: null }, { age: 28, nam: 4.44, nu: 3.75 }, { age: 29, nam: 4.50, nu: 3.77 }, { age: 30, nam: 4.57, nu: 3.79 }, { age: 31, nam: 4.68, nu: 3.83 }, { age: 32, nam: 4.83, nu: 3.89 }, { age: 33, nam: 5.01, nu: 3.97 }, { age: 34, nam: 5.21, nu: 4.09 }, { age: 35, nam: 5.42, nu: 4.24 }, { age: 36, nam: 5.64, nu: 4.40 }, { age: 37, nam: 5.90, nu: 4.57 }, { age: 38, nam: 6.18, nu: 4.76 }, { age: 39, nam: 6.48, nu: 4.97 }, { age: 40, nam: 6.81, nu: 5.21 }, { age: 41, nam: 7.19, nu: 5.47 }, { age: 42, nam: 7.62, nu: 5.74 }, { age: 43, nam: 8.07, nu: 6.04 }, { age: 44, nam: 8.57, nu: 6.36 }, { age: 45, nam: 9.12, nu: 6.71 }, { age: 46, nam: 9.75, nu: 7.12 }, { age: 47, nam: 10.46, nu: 7.57 }, { age: 48, nam: 11.24, nu: 8.04 }, { age: 49, nam: 12.11, nu: 8.58 }, { age: 50, nam: 13.07, nu: 9.17 }, { age: 51, nam: 14.14, nu: 9.91 }, { age: 52, nam: 15.35, nu: 10.65 }, { age: 53, nam: 16.71, nu: 11.46 }, { age: 54, nam: 18.25, nu: 12.45 }, { age: 55, nam: 20.04, nu: 13.68 }, { age: 56, nam: 21.76, nu: 14.75 }, { age: 57, nam: 23.69, nu: 15.95 }, { age: 58, nam: 25.89, nu: 17.33 }, { age: 59, nam: 28.11, nu: 18.74 }, { age: 60, nam: 30.52, nu: 20.29 } ],
-        '15': [ { age: 12, nam: 3.64, nu: null }, { age: 13, nam: 3.73, nu: null }, { age: 14, nam: 3.83, nu: null }, { age: 15, nam: 3.92, nu: null }, { age: 16, nam: 4.00, nu: null }, { age: 17, nam: 4.09, nu: null }, { age: 18, nam: 4.21, nu: null }, { age: 19, nam: 4.23, nu: null }, { age: 20, nam: 4.29, nu: null }, { age: 21, nam: 4.34, nu: null }, { age: 22, nam: 4.38, nu: null }, { age: 23, nam: 4.40, nu: null }, { age: 24, nam: 4.44, nu: null }, { age: 25, nam: 4.47, nu: null }, { age: 26, nam: 4.51, nu: null }, { age: 27, nam: 4.56, nu: null }, { age: 28, nam: 4.61, nu: 3.84 }, { age: 29, nam: 4.70, nu: 3.88 }, { age: 30, nam: 4.81, nu: 3.93 }, { age: 31, nam: 4.95, nu: 4.00 }, { age: 32, nam: 5.14, nu: 4.09 }, { age: 33, nam: 5.37, nu: 4.21 }, { age: 34, nam: 5.61, nu: 4.37 }, { age: 35, nam: 5.88, nu: 4.55 }, { age: 36, nam: 6.17, nu: 4.75 }, { age: 37, nam: 6.63, nu: 4.97 }, { age: 38, nam: 7.01, nu: 5.22 }, { age: 39, nam: 7.43, nu: 5.49 }, { age: 40, nam: 7.78, nu: 5.82 }, { age: 41, nam: 8.29, nu: 6.16 }, { age: 42, nam: 8.86, nu: 6.52 }, { age: 43, nam: 9.49, nu: 6.90 }, { age: 44, nam: 10.17, nu: 7.32 }, { age: 45, nam: 10.91, nu: 7.77 }, { age: 46, nam: 11.73, nu: 8.25 }, { age: 47, nam: 12.64, nu: 8.78 }, { age: 48, nam: 13.64, nu: 9.37 }, { age: 49, nam: 14.74, nu: 10.04 }, { age: 50, nam: 15.94, nu: 10.75 }, { age: 51, nam: 17.30, nu: 11.58 }, { age: 52, nam: 18.81, nu: 12.51 }, { age: 53, nam: 20.49, nu: 13.54 }, { age: 54, nam: 22.35, nu: 14.70 }, { age: 55, nam: 24.45, nu: 16.07 } ]
+        5: [ { age: 12, nam: 4.20, nu: null }, { age: 13, nam: 4.19, nu: null }, { age: 14, nam: 4.17, nu: null }, { age: 15, nam: 4.16, nu: null }, { age: 16, nam: 4.16, nu: null }, { age: 17, nam: 4.17, nu: null }, { age: 18, nam: 4.17, nu: null }, { age: 19, nam: 4.17, nu: null }, { age: 20, nam: 4.22, nu: null }, { age: 21, nam: 4.26, nu: null }, { age: 22, nam: 4.28, nu: null }, { age: 23, nam: 4.29, nu: null }, { age: 24, nam: 4.31, nu: null }, { age: 25, nam: 4.33, nu: null }, { age: 26, nam: 4.34, nu: null }, { age: 27, nam: 4.36, nu: null }, { age: 28, nam: 4.39, nu: 3.71 }, { age: 29, nam: 4.44, nu: 3.73 }, { age: 30, nam: 4.52, nu: 3.75 }, { age: 31, nam: 4.62, nu: 3.78 }, { age: 32, nam: 4.77, nu: 3.84 }, { age: 33, nam: 4.96, nu: 3.93 }, { age: 34, nam: 5.16, nu: 4.05 }, { age: 35, nam: 5.37, nu: 4.20 }, { age: 36, nam: 5.55, nu: 4.37 }, { age: 37, nam: 5.79, nu: 4.55 }, { age: 38, nam: 6.02, nu: 4.70 }, { age: 39, nam: 6.27, nu: 4.88 }, { age: 40, nam: 6.54, nu: 5.08 }, { age: 41, nam: 6.85, nu: 5.30 }, { age: 42, nam: 7.18, nu: 5.52 }, { age: 43, nam: 7.54, nu: 5.76 }, { age: 44, nam: 7.93, nu: 6.03 }, { age: 45, nam: 8.36, nu: 6.31 }, { age: 46, nam: 8.81, nu: 6.62 }, { age: 47, nam: 9.31, nu: 6.94 }, { age: 48, nam: 9.88, nu: 7.30 }, { age: 49, nam: 10.49, nu: 7.69 }, { age: 50, nam: 11.32, nu: 8.23 }, { age: 51, nam: 12.21, nu: 8.82 }, { age: 52, nam: 13.24, nu: 9.48 }, { age: 53, nam: 14.41, nu: 10.22 }, { age: 54, nam: 15.77, nu: 11.15 }, { age: 55, nam: 17.43, nu: 12.33 }, { age: 56, nam: 18.82, nu: 13.19 }, { age: 57, nam: 20.41, nu: 14.15 }, { age: 58, nam: 22.29, nu: 15.32 }, { age: 59, nam: 24.15, nu: 16.49 }, { age: 60, nam: 26.19, nu: 17.83 }, { age: 61, nam: 28.51, nu: 19.36 }, { age: 62, nam: 31.13, nu: 21.05 }, { age: 63, nam: 34.09, nu: 22.97 }, { age: 64, nam: 37.02, nu: 24.87 }, { age: 65, nam: 40.21, nu: 27.03 } ],
+        10: [ { age: 12, nam: 3.55, nu: null }, { age: 13, nam: 3.66, nu: null }, { age: 14, nam: 3.77, nu: null }, { age: 15, nam: 3.87, nu: null }, { age: 16, nam: 3.96, nu: null }, { age: 17, nam: 4.06, nu: null }, { age: 18, nam: 4.20, nu: null }, { age: 19, nam: 4.22, nu: null }, { age: 20, nam: 4.28, nu: null }, { age: 21, nam: 4.32, nu: null }, { age: 22, nam: 4.35, nu: null }, { age: 23, nam: 4.35, nu: null }, { age: 24, nam: 4.36, nu: null }, { age: 25, nam: 4.38, nu: null }, { age: 26, nam: 4.40, nu: null }, { age: 27, nam: 4.42, nu: null }, { age: 28, nam: 4.44, nu: 3.75 }, { age: 29, nam: 4.50, nu: 3.77 }, { age: 30, nam: 4.57, nu: 3.79 }, { age: 31, nam: 4.68, nu: 3.83 }, { age: 32, nam: 4.83, nu: 3.89 }, { age: 33, nam: 5.01, nu: 3.97 }, { age: 34, nam: 5.21, nu: 4.09 }, { age: 35, nam: 5.42, nu: 4.24 }, { age: 36, nam: 5.64, nu: 4.40 }, { age: 37, nam: 5.90, nu: 4.57 }, { age: 38, nam: 6.18, nu: 4.76 }, { age: 39, nam: 6.48, nu: 4.97 }, { age: 40, nam: 6.81, nu: 5.21 }, { age: 41, nam: 7.19, nu: 5.47 }, { age: 42, nam: 7.62, nu: 5.74 }, { age: 43, nam: 8.07, nu: 6.04 }, { age: 44, nam: 8.57, nu: 6.36 }, { age: 45, nam: 9.12, nu: 6.71 }, { age: 46, nam: 9.75, nu: 7.12 }, { age: 47, nam: 10.46, nu: 7.57 }, { age: 48, nam: 11.24, nu: 8.04 }, { age: 49, nam: 12.11, nu: 8.58 }, { age: 50, nam: 13.07, nu: 9.17 }, { age: 51, nam: 14.14, nu: 9.91 }, { age: 52, nam: 15.35, nu: 10.65 }, { age: 53, nam: 16.71, nu: 11.46 }, { age: 54, nam: 18.25, nu: 12.45 }, { age: 55, nam: 20.04, nu: 13.68 }, { age: 56, nam: 21.76, nu: 14.75 }, { age: 57, nam: 23.69, nu: 15.95 }, { age: 58, nam: 25.89, nu: 17.33 }, { age: 59, nam: 28.11, nu: 18.74 }, { age: 60, nam: 30.52, nu: 20.29 } ],
+        15: [ { age: 12, nam: 3.64, nu: null }, { age: 13, nam: 3.73, nu: null }, { age: 14, nam: 3.83, nu: null }, { age: 15, nam: 3.92, nu: null }, { age: 16, nam: 4.00, nu: null }, { age: 17, nam: 4.09, nu: null }, { age: 18, nam: 4.21, nu: null }, { age: 19, nam: 4.23, nu: null }, { age: 20, nam: 4.29, nu: null }, { age: 21, nam: 4.34, nu: null }, { age: 22, nam: 4.38, nu: null }, { age: 23, nam: 4.40, nu: null }, { age: 24, nam: 4.44, nu: null }, { age: 25, nam: 4.47, nu: null }, { age: 26, nam: 4.51, nu: null }, { age: 27, nam: 4.56, nu: null }, { age: 28, nam: 4.61, nu: 3.84 }, { age: 29, nam: 4.70, nu: 3.88 }, { age: 30, nam: 4.81, nu: 3.93 }, { age: 31, nam: 4.95, nu: 4.00 }, { age: 32, nam: 5.14, nu: 4.09 }, { age: 33, nam: 5.37, nu: 4.21 }, { age: 34, nam: 5.61, nu: 4.37 }, { age: 35, nam: 5.88, nu: 4.55 }, { age: 36, nam: 6.17, nu: 4.75 }, { age: 37, nam: 6.63, nu: 4.97 }, { age: 38, nam: 7.01, nu: 5.22 }, { age: 39, nam: 7.43, nu: 5.49 }, { age: 40, nam: 7.78, nu: 5.82 }, { age: 41, nam: 8.29, nu: 6.16 }, { age: 42, nam: 8.86, nu: 6.52 }, { age: 43, nam: 9.49, nu: 6.90 }, { age: 44, nam: 10.17, nu: 7.32 }, { age: 45, nam: 10.91, nu: 7.77 }, { age: 46, nam: 11.73, nu: 8.25 }, { age: 47, nam: 12.64, nu: 8.78 }, { age: 48, nam: 13.64, nu: 9.37 }, { age: 49, nam: 14.74, nu: 10.04 }, { age: 50, nam: 15.94, nu: 10.75 }, { age: 51, nam: 17.30, nu: 11.58 }, { age: 52, nam: 18.81, nu: 12.51 }, { age: 53, nam: 20.49, nu: 13.54 }, { age: 54, nam: 22.35, nu: 14.70 }, { age: 55, nam: 24.45, nu: 16.07 }
+        ]
     },
     mul_factors: [
         { ageMin: 0, ageMax: 9, minFactor: 55, maxFactor: 150 }, { ageMin: 10, ageMax: 16, minFactor: 45, maxFactor: 150 }, { ageMin: 17, ageMax: 19, minFactor: 40, maxFactor: 150 }, { ageMin: 20, ageMax: 29, minFactor: 35, maxFactor: 140 }, { ageMin: 30, ageMax: 34, minFactor: 25, maxFactor: 120 }, { ageMin: 35, ageMax: 39, minFactor: 20, maxFactor: 100 }, { ageMin: 40, ageMax: 44, minFactor: 20, maxFactor: 70 }, { ageMin: 45, ageMax: 49, minFactor: 20, maxFactor: 50 }, { ageMin: 50, ageMax: 54, minFactor: 15, maxFactor: 40 }, { ageMin: 55, ageMax: 59, minFactor: 8, maxFactor: 20 }, { ageMin: 60, ageMax: 70, minFactor: 5, maxFactor: 10 }
@@ -684,9 +631,11 @@ export const investment_data = {
         { age: 0, nam: 2.099, nu: 1.5 }, { age: 1, nam: 0.821, nu: 0.67 }, { age: 2, nam: 0.79, nu: 0.64 }, { age: 3, nam: 0.78, nu: 0.619 }, { age: 4, nam: 0.74, nu: 0.62 }, { age: 5, nam: 0.7, nu: 0.601 }, { age: 6, nam: 0.66, nu: 0.58 }, { age: 7, nam: 0.62, nu: 0.57 }, { age: 8, nam: 0.6, nu: 0.56 }, { age: 9, nam: 0.59, nu: 0.55 }, { age: 10, nam: 0.6, nu: 0.54 }, { age: 11, nam: 0.65, nu: 0.56 }, { age: 12, nam: 0.74, nu: 0.58 }, { age: 13, nam: 0.86, nu: 0.62 }, { age: 14, nam: 0.99, nu: 0.66 }, { age: 15, nam: 1.14, nu: 0.7 }, { age: 16, nam: 1.271, nu: 0.74 }, { age: 17, nam: 1.379, nu: 0.77 }, { age: 18, nam: 1.46, nu: 0.8 }, { age: 19, nam: 1.5, nu: 0.82 }, { age: 20, nam: 1.52, nu: 0.849 }, { age: 21, nam: 1.52, nu: 0.861 }, { age: 22, nam: 1.5, nu: 0.88 }, { age: 23, nam: 1.47, nu: 0.9 }, { age: 24, nam: 1.44, nu: 0.92 }, { age: 25, nam: 1.4, nu: 0.94 }, { age: 26, nam: 1.38, nu: 0.96 }, { age: 27, nam: 1.37, nu: 0.99 }, { age: 28, nam: 1.36, nu: 1.02 }, { age: 29, nam: 1.38, nu: 1.06 }, { age: 30, nam: 1.4, nu: 1.1 }, { age: 31, nam: 1.44, nu: 1.14 }, { age: 32, nam: 1.5, nu: 1.18 }, { age: 33, nam: 1.56, nu: 1.231 }, { age: 34, nam: 1.64, nu: 1.29 }, { age: 35, nam: 1.74, nu: 1.359 }, { age: 36, nam: 1.861, nu: 1.461 }, { age: 37, nam: 1.99, nu: 1.57 }, { age: 38, nam: 2.14, nu: 1.7 }, { age: 39, nam: 2.32, nu: 1.859 }, { age: 40, nam: 2.519, nu: 2.019 }, { age: 41, nam: 2.74, nu: 2.201 }, { age: 42, nam: 2.97, nu: 2.38 }, { age: 43, nam: 3.221, nu: 2.56 }, { age: 44, nam: 3.5, nu: 2.75 }, { age: 45, nam: 3.78, nu: 2.94 }, { age: 46, nam: 4.1, nu: 3.14 }, { age: 47, nam: 4.421, nu: 3.35 }, { age: 48, nam: 4.78, nu: 3.581 }, { age: 49, nam: 5.17, nu: 3.83 }, { age: 50, nam: 5.601, nu: 4.1 }, { age: 51, nam: 6.1, nu: 4.4 }, { age: 52, nam: 6.66, nu: 4.741 }, { age: 53, nam: 7.3, nu: 5.1 }, { age: 54, nam: 8.01, nu: 5.48 }, { age: 55, nam: 8.771, nu: 5.86 }, { age: 56, nam: 9.58, nu: 6.241 }, { age: 57, nam: 10.431, nu: 6.6 }, { age: 58, nam: 11.34, nu: 6.96 }, { age: 59, nam: 12.341, nu: 7.361 }, { age: 60, nam: 13.44, nu: 7.84 }, { age: 61, nam: 14.691, nu: 8.43 }, { age: 62, nam: 16.1, nu: 9.19 }, { age: 63, nam: 17.671, nu: 10.101 }, { age: 64, nam: 19.421, nu: 11.141 }, { age: 65, nam: 21.302, nu: 12.23 }, { age: 66, nam: 23.301, nu: 13.371 }, { age: 67, nam: 25.431, nu: 14.501 }, { age: 68, nam: 27.722, nu: 15.671 }, { age: 69, nam: 30.254, nu: 16.982 }, { age: 70, nam: 33.101, nu: 18.531 }, { age: 71, nam: 36.343, nu: 20.42 }, { age: 72, nam: 40.061, nu: 22.782 }, { age: 73, nam: 44.27, nu: 25.593 }, { age: 74, nam: 48.883, nu: 28.845 }, { age: 75, nam: 53.803, nu: 32.445 }, { age: 76, nam: 58.963, nu: 36.362 }, { age: 77, nam: 64.303, nu: 40.542 }, { age: 78, nam: 69.864, nu: 45.063 }, { age: 79, nam: 75.813, nu: 50.063 }, { age: 80, nam: 82.355, nu: 55.746 }, { age: 81, nam: 89.675, nu: 62.265 }, { age: 82, nam: 97.936, nu: 69.806 }, { age: 83, nam: 107.076, nu: 78.329 }, { age: 84, nam: 116.908, nu: 87.709 }, { age: 85, nam: 127.187, nu: 97.844 }, { age: 86, nam: 137.777, nu: 108.675 }, { age: 87, nam: 148.588, nu: 120.167 }, { age: 88, nam: 159.628, nu: 132.33 }, { age: 89, nam: 170.957, nu: 145.28 }, { age: 90, nam: 182.74, nu: 159.09 }, { age: 91, nam: 195.29, nu: 174.15 }, { age: 92, nam: 209.14, nu: 190.95 }, { age: 93, nam: 225.7, nu: 210.73 }, { age: 94, nam: 247.98, nu: 236.18 }, { age: 95, nam: 281.49, nu: 272.81 }, { age: 96, nam: 336.79, nu: 331.11 }, { age: 97, nam: 432.8, nu: 429.79 }, { age: 98, nam: 596.13, nu: 595.17 }, { age: 99, nam: 800, nu: 800 }, { age: 100, nam: 800, nu: 800 },
     ],
     initial_fees: {
-        KHOE_TRON_VEN: { 1: 0.50, 2: 0.30, 3: 0.20, 4: 0.20, 5: 0.20, 6: 0.02, 7: 0.02, 8: 0.02, 9: 0.02, 10: 0.02 },
+        PUL_TRON_DOI: { 1: 0.50, 2: 0.30, 3: 0.20, 4: 0.20, 5: 0.20, 6: 0.02, 7: 0.02, 8: 0.02, 9: 0.02, 10: 0.02 },
+        PUL_15NAM: { 1: 0.50, 2: 0.30, 3: 0.20, 4: 0.20, 5: 0.20, 6: 0.02, 7: 0.02, 8: 0.02, 9: 0.02, 10: 0.02 },
+        PUL_5NAM: { 1: 0.30, 2: 0.18, 3: 0.12, 4: 0.12, 5: 0.12, 6: 0.012, 7: 0.012, 8: 0.012, 9: 0.012, 10: 0.012 },
         KHOE_BINH_AN: { 1: 0.50, 2: 0.30, 3: 0.20, 4: 0.20, 5: 0.20, 6: 0.02, 7: 0.02, 8: 0.02, 9: 0.02, 10: 0.02 },
-        VUNG_TUONG_LAI: { 1: 0.50, 2: 0.30, 3: 0.20, 4: 0.20, 5: 0.20, 6: 0.02, 7: 0.02, 8: 0.02, 9: 0.02, 10: 0.02 },
+        VUNG_TUONG_LAI:{ 1: 0.50, 2: 0.30, 3: 0.20, 4: 0.20, 5: 0.20, 6: 0.02, 7: 0.02, 8: 0.02, 9: 0.02, 10: 0.02 },
         EXTRA: 0.02
     },
     guaranteed_interest_rates: {
@@ -812,25 +761,24 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     benefits:[
       { id:'kba_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
       { id:'kba_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
-      { id:'kba_tangcuong', labelBase:'Gia tăng bảo vệ mỗi năm 5% từ năm thứ 2 đến năm thứ 11', formulaLabel:'Tối đa 50% STBH', valueType:'number', compute:(sa)=>sa*0.50},
+      { id:'kba_tangcuong', labelBase:'Gia tăng bảo vệ mỗi năm 5% từ năm thứ 2 đến năm thứ 11', formulaLabel:'Tối đa 50% STBH', valueType:'number', compute:(sa)=>sa*0.50},      
       { id:'kba_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'tối đa 30% STBH', valueType:'number', minAge:18, compute:(sa)=>sa*0.30 },
       { id:'kba_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', compute:(sa)=>sa*0.50, cap:500000000 }
     ]
   },
-   {
+  {
     key:'VUNG_TUONG_LAI',
     type:'main',
     hasTotal:true,
     benefits:[
       { id:'vtl_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
       { id:'vtl_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
-      { id:'vtl_tangcuong', labelBase:'Gia tăng bảo vệ mỗi năm 5% từ năm thứ 2 đến năm thứ 11', formulaLabel:'Tối đa 50% STBH', valueType:'number', compute:(sa)=>sa*0.50},
-      { id:'vtl_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'tối đa 30% STBH', valueType:'number', minAge:18, compute:(sa)=>sa*0.30 },
+      { id:'vtl_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'Tối đa 30% STBH', valueType:'number', minAge:18, compute:(sa)=>sa*0.30 },
       { id:'vtl_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', compute:(sa)=>sa*0.50, cap:500000000 }
     ]
   },
   {
-    key:'KHOE_TRON_VEN',
+    key:'PUL_FAMILY',
     type:'main',
     hasTotal:true,
     benefits:[
@@ -838,12 +786,8 @@ export const BENEFIT_MATRIX_SCHEMAS = [
       { id:'pul_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
       { id:'pul_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'Tối đa 20% STBH', valueType:'number', minAge:18, compute:(sa)=>sa*0.20 },
       { id:'pul_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', compute:(sa)=>sa*0.50, cap:500000000 },
-      {
-        id: 'pul_commitment',
-        labelBase: 'Cam kết bảo vệ',
-        valueType: 'text',
-        computeTextByProgram: (programConfig) => programConfig?.benefitSchemaText || ''
-      }
+      { id:'pul_commit_5', labelBase:'Cam kết bảo vệ', formulaLabel:'', valueType:'text', productCond:'PUL_5NAM', text:'Đóng đủ phí tối thiểu 5 năm - Cam kết bảo vệ tối thiểu 30 năm' },
+      { id:'pul_commit_15', labelBase:'Cam kết bảo vệ', formulaLabel:'', valueType:'text', productCond:'PUL_15NAM', text:'Đóng đủ phí tối thiểu 15 năm - Cam kết bảo vệ tối thiểu 30 năm' }
     ]
   },
   {
@@ -866,7 +810,7 @@ export const BENEFIT_MATRIX_SCHEMAS = [
       { id:'scl_day_surgery', labelBase:'Phẫu thuật/Thủ thuật trong ngày', formulaLabel:'', valueType:'text', text:'Theo Chi phí y tế' },
       { id:'scl_common', labelBase:'Điều trị trong ngày cho các bệnh: Viêm phế quản; Viêm phổi; Sốt xuất huyết; Cúm (mỗi bệnh/mỗi Năm hợp đồng)', formulaLabel:'', valueType:'text', computeProg:(m)=> m.commonDisease? bm_fmt(m.commonDisease):'Theo Chi phí y tế' },
       { id:'scl_dialysis', labelBase:'Lọc máu', formulaLabel:'', valueType:'text', computeProg:(m)=> m.dialysis? bm_fmt(m.dialysis):'Theo Chi phí y tế' },
-      { id:'scl_maternity_header', labelBase:'Quyền lợi Thai sản', isHeader: true, maternityOnly:true },
+      { id:'scl_maternity_header', labelBase:'Quyền lợi Thai sản', headerCategory:'maternity' },
       { id:'scl_maternity_ratio', labelBase:'Tỷ lệ chi trả thai sản', formulaLabel:'', valueType:'text', maternityOnly:true, text:'Năm 1: 50% | Năm 2: 80% | Từ năm 3: 100%' },
       { id:'scl_mat_sum', labelBase:'Hạn mức', formulaLabel:'', valueType:'text', maternityOnly:true, computeProg:(m)=> m.maternitySum? bm_fmt(m.maternitySum):'' },
       { id:'scl_mat_check', labelBase:'Khám thai (tối đa 8 lần/năm)', formulaLabel:'', valueType:'text', maternityOnly:true, computeProg:(m)=> m.maternityCheck? bm_fmt(m.maternityCheck)+'/lần':'' },
@@ -876,28 +820,18 @@ export const BENEFIT_MATRIX_SCHEMAS = [
       { id:'scl_mat_birth_cs', labelBase:'Sinh mổ theo chỉ định', formulaLabel:'', valueType:'text', maternityOnly:true, text:'Theo Chi phí y tế' },
       { id:'scl_mat_complication', labelBase:'Biến chứng thai sản', formulaLabel:'', valueType:'text', maternityOnly:true, text:'Theo Chi phí y tế' },
       { id:'scl_mat_newborn', labelBase:'Chăm sóc trẻ sơ sinh (tối đa 7 ngày sau sinh)', formulaLabel:'', valueType:'text', maternityOnly:true, text:'Theo Chi phí y tế' },
-    ]
-  },
-   {
-    key: 'OUTPATIENT_SCL',
-    type: 'rider',
-    displayGroup: 'HEALTH_SCL',
-    benefits: [
-      { id: 'scl_out_header', labelBase: 'Quyền lợi Ngoại trú', isHeader: true, outpatientOnly:true },
+      { id:'scl_out_header', labelBase:'Quyền lợi Ngoại trú', headerCategory:'outpatient' },
       { id:'scl_out_title', labelBase:'Tỷ lệ chi trả', formulaLabel:'', valueType:'text', outpatientOnly:true, text:'80%' },
-      { id:'scl_out_limit', labelBase:'Hạn mức ', formulaLabel:'', valueType:'text', outpatientOnly:true, computeProg:(m)=> m.outLimit ? bm_fmt(m.outLimit) : '' },
-      { id:'scl_out_visit', labelBase:'Mỗi lần khám', formulaLabel:'', valueType:'text', outpatientOnly:true, computeProg:(m)=> m.outVisit ? bm_fmt(m.outVisit) : '' },
-      { id:'scl_out_mental', labelBase:'Tư vấn / Điều trị sức khoẻ tâm thần', formulaLabel:'', valueType:'text', outpatientOnly:true, computeProg:(m)=> m.outMental ? bm_fmt(m.outMental) : 'Không áp dụng' },
-    ]
-  },
-  {
-    key: 'DENTAL_SCL',
-    type: 'rider',
-    displayGroup: 'HEALTH_SCL',
-    benefits: [
-      { id: 'scl_dental_header', labelBase: 'Quyền lợi Nha khoa', isHeader: true, dentalOnly:true },
+      { id:'scl_out_limit', labelBase:'Hạn mức ', formulaLabel:'', valueType:'text', outpatientOnly:true,
+        computeProg:(m)=> m.outLimit ? bm_fmt(m.outLimit) : '' },
+      { id:'scl_out_visit', labelBase:'Mỗi lần khám', formulaLabel:'', valueType:'text', outpatientOnly:true,
+        computeProg:(m)=> m.outVisit ? bm_fmt(m.outVisit) : '' },
+      { id:'scl_out_mental', labelBase:'Tư vấn / Điều trị sức khoẻ tâm thần', formulaLabel:'', valueType:'text', outpatientOnly:true,
+        computeProg:(m)=> m.outMental ? bm_fmt(m.outMental) : 'Không áp dụng' },
+      { id:'scl_dental_header', labelBase:'Quyền lợi Nha khoa', headerCategory:'dental' },
       { id:'scl_dental_title', labelBase:'Tỷ lệ chi trả', formulaLabel:'', valueType:'text', dentalOnly:true, text:'80%' },
-      { id:'scl_dental_limit', labelBase:'Hạn mức năm', formulaLabel:'', valueType:'text', dentalOnly:true, computeProg:(m)=> m.dentalLimit ? bm_fmt(m.dentalLimit) : '' }
+      { id:'scl_dental_limit', labelBase:'Hạn mức năm', formulaLabel:'', valueType:'text', dentalOnly:true,
+        computeProg:(m)=> m.dentalLimit ? bm_fmt(m.dentalLimit) : '' }
     ]
   },
   {
@@ -909,7 +843,7 @@ export const BENEFIT_MATRIX_SCHEMAS = [
       { id:'bhn_mid', labelBase:'BHN giai đoạn giữa', formulaLabel:'60% STBH (tối đa 2 lần, tối đa 1 tỷ/ lần)', valueType:'number', compute:(sa)=>sa*0.60, cap:1000000000, multiClaim: 2 },
       { id:'bhn_late', labelBase:'BHN giai đoạn cuối', formulaLabel:'100% STBH (1 lần)', valueType:'number', compute:(sa)=>sa },
       { id:'bhn_child', labelBase:'BHN ở trẻ em', formulaLabel:'60% STBH (1 lần, tối đa 500 tr, dưới 21 tuổi)', valueType:'number', compute:(sa)=>sa*0.60, cap:500000000, childOnly:true },
-      { id:'bhn_elder', labelBase:'BHN người lớn tuổi', formulaLabel:'20% STBH (1 lần, tối đa 500 tr, từ 55 tuổi)', valueType:'number', compute:(sa)=>sa*0.20, cap:500000000, elderOnly:true},
+      { id:'bhn_elder', labelBase:'BHN người lớn tuổi', formulaLabel:'20% STBH (1 lần, tối đa 500 tr, từ 55 tuổi)', valueType:'number', compute:(sa)=>sa*0.20, cap:500000000},
       { id:'bhn_special', labelBase:'Quyền lợi đặc biệt', formulaLabel:'30% STBH (1 lần, tối đa 500tr)', valueType:'number', compute:(sa)=>sa*0.30, cap:500000000 },
       { id:'bhn_wellness', labelBase:'Quyền lợi sống khoẻ AIA Vitality', formulaLabel:'', valueType:'text', minAge:18, text:'Tối đa 30% trung bình phí 5 năm' }
     ]
