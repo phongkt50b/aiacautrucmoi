@@ -4,8 +4,8 @@
  * Tệp này chứa tất cả dữ liệu cấu hình cho các sản phẩm bảo hiểm, được thiết kế theo kiến trúc "hướng dữ liệu".
  * - GLOBAL_CONFIG: Chứa tất cả các hằng số và quy tắc nghiệp vụ toàn cục.
  * - PRODUCT_CATALOG: "Bộ não" của ứng dụng, định nghĩa tất cả sản phẩm (chính, bổ sung).
- *   Mỗi sản phẩm là một "bản thiết kế" chi tiết mà logic.js sẽ đọc để tự động render UI, áp dụng quy tắc và tính phí.
- *   Đây là cấu trúc đã được tái cấu trúc hoàn toàn để loại bỏ logic cứng khỏi mã nguồn.
+ * Mỗi sản phẩm là một "bản thiết kế" chi tiết mà logic.js sẽ đọc để tự động render UI, áp dụng quy tắc và tính phí.
+ * Đây là cấu trúc đã được tái cấu trúc hoàn toàn để loại bỏ logic cứng khỏi mã nguồn.
  */
 
 // ===================================================================================
@@ -27,8 +27,13 @@ export const GLOBAL_CONFIG = {
     MAX_SUPPLEMENTARY_INSURED: 10,
     // Hệ số nhân phí khi thay đổi kỳ đóng phí
     paymentFrequencyFactors: {
-        half: 1.02,   // Nửa năm
+        half: 1.02,    // Nửa năm
         quarter: 1.04 // Quý
+    },
+    // Ngưỡng phí tối thiểu để cho phép chọn kỳ đóng phí khác Năm
+    paymentFrequencyThresholds: {
+        half: 7000000,
+        quarter: 8000000,
     },
 };
 
@@ -45,6 +50,7 @@ export const PRODUCT_CATALOG = {
         type: 'main',
         displayName: 'Khoẻ Trọn Vẹn',
         viewerSlug: 'khoe-tron-ven',
+        benefitSchemaKey: 'KHOE_TRON_VEN', // <-- Added
         displayOrder: 1,
         programs: {
             enabled: true,
@@ -78,21 +84,28 @@ export const PRODUCT_CATALOG = {
                 { type: 'age', max: 70 },
             ],
             validationRules: {
-                anyOf: [
-                    { stbh: { min: 1000000000, message: "STBH tối thiểu 1 tỷ" } },
-                    { premium: { min: 20000000, message: "Hoặc phí tối thiểu 20 triệu" } }
+                anyOf: [ // Điều kiện "hoặc" cho STBH/Phí
+                    { stbh: { min: 1000000000 } }, // Không cần message ở đây nếu message chung đủ
+                    { premium: { min: 20000000 } }
                 ],
+                anyOfMessage: "Phí tối thiểu 20.000.000 hoặc STBH từ 1.000.000.000 trở lên.", // Thông báo chung khi cả 2 điều kiện anyOf không đạt
                 stbh: {
-                    hint: "Phí tối thiểu 20.000.000 hoặc STBH từ 1 tỷ trở lên."
+                    min: 100000000, // Vẫn cần min chung để kiểm tra rider eligibility
+                    placeholder: "VD: 1.000.000.000",
+                    hint: "Phí tối thiểu 20 triệu hoặc STBH từ 1 tỷ." // Gợi ý hiển thị
                 },
                 extraPremium: {
                     maxFactorOfBase: 5,
+                    placeholder: "VD: 10.000.000",
+                    message: (maxVal) => `Phí đóng thêm không vượt quá 5 lần phí cơ bản (${HELPERS.formatCurrency(maxVal)}).`,
                     hintFunction: (stbh, customer, basePremium) => `Tối đa ${HELPERS.formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`
                 },
                 paymentTerm: {
                     min: 4,
                     maxFunction: (age) => 100 - age,
-                    message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm`
+                    placeholder: "VD: 20",
+                    hint: (min, max) => `Nhập từ ${min} đến ${max} năm`,
+                    message: (min, max) => `Thời gian đóng phí phải từ ${min} đến ${max} năm.`
                 }
             },
             riderLimits: {
@@ -101,12 +114,12 @@ export const PRODUCT_CATALOG = {
         },
         calculation: {
             method: 'ratePer1000StbhByProgram',
-            rateTableRef: 'pul_rates'
+            // rateTableRef được xác định trong mỗi program
         },
         cashValueConfig: {
             enabled: true,
-            sarIncludesExtraPremium: true,
-            useGuaranteedInterest: true
+            sarIncludesExtraPremium: true, // Phí đóng thêm tính vào SAR
+            useGuaranteedInterest: true // Tính cả cột lãi suất cam kết
         }
     },
 
@@ -115,42 +128,59 @@ export const PRODUCT_CATALOG = {
         type: 'main',
         displayName: 'MUL - Khoẻ Bình An',
         viewerSlug: 'khoe-binh-an',
+        benefitSchemaKey: 'KHOE_BINH_AN', // <-- Added
         displayOrder: 2,
+        programs: { enabled: false }, // <-- Added for consistency
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 70 },
             ],
             validationRules: {
-                stbh: { min: 100000000, message: "STBH tối thiểu 100 triệu" },
+                stbh: {
+                    min: 100000000,
+                    message: "STBH tối thiểu là 100.000.000",
+                    placeholder: "VD: 500.000.000"
+                },
                 premium: {
                     min: 5000000,
-                    message: "Phí tối thiểu 5 triệu",
+                    message: "Phí tối thiểu là 5.000.000",
+                    placeholder: "Nhập phí",
                     stbhFactorRef: 'mul_factors',
-                    stbhFactorMessage: "Phí không hợp lệ so với STBH",
+                    stbhFactorMessage: "Phí không nằm trong khoảng hợp lệ so với STBH và tuổi.",
                     hintFunction: (stbh, customer) => {
                         const { product_data, roundDownTo1000, formatCurrency } = HELPERS;
+                        if (!product_data || !product_data.mul_factors) return 'Nhập STBH để xem khoảng phí gợi ý.';
                         const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
-                        if (!factorRow || !stbh) return '';
+                        if (!factorRow || !stbh || stbh < 100000000) return 'Phí tối thiểu 5 triệu.';
                         const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
                         const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
-                        return `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
+                        return `Phí gợi ý: ${formatCurrency(minFee)} - ${formatCurrency(maxFee)}.`;
                     }
                 },
-                paymentTerm: { min: 4, maxFunction: (age) => 100 - age, default: 20, message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm` },
+                paymentTerm: {
+                    min: 4,
+                    maxFunction: (age) => 100 - age,
+                    default: 20,
+                    placeholder: "VD: 20",
+                    hint: (min, max) => `Nhập từ ${min} đến ${max} năm`,
+                    message: (min, max) => `Thời gian đóng phí phải từ ${min} đến ${max} năm.`
+                 },
                 extraPremium: {
                     maxFactorOfBase: 5,
+                    placeholder: "VD: 5.000.000",
+                    message: (maxVal) => `Phí đóng thêm không vượt quá 5 lần phí cơ bản (${HELPERS.formatCurrency(maxVal)}).`,
                     hintFunction: (stbh, customer, basePremium) => `Tối đa ${HELPERS.formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`
                 }
             },
-             riderLimits: { enabled: false }
+            riderLimits: { enabled: false }
         },
         calculation: {
-            method: 'fromInput'
+            method: 'fromInput' // Phí chính nhập trực tiếp
         },
         cashValueConfig: {
             enabled: true,
-            sarIncludesExtraPremium: false,
+            sarIncludesExtraPremium: false, // Phí đóng thêm KHÔNG tính vào SAR
             useGuaranteedInterest: true
         }
     },
@@ -160,31 +190,48 @@ export const PRODUCT_CATALOG = {
         type: 'main',
         displayName: 'MUL - Vững Tương Lai',
         viewerSlug: 'vung-tuong-lai',
+        benefitSchemaKey: 'VUNG_TUONG_LAI', // <-- Added
         displayOrder: 3,
+        programs: { enabled: false }, // <-- Added for consistency
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 70 },
             ],
-            validationRules: {
-                stbh: { min: 100000000, message: "STBH tối thiểu 100 triệu" },
+            validationRules: { // Tương tự KHOE_BINH_AN
+                stbh: {
+                    min: 100000000,
+                    message: "STBH tối thiểu là 100.000.000",
+                    placeholder: "VD: 500.000.000"
+                },
                 premium: {
                     min: 5000000,
-                    message: "Phí tối thiểu 5 triệu",
+                    message: "Phí tối thiểu là 5.000.000",
+                    placeholder: "Nhập phí",
                     stbhFactorRef: 'mul_factors',
-                    stbhFactorMessage: "Phí không hợp lệ so với STBH",
+                    stbhFactorMessage: "Phí không nằm trong khoảng hợp lệ so với STBH và tuổi.",
                     hintFunction: (stbh, customer) => {
                         const { product_data, roundDownTo1000, formatCurrency } = HELPERS;
+                         if (!product_data || !product_data.mul_factors) return 'Nhập STBH để xem khoảng phí gợi ý.';
                         const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
-                        if (!factorRow || !stbh) return '';
+                        if (!factorRow || !stbh || stbh < 100000000) return 'Phí tối thiểu 5 triệu.';
                         const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
                         const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
-                        return `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
+                        return `Phí gợi ý: ${formatCurrency(minFee)} - ${formatCurrency(maxFee)}.`;
                     }
                 },
-                paymentTerm: { min: 4, maxFunction: (age) => 100 - age, default: 20, message: (min, max) => `Vui lòng nhập từ ${min} đến ${max} năm` },
+                paymentTerm: {
+                    min: 4,
+                    maxFunction: (age) => 100 - age,
+                    default: 20,
+                    placeholder: "VD: 20",
+                    hint: (min, max) => `Nhập từ ${min} đến ${max} năm`,
+                    message: (min, max) => `Thời gian đóng phí phải từ ${min} đến ${max} năm.`
+                 },
                 extraPremium: {
                     maxFactorOfBase: 5,
+                    placeholder: "VD: 5.000.000",
+                    message: (maxVal) => `Phí đóng thêm không vượt quá 5 lần phí cơ bản (${HELPERS.formatCurrency(maxVal)}).`,
                     hintFunction: (stbh, customer, basePremium) => `Tối đa ${HELPERS.formatCurrency(basePremium * 5)} (5 lần phí cơ bản)`
                 }
             },
@@ -205,14 +252,16 @@ export const PRODUCT_CATALOG = {
         type: 'main',
         displayName: 'An Bình Ưu Việt',
         viewerSlug: 'an-binh-uu-viet',
+        benefitSchemaKey: 'AN_BINH_UU_VIET', // <-- Added
         displayOrder: 4,
         programs: {
             enabled: true,
             label: 'Thời hạn đóng phí',
             options: [
-                { key: '15', label: '15 năm', rateTableRef: 'an_binh_uu_viet_rates.15', eligibility: [{ type: 'age', max: 55 }] },
-                { key: '10', label: '10 năm', rateTableRef: 'an_binh_uu_viet_rates.10', eligibility: [{ type: 'age', max: 60 }] },
-                { key: '5', label: '5 năm', rateTableRef: 'an_binh_uu_viet_rates.5', eligibility: [{ type: 'age', max: 65 }] }
+                // Thêm defaultPaymentTerm trùng với key để logic.js dễ lấy
+                { key: '15', label: '15 năm', rateTableRef: 'an_binh_uu_viet_rates.15', eligibility: [{ type: 'age', max: 55 }], defaultPaymentTerm: 15 },
+                { key: '10', label: '10 năm', rateTableRef: 'an_binh_uu_viet_rates.10', eligibility: [{ type: 'age', max: 60 }], defaultPaymentTerm: 10 },
+                { key: '5', label: '5 năm', rateTableRef: 'an_binh_uu_viet_rates.5', eligibility: [{ type: 'age', max: 65 }], defaultPaymentTerm: 5 }
             ]
         },
         rules: {
@@ -221,47 +270,66 @@ export const PRODUCT_CATALOG = {
                 { type: 'age', min: 28, max: 65, condition: (p) => p.gender === 'Nữ' },
             ],
             validationRules: {
-                stbh: { min: 100000000, message: "STBH tối thiểu 100 triệu" },
-                premium: { min: 5000000, message: "Phí chính tối thiểu 5 triệu" }
+                stbh: {
+                    min: 100000000,
+                    message: "STBH tối thiểu là 100.000.000",
+                    placeholder: "VD: 200.000.000"
+                },
+                premium: { // Dùng để validate phí *sau khi* tính toán
+                    min: 5000000,
+                    message: "Phí chính hàng năm tính ra phải tối thiểu 5.000.000"
+                },
+                 program: { // Thêm validation cho program (thời hạn đóng phí)
+                    required: true,
+                    message: "Vui lòng chọn thời hạn đóng phí."
+                }
             },
             riderLimits: { enabled: false }
         },
         calculation: {
             method: 'ratePer1000StbhByProgram',
-            rateTableRef: 'an_binh_uu_viet_rates'
+            // rateTableRef được xác định trong mỗi program
         },
         cashValueConfig: {
-            enabled: false
+            enabled: false // Không có GT tài khoản/hoàn lại
         }
     },
     'TRON_TAM_AN': {
         id: 'TRON_TAM_AN',
-        type: 'main',
+        type: 'main', // Vẫn là main, nhưng có cấu hình package
         displayName: 'Gói Trọn Tâm An',
         viewerSlug: 'tron-tam-an',
+        benefitSchemaKey: null, // Gói không có schema riêng, quyền lợi là của SP nền + rider
         displayOrder: 5,
-        packageConfig: {
-            underlyingMainProduct: 'AN_BINH_UU_VIET',
-            fixedValues: {
+        programs: { enabled: false }, // Gói không có chương trình
+        packageConfig: { // Cấu hình đặc biệt cho sản phẩm gói
+            underlyingMainProduct: 'AN_BINH_UU_VIET', // Sản phẩm chính làm nền
+            fixedValues: { // Giá trị cố định cho SP nền
                 stbh: 100000000,
-                program: '10' // The key for the 10-year program
+                program: '10' // Key của chương trình 10 năm của ABUV
             },
-            mandatoryRiders: [
+            mandatoryRiders: [ // Rider bắt buộc và STBH/chương trình cố định
                 { id: 'HOSPITAL_SUPPORT', stbh: 200000 },
                 { id: 'ACCIDENT', stbh: 100000000 }
+                // Nếu rider bắt buộc có program, thêm vào đây, vd: { id: 'HEALTH_SCL', program: 'co_ban' }
             ]
         },
         rules: {
-            eligibility: [
+            eligibility: [ // Điều kiện tham gia gói
                 { type: 'age', min: 28, max: 60 }
             ],
-            noSupplementaryInsured: true
+            noSupplementaryInsured: true, // Gói này không cho phép NĐBH bổ sung
+            riderLimits: { // Gói này không cho phép thêm rider nào khác ngoài mandatoryRiders
+                enabled: true,
+                allowed: []
+            },
+             validationRules: {} // Không cần validation input vì mọi thứ đã cố định
         },
         calculation: {
-            method: 'package'
+            method: 'package' // Logic tính phí sẽ dựa vào packageConfig
         },
         cashValueConfig: {
-            enabled: false
+            enabled: false // Theo sản phẩm nền ABUV
         }
     },
     // =======================================================================
@@ -273,61 +341,127 @@ export const PRODUCT_CATALOG = {
         type: 'rider',
         displayName: 'Sức khỏe Bùng Gia Lực',
         viewerSlug: 'bung-gia-luc',
+        benefitSchemaKey: 'HEALTH_SCL', // <-- Added
         displayOrder: 10,
         dependencies: {
-            subRiders: ['OUTPATIENT_SCL', 'DENTAL_SCL'],
-            mainPremiumThresholds: {
+            subRiders: ['OUTPATIENT_SCL', 'DENTAL_SCL'], // Khai báo rider con
+            mainPremiumThresholds: { // Ngưỡng phí SP chính để được chọn chương trình
                 label: "chương trình",
                 thresholds: [
-                    { minPremium: 5000000,  maxPremium: 9999999, allowed: ['co_ban', 'nang_cao'] },
-                    { minPremium: 10000000, maxPremium: 14999999, allowed: ['co_ban', 'nang_cao', 'toan_dien'] },
-                    { minPremium: 15000000, allowed: ['co_ban', 'nang_cao', 'toan_dien', 'hoan_hao'] }
-                ]
+                    // Cần sắp xếp từ cao xuống thấp để logic kiểm tra dễ hơn
+                    { minPremium: 15000000, allowed: ['co_ban', 'nang_cao', 'toan_dien', 'hoan_hao'], message:"Phí chính từ 15tr" },
+                    { minPremium: 10000000, allowed: ['co_ban', 'nang_cao', 'toan_dien'], message:"Phí chính từ 10tr" },
+                    { minPremium: 5000000,  allowed: ['co_ban', 'nang_cao'], message:"Phí chính từ 5tr" }
+                    // Mặc định dưới 5tr sẽ không được chọn chương trình nào (logic.js sẽ xử lý)
+                ],
+                message: (programLabel, minPremium) => `Phí SP chính tối thiểu ${HELPERS.formatCurrency(minPremium)} để chọn chương trình ${programLabel}.`
             }
         },
-        programs: {
+        programs: { // Rider này có chương trình
             enabled: true,
             label: "Chương trình",
             options: [
-                { key: 'co_ban', label: 'Cơ bản'},
-                { key: 'nang_cao', label: 'Nâng cao' },
-                { key: 'toan_dien', label: 'Toàn diện' },
-                { key: 'hoan_hao', label: 'Hoàn hảo' }
+                // Thêm stbh vào đây để dễ truy vấn
+                { key: 'co_ban', label: 'Cơ bản', stbh: 100000000 },
+                { key: 'nang_cao', label: 'Nâng cao', stbh: 250000000 },
+                { key: 'toan_dien', label: 'Toàn diện', stbh: 500000000 },
+                { key: 'hoan_hao', label: 'Hoàn hảo', stbh: 1000000000 }
             ]
+        },
+        // Thêm cấu hình cho input "Phạm vi địa lý"
+        uiInputs: {
+             scope: { // Key định danh input
+                label: "Phạm vi địa lý",
+                type: "select", // Loại input
+                options: [
+                    { value: "main_vn", label: "Việt Nam" },
+                    { value: "main_global", label: "Nước ngoài (Toàn cầu)" }
+                ],
+                defaultValue: "main_vn"
+            }
         },
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 65, renewalMax: 74 },
-                { type: 'riskGroup', exclude: [4], required: true }
-            ]
+                { type: 'riskGroup', exclude: [4], required: true, message: "Nghề nghiệp nhóm 4 không được tham gia." }
+            ],
+             validationRules: { // Validation cho các lựa chọn của rider này
+                program: { required: true, message: "Vui lòng chọn chương trình." },
+                scope: { required: true, message: "Vui lòng chọn phạm vi địa lý." }
+            }
         },
         calculation: {
-            method: 'healthSclLookup'
+            method: 'healthSclLookup', // Method tính phí đặc biệt cho SCL
+             rateTableRef: 'health_scl_rates' // Chỉ định bảng dữ liệu
         }
     },
     'OUTPATIENT_SCL': {
         id: 'OUTPATIENT_SCL',
         type: 'rider',
         displayName: 'Quyền lợi ngoại trú',
+        viewerSlug: null, // Không có slug riêng, đi theo mẹ
+        benefitSchemaKey: 'OUTPATIENT_SCL', // <-- Added
+        displayOrder: 10.1, // Hiển thị ngay sau SCL chính
+        displayGroup: 'HEALTH_SCL', // Nhóm với SCL chính trong bảng quyền lợi
         dependencies: {
-            parentRiderRequired: 'HEALTH_SCL',
-            allowDifferentProgram: true
+            parentRiderRequired: 'HEALTH_SCL', // Phải chọn SCL Nội trú trước
+            allowDifferentProgram: true, // Có thể chọn chương trình khác Nội trú
+            parentRiderRequiredMessage: "Phải chọn Sức khỏe Bùng Gia Lực (Nội trú) trước."
+        },
+        programs: { // Rider này cũng có chương trình, giống hệt mẹ
+            enabled: true,
+            label: "Chương trình Ngoại trú", // Có thể đổi label nếu muốn
+            options: [ // Cần copy options từ HEALTH_SCL hoặc tham chiếu động
+                { key: 'co_ban', label: 'Cơ bản' },
+                { key: 'nang_cao', label: 'Nâng cao' },
+                { key: 'toan_dien', label: 'Toàn diện' },
+                { key: 'hoan_hao', label: 'Hoàn hảo' }
+            ]
+        },
+        rules: {
+             eligibility: [], // Kế thừa eligibility từ mẹ (logic.js sẽ xử lý)
+             validationRules: {
+                 program: { required: true, message: "Vui lòng chọn chương trình ngoại trú." }
+             }
         },
         calculation: {
-            method: 'healthSclLookup' // It uses the same lookup method
+            method: 'healthSclLookup', // Dùng chung method
+             rateTableRef: 'health_scl_rates' // Dùng chung bảng
         }
     },
     'DENTAL_SCL': {
         id: 'DENTAL_SCL',
         type: 'rider',
         displayName: 'Quyền lợi nha khoa',
+        viewerSlug: null,
+        benefitSchemaKey: 'DENTAL_SCL', // <-- Added
+        displayOrder: 10.2,
+        displayGroup: 'HEALTH_SCL',
         dependencies: {
-            parentRiderRequired: 'OUTPATIENT_SCL', // Requires Outpatient to be selected
-            allowDifferentProgram: true
+            parentRiderRequired: 'OUTPATIENT_SCL', // Phải chọn Ngoại trú trước
+            allowDifferentProgram: true,
+            parentRiderRequiredMessage: "Phải chọn Quyền lợi ngoại trú trước."
+        },
+         programs: { // Giống Ngoại trú
+            enabled: true,
+            label: "Chương trình Nha khoa",
+            options: [
+                { key: 'co_ban', label: 'Cơ bản' },
+                { key: 'nang_cao', label: 'Nâng cao' },
+                { key: 'toan_dien', label: 'Toàn diện' },
+                { key: 'hoan_hao', label: 'Hoàn hảo' }
+            ]
+        },
+        rules: {
+             eligibility: [],
+             validationRules: {
+                 program: { required: true, message: "Vui lòng chọn chương trình nha khoa." }
+             }
         },
         calculation: {
-            method: 'healthSclLookup' // It uses the same lookup method
+            method: 'healthSclLookup',
+             rateTableRef: 'health_scl_rates'
         }
     },
     'BHN_2_0': {
@@ -335,19 +469,27 @@ export const PRODUCT_CATALOG = {
         type: 'rider',
         displayName: 'Bệnh Hiểm Nghèo 2.0',
         viewerSlug: 'benh-hiem-ngheo-20',
+        benefitSchemaKey: 'BHN_2_0', // <-- Added
         displayOrder: 11,
+        programs: { enabled: false }, // <-- Added for consistency
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 70, renewalMax: 85 },
             ],
             validationRules: {
-                stbh: { min: 200000000, max: 5000000000, hint: 'STBH từ 200 triệu đến 5 tỷ.' }
+                stbh: {
+                    min: 200000000,
+                    max: 5000000000,
+                    placeholder: 'VD: 500.000.000',
+                    hint: 'STBH từ 200 triệu đến 5 tỷ.',
+                    message: "STBH phải từ 200 triệu đến 5 tỷ."
+                }
             }
         },
         calculation: {
-            method: 'ratePer1000Stbh',
-            rateTableRef: 'bhn_rates'
+            method: 'ratePer1000Stbh', // Tính theo tuổi, giới tính
+            rateTableRef: 'bhn_rates' // Tham chiếu bảng phí BHN
         }
     },
     'ACCIDENT': {
@@ -355,20 +497,28 @@ export const PRODUCT_CATALOG = {
         type: 'rider',
         displayName: 'Bảo hiểm Tai nạn',
         viewerSlug: 'tai-nan',
+        benefitSchemaKey: 'ACCIDENT', // <-- Added
         displayOrder: 13,
+        programs: { enabled: false },
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
                 { type: 'age', max: 64, renewalMax: 65 },
-                { type: 'riskGroup', required: true }
+                { type: 'riskGroup', required: true, message: "Vui lòng chọn nghề nghiệp để xác định nhóm." }
             ],
             validationRules: {
-                stbh: { min: 10000000, max: 8000000000, hint: 'STBH từ 10 triệu đến 8 tỷ.' }
+                stbh: {
+                    min: 10000000,
+                    max: 8000000000,
+                    placeholder: 'VD: 1.000.000.000',
+                    hint: 'STBH từ 10 triệu đến 8 tỷ.',
+                    message: "STBH phải từ 10 triệu đến 8 tỷ."
+                 }
             }
         },
         calculation: {
-            method: 'ratePer1000StbhByRiskGroup',
-            rateTableRef: 'accident_rates'
+            method: 'ratePer1000StbhByRiskGroup', // Tính theo nhóm nghề
+            rateTableRef: 'accident_rates' // Tham chiếu object phí theo nhóm { 1: rate1, 2: rate2, ... }
         }
     },
     'HOSPITAL_SUPPORT': {
@@ -376,7 +526,9 @@ export const PRODUCT_CATALOG = {
         type: 'rider',
         displayName: 'Hỗ trợ chi phí nằm viện',
         viewerSlug: 'ho-tro-vien-phi',
+        benefitSchemaKey: 'HOSPITAL_SUPPORT', // <-- Added
         displayOrder: 12,
+        programs: { enabled: false },
         rules: {
             eligibility: [
                 { type: 'daysFromBirth', min: 30 },
@@ -385,54 +537,64 @@ export const PRODUCT_CATALOG = {
             validationRules: {
                 stbh: {
                     multipleOf: 100000,
-                    hintFunction: (stbh, customer, mainPremium, totalHospitalSupportStbh) => {
+                    placeholder: "VD: 300.000 (đ/ngày)",
+                    messageMultipleOf: "Số tiền hỗ trợ phải là bội số của 100.000.",
+                    messageMax: "Số tiền hỗ trợ vượt quá giới hạn cho phép.",
+                    // Giới hạn theo tuổi và theo tổng STBH đã có sẽ được xử lý trong hintFunction và logic validate
+                    maxByAge: { under18: 300000, from18: 1000000 }, // Giới hạn cứng theo tuổi
+                    hintFunction: (stbh, customer, mainPremium, totalAggregateValue) => { // totalAggregateValue là tổng STBH HOSPITAL_SUPPORT của những người đã nhập trước đó
                         const { formatCurrency } = HELPERS;
+                        // Lấy công thức tính max tổng từ calculation.stbhCalculation.config
                         const maxFormula = PRODUCT_CATALOG.HOSPITAL_SUPPORT.calculation.stbhCalculation.config.maxFormula;
-                        const maxSupportTotal = maxFormula(mainPremium);
+                        const maxSupportTotal = maxFormula ? maxFormula(mainPremium || 0) : Infinity; // Tính tổng giới hạn STBH
                         const maxByAge = customer.age >= 18 ? 1000000 : 300000;
-                        const remaining = maxSupportTotal - totalHospitalSupportStbh;
-                        const finalMax = Math.min(maxByAge, remaining);
-                        return `Tối đa: ${formatCurrency(finalMax, 'đ/ngày')}. Phải là bội số của 100.000.`;
-                    },
-                    maxByAge: { under18: 300000, from18: 1000000 }
+                        const remaining = Math.max(0, maxSupportTotal - (totalAggregateValue || 0)); // Giới hạn còn lại
+                        const finalMax = Math.min(maxByAge, remaining); // Lấy giới hạn nhỏ hơn
+                        return `Tối đa: ${formatCurrency(finalMax, 'đ/ngày')}. Bội số của 100.000.`;
+                    }
                 }
             }
         },
         calculation: {
-            method: 'ratePer100Stbh',
-            rateTableRef: 'hospital_fee_support_rates',
-            stbhCalculation: {
-                method: 'aggregateAcrossAllInsureds',
+            method: 'ratePer100Stbh', // Tính trên 100đ STBH
+            rateTableRef: 'hospital_fee_support_rates', // Tham chiếu bảng phí theo tuổi
+            stbhCalculation: { // Cấu hình cách giới hạn STBH
+                method: 'aggregateAcrossAllInsureds', // Đánh dấu cần tính tổng STBH của rider này trên toàn đơn
                 config: {
-                    maxFormula: (mainPremium) => Math.floor(mainPremium / 4000000) * 100000
+                    // Công thức tính tổng giới hạn STBH dựa trên phí SP chính
+                    maxFormula: (mainPremium) => Math.floor((mainPremium || 0) / 4000000) * 100000
                 }
             }
         }
     },
     'MDP_3_0': {
         id: 'MDP_3_0',
-        type: 'rider',
+        type: 'waiver_of_premium', // <-- Đổi type để logic.js phân biệt
         displayName: 'Miễn Đóng Phí 3.0',
-        viewerSlug: 'mien-dong-phi',
-        displayOrder: 20,
+        viewerSlug: 'mien-dong-phi', // Cần kiểm tra lại slug này
+        benefitSchemaKey: null, // Không có schema quyền lợi riêng
+        displayOrder: 20, // Hiển thị cuối hoặc theo nhóm MDP
+        programs: { enabled: false },
         rules: {
-            eligibility: [
-                { type: 'age', min: 18, max: 60 }
-            ]
+            eligibility: [ // Điều kiện cho *người được chọn* để miễn phí
+                { type: 'age', min: 18, max: 60, message:"Tuổi người được miễn phí phải từ 18-60." }
+            ],
+             validationRules: {} // Không có input STBH trực tiếp
         },
         calculation: {
-            method: 'ratePer1000StbhForMdp', // A specific method for clarity
-            rateTableRef: 'mdp3_rates',
-            stbhCalculation: {
+            method: 'ratePer1000StbhForMdp', // Method tính phí riêng cho MDP
+            rateTableRef: 'mdp3_rates', // Bảng phí MDP
+            stbhCalculation: { // Cách tính STBH (là tổng phí các SP khác)
                 method: 'sumPremiumsOfPolicy',
                 config: {
-                    includePolicyOwnerRiders: false
+                    // true: Tính cả phí rider của người được chọn MDP (nếu có)
+                    // false: Chỉ tính phí SP chính + phí rider của những người khác
+                    includePolicyOwnerRiders: false // MDP 3.0 không tính rider của chính người đó
                 }
             }
         }
     }
 };
-
 
 // =======================================================================
 // ===== CÁC BẢNG DỮ LIỆU THÔ (RAW DATA TABLES)
