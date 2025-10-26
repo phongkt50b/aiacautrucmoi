@@ -37,6 +37,8 @@ export const PRODUCT_CATALOG = {
         type: 'main',
         name: 'Khoẻ trọn vẹn - Trọn đời',
         group: 'PUL',
+        viewerSlug: 'khoe-tron-ven',
+        benefitSchemaKey: 'PUL_FAMILY',
         ui: {
             inputs: ['stbh', 'paymentTerm', 'extraPremium']
         },
@@ -53,6 +55,15 @@ export const PRODUCT_CATALOG = {
         calculation: {
             method: 'ratePer1000Stbh',
             rateTableRef: 'pul_rates.PUL_TRON_DOI'
+        },
+        investmentConfig: {
+            costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+            initialFeesRef: 'PUL_TRON_DOI',
+            stbhGrowth: null,
+            persistencyBonusRef: 'persistency_bonus',
+            bonusRule: {
+                type: 'persistency_milestone'
+            }
         }
     },
 
@@ -60,6 +71,8 @@ export const PRODUCT_CATALOG = {
         type: 'main',
         name: 'Khoẻ trọn vẹn - 15 năm',
         group: 'PUL',
+        viewerSlug: 'khoe-tron-ven',
+        benefitSchemaKey: 'PUL_FAMILY',
         ui: {
             inputs: ['stbh', 'paymentTerm', 'extraPremium']
         },
@@ -76,6 +89,15 @@ export const PRODUCT_CATALOG = {
         calculation: {
             method: 'ratePer1000Stbh',
             rateTableRef: 'pul_rates.PUL_15NAM'
+        },
+        investmentConfig: {
+            costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+            initialFeesRef: 'PUL_15NAM',
+            stbhGrowth: null,
+            persistencyBonusRef: 'persistency_bonus',
+            bonusRule: {
+                type: 'persistency_milestone'
+            }
         }
     },
 
@@ -83,6 +105,8 @@ export const PRODUCT_CATALOG = {
         type: 'main',
         name: 'Khoẻ trọn vẹn - 5 năm',
         group: 'PUL',
+        viewerSlug: 'khoe-tron-ven',
+        benefitSchemaKey: 'PUL_FAMILY',
         ui: {
             inputs: ['stbh', 'paymentTerm', 'extraPremium']
         },
@@ -99,6 +123,15 @@ export const PRODUCT_CATALOG = {
         calculation: {
             method: 'ratePer1000Stbh',
             rateTableRef: 'pul_rates.PUL_5NAM'
+        },
+        investmentConfig: {
+            costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+            initialFeesRef: 'PUL_5NAM',
+            stbhGrowth: null,
+            persistencyBonusRef: 'persistency_bonus',
+            bonusRule: {
+                type: 'persistency_milestone'
+            }
         }
     },
 
@@ -106,6 +139,8 @@ export const PRODUCT_CATALOG = {
         type: 'main',
         name: 'MUL - Khoẻ Bình An',
         group: 'MUL',
+        viewerSlug: 'khoe-binh-an',
+        benefitSchemaKey: 'KHOE_BINH_AN',
         ui: {
             inputs: ['stbh', 'premium', 'paymentTerm', 'extraPremium']
         },
@@ -121,6 +156,21 @@ export const PRODUCT_CATALOG = {
         },
         calculation: {
             method: 'fromInput'
+        },
+        investmentConfig: {
+            costOfInsuranceRef: 'mul_cost_of_insurance_rates',
+            initialFeesRef: 'KHOE_BINH_AN',
+            stbhGrowth: {
+                type: 'linear_capped',
+                rate: 0.05,
+                startYear: 2,
+                endYear: 11
+            },
+            bonusRule: {
+                type: 'annual_premium',
+                rate: 0.03,
+                startYear: 5
+            }
         }
     },
 
@@ -128,6 +178,8 @@ export const PRODUCT_CATALOG = {
         type: 'main',
         name: 'MUL - Vững Tương Lai',
         group: 'MUL',
+        viewerSlug: 'vung-tuong-lai',
+        benefitSchemaKey: 'VUNG_TUONG_LAI',
         ui: {
             inputs: ['stbh', 'premium', 'paymentTerm', 'extraPremium']
         },
@@ -143,6 +195,16 @@ export const PRODUCT_CATALOG = {
         },
         calculation: {
             method: 'fromInput'
+        },
+        investmentConfig: {
+            costOfInsuranceRef: 'mul_cost_of_insurance_rates',
+            initialFeesRef: 'VUNG_TUONG_LAI',
+            stbhGrowth: null,
+            bonusRule: {
+                type: 'annual_premium',
+                rate: 0.03,
+                startYear: 5
+            }
         }
     },
     
@@ -150,6 +212,9 @@ export const PRODUCT_CATALOG = {
         type: 'main',
         name: 'Trọn tâm an',
         group: 'PACKAGE',
+        viewerSlug: 'tron-tam-an',
+        benefitSchemaKey: null, // Không có schema riêng, dùng includes
+        includesBenefitSchema: 'AN_BINH_UU_VIET', // Thêm quyền lợi của sản phẩm này
         packageConfig: {
             underlyingMainProduct: 'AN_BINH_UU_VIET', 
             fixedValues: {
@@ -159,7 +224,7 @@ export const PRODUCT_CATALOG = {
             mandatoryRiders: ['health_scl'] 
         },
         ui: {
-            inputs: [] // Gói này không có input riêng, nó điều khiển sản phẩm con
+            inputs: []
         },
         rules: {
             eligibility: [
@@ -170,7 +235,7 @@ export const PRODUCT_CATALOG = {
             noSupplementaryInsured: true
         },
         calculation: {
-            method: 'none' // Phí được tính từ sản phẩm con
+            method: 'none'
         }
     },
     
@@ -178,6 +243,8 @@ export const PRODUCT_CATALOG = {
         type: 'main',
         name: 'An Bình Ưu Việt',
         group: 'TRADITIONAL',
+        viewerSlug: 'an-binh-uu-viet',
+        benefitSchemaKey: 'AN_BINH_UU_VIET',
         ui: {
             inputs: ['stbh'],
             options: {
@@ -214,6 +281,8 @@ export const PRODUCT_CATALOG = {
         id: 'health_scl',
         type: 'rider',
         name: 'Sức khỏe Bùng Gia Lực',
+        viewerSlug: 'bung-gia-luc',
+        benefitSchemaKey: 'HEALTH_SCL',
         ui: {
             options: ['program', 'scope', 'outpatient', 'dental']
         },
@@ -235,8 +304,7 @@ export const PRODUCT_CATALOG = {
             }
         },
         calculation: {
-            method: 'custom',
-            functionName: 'calculateHealthSclPremium'
+            method: 'healthSclLookup'
         }
     },
     
@@ -244,6 +312,8 @@ export const PRODUCT_CATALOG = {
         id: 'bhn',
         type: 'rider',
         name: 'Bệnh Hiểm Nghèo 2.0',
+        viewerSlug: 'benh-hiem-ngheo-20',
+        benefitSchemaKey: 'BHN_2_0',
         ui: {
             inputs: ['stbh']
         },
@@ -255,8 +325,10 @@ export const PRODUCT_CATALOG = {
             stbh: { min: 200000000, max: 5000000000 }
         },
         calculation: {
-            method: 'custom',
-            functionName: 'calculateBhnPremium'
+            method: 'rateLookup',
+            rateTableRef: 'bhn_rates',
+            lookupBy: ['ageBand', 'gender'],
+            divisor: 1000
         }
     },
 
@@ -264,6 +336,8 @@ export const PRODUCT_CATALOG = {
         id: 'accident',
         type: 'rider',
         name: 'Bảo hiểm Tai nạn',
+        viewerSlug: 'tai-nan',
+        benefitSchemaKey: 'ACCIDENT',
         ui: {
             inputs: ['stbh']
         },
@@ -276,8 +350,10 @@ export const PRODUCT_CATALOG = {
             stbh: { min: 10000000, max: 8000000000 }
         },
         calculation: {
-            method: 'custom',
-            functionName: 'calculateAccidentPremium'
+            method: 'rateLookup',
+            rateTableRef: 'accident_rates',
+            lookupBy: ['riskGroup'],
+            divisor: 1000
         }
     },
 
@@ -285,6 +361,8 @@ export const PRODUCT_CATALOG = {
         id: 'hospital_support',
         type: 'rider',
         name: 'Hỗ trợ chi phí nằm viện',
+        viewerSlug: 'ho-tro-vien-phi',
+        benefitSchemaKey: 'HOSPITAL_SUPPORT',
         ui: {
             inputs: ['stbh']
         },
@@ -300,8 +378,11 @@ export const PRODUCT_CATALOG = {
             }
         },
         calculation: {
-            method: 'custom',
-            functionName: 'calculateHospitalSupportPremium'
+            method: 'rateLookup',
+            rateTableRef: 'hospital_fee_support_rates',
+            lookupBy: ['ageBand'],
+            valueKey: 'rate',
+            divisor: 100
         }
     }
 };
@@ -700,7 +781,6 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     key:'PUL_FAMILY',
     type:'main',
     hasTotal:true,
-    productKeys:['PUL_TRON_DOI','PUL_5NAM','PUL_15NAM'],
     benefits:[
       { id:'pul_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
       { id:'pul_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
