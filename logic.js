@@ -1091,7 +1091,7 @@ function initDateFormatter(input) {
   });
 }
 function roundInputToThousand(input) {
-  if (!input || !input.classList.contains('form-input') || input.classList.contains('dob-input') || input.id === 'target-age-input' || input.id === 'custom-interest-rate-input') return;
+  if (!input || !input.classList.contains('form-input') || input.classList.contains('dob-input') || input.classList.contains('name-input') || input.classList.contains('occupation-input') || input.id === 'target-age-input' || input.id === 'custom-interest-rate-input') return;
   const raw = parseFormattedNumber(input.value || '');
   if (!raw) { input.value = ''; return; }
   const isHospitalDaily = input.classList.contains('HOSPITAL_SUPPORT-stbh');
