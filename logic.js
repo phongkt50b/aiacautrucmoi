@@ -3492,20 +3492,3 @@ function buildPart2BenefitsSectionHtml(summaryData) {
     return `<h3 class="text-lg font-bold mt-6 mb-3">Phần 2 · Tóm tắt quyền lợi sản phẩm</h3>${blocks.join('')}`;
 }
 
-function buildPart3ScheduleSectionHtml(summaryData) {
-    const { schedule, isAnnual, persons } = summaryData; // persons includes owner if needed
-    const { rows, extraAllZero, hasCashValue } = schedule;
-    const fmt = formatDisplayCurrency;
-
-    if (!rows.length) return '';
-
-    // Filter active persons (those who have non-zero rider fees in at least one year)
-    const activePersonIndices = persons
-        .map((p, i) => rows.some(r => (r.perPersonSuppAnnualEq[i] || 0) > 0) ? i : -1)
-        .filter(index => index !== -1);
-
-
-    // --- Build Header ---
-    const headerCells = [
-        '<th class="p-2 border">Năm HĐ</th>',
-        '<th
