@@ -705,8 +705,73 @@ function generateSupplementaryProductsHtml() {
     });
     return html;
 }
-function initOccupationAutocomplete(input, container) {}
-function initDateFormatter(input) {}
+function initOccupationAutocomplete(input, container) {
+    if (!input) return;
+    const autocompleteContainer = container.querySelector('.occupation-autocomplete');
+    if (!autocompleteContainer) return;
+
+    const renderResults = (searchTerm) => {
+        autocompleteContainer.innerHTML = '';
+        autocompleteContainer.classList.remove('hidden');
+
+        const filtered = product_data.occupations
+            .filter(occ => occ.name.toLowerCase().includes(searchTerm.toLowerCase()))
+            .slice(0, 50); // Limit results to avoid performance issues
+
+        if (filtered.length === 0) {
+            autocompleteContainer.innerHTML = '<div class="autocomplete-item p-3 text-gray-500">Không tìm thấy kết quả.</div>';
+            return;
+        }
+
+        filtered.forEach(occ => {
+            if (occ.group === 0) return; // Do not show the placeholder option
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item p-3 cursor-pointer hover:bg-gray-100';
+            item.textContent = occ.name;
+            item.addEventListener('click', () => {
+                input.value = occ.name;
+                input.dataset.group = occ.group;
+                const riskGroupSpan = container.querySelector('.risk-group-span');
+                if (riskGroupSpan) {
+                    riskGroupSpan.textContent = occ.group;
+                }
+                autocompleteContainer.classList.add('hidden');
+                runWorkflow(); // A new risk group can affect eligibility and premiums
+            });
+            autocompleteContainer.appendChild(item);
+        });
+    };
+
+    input.addEventListener('input', () => {
+        renderResults(input.value);
+    });
+
+    input.addEventListener('focus', () => {
+        if (input.value) {
+            renderResults(input.value);
+        }
+    });
+
+    // Hide results when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!container.contains(e.target)) {
+            autocompleteContainer.classList.add('hidden');
+        }
+    });
+}
+function initDateFormatter(input) {
+    if (!input) return;
+    input.addEventListener('input', (e) => {
+        let value = input.value.replace(/\D/g, '');
+        if (value.length > 2) {
+            value = value.substring(0, 2) + '/' + value.substring(2);
+        }
+        if (value.length > 5) {
+            value = value.substring(0, 5) + '/' + value.substring(5, 9);
+        }
+        input.value = value;
+    });
+}
 function formatNumberInput(input) {}
 function initSummaryModal() {}
 function updateTargetAge() {}
