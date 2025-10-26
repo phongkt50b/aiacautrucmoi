@@ -3491,4 +3491,719 @@ function buildPart2BenefitsSectionHtml(summaryData) {
     if (!blocks.length) return `<h3 class="text-lg font-bold mt-6 mb-3">Phần 2 · Tóm tắt quyền lợi sản phẩm</h3><div class="text-sm text-gray-500 italic mb-4">Chưa chọn sản phẩm nào để hiển thị quyền lợi.</div>`;
     return `<h3 class="text-lg font-bold mt-6 mb-3">Phần 2 · Tóm tắt quyền lợi sản phẩm</h3>${blocks.join('')}`;
 }
+function buildPart3ScheduleSectionHtml(summaryData) {
+    const { schedule, persons, isAnnual, productConfig } = summaryData;
+    const { rows, extraAllZero, hasCashValue } = schedule;
+    const fmt = formatDisplayCurrency;
 
+    if (!rows.length) return '';
+
+    // Find indices of persons who actually have supplementary fees in the schedule
+    const activePersonIndices = persons
+        .map((p, i) => i)
+        .filter(i => rows.some(r => (r.perPersonSuppAnnualEq[i] || 0) > 0));
+
+    let headerCells = [
+        '<th class="p-2 border">Năm HĐ</th>',
+        '<th class="p-2 border">Tuổi</th>',
+        '<th class="p-2 border">Phí chính</th>'
+    ];
+    if (!extraAllZero) {
+        headerCells.push('<th class="p-2 border">Phí đóng thêm</th>');
+    }
+    activePersonIndices.forEach(i => {
+        const personName = persons[i].id === 'policy-owner-container' ? 'BMBH (Miễn phí)' : persons[i].name;
+        headerCells.push(`<th class="p-2 border">Phí BS (${sanitizeHtml(personName)})</th>`);
+    });
+    if (!isAnnual) {
+        headerCells.push('<th class="p-2 border">Tổng quy năm</th>');
+    }
+    headerCells.push('<th class="p-2 border">Tổng đóng/năm</th>');
+    if (!isAnnual) {
+        headerCells.push('<th class="p-2 border">Chênh lệch</th>');
+    }
+    if (hasCashValue) {
+        const customRateStr = document.getElementById('custom-interest-rate-input')?.value || "minh họa";
+        headerCells.push('<th class="p-2 border">Giá trị TK (Lãi suất cam kết)</th>');
+        headerCells.push(`<th class="p-2 border">Giá trị TK (Lãi suất ${customRateStr}% 20 năm đầu)</th>`);
+        headerCells.push(`<th class="p-2 border">Giá trị TK (Lãi suất ${customRateStr}% xuyên suốt)</th>`);
+    }
+
+    const header = `<tr>${headerCells.join('')}</tr>`;
+
+    // --- Body Rows ---
+    let sums = { main: 0, extra: 0, supp: activePersonIndices.map(() => 0), totalEq: 0, totalBase: 0, diff: 0 };
+    const body = rows.map((r, i) => {
+        sums.main += r.mainYearBase;
+        sums.extra += r.extraYearBase;
+        sums.totalEq += r.totalAnnualEq;
+        sums.totalBase += r.totalYearBase;
+        sums.diff += r.diff;
+        activePersonIndices.forEach((pIdx, idx) => sums.supp[idx] += r.perPersonSuppAnnualEq[pIdx]);
+
+        let rowCells = [
+            `<td class="p-2 border text-center">${r.year}</td>`,
+            `<td class="p-2 border text-center">${r.age}</td>`,
+            `<td class="p-2 border text-right">${fmt(r.mainYearBase)}</td>`
+        ];
+        if (!extraAllZero) {
+            rowCells.push(`<td class="p-2 border text-right">${fmt(r.extraYearBase)}</td>`);
+        }
+        activePersonIndices.forEach(pIdx => {
+            rowCells.push(`<td class="p-2 border text-right">${fmt(r.perPersonSuppAnnualEq[pIdx])}</td>`);
+        });
+        if (!isAnnual) {
+            rowCells.push(`<td class="p-2 border text-right">${fmt(r.totalAnnualEq)}</td>`);
+        }
+        rowCells.push(`<td class="p-2 border text-right font-semibold">${fmt(r.totalYearBase)}</td>`);
+        if (!isAnnual) {
+            const diffFormatted = r.diff !== 0 ? `<span class="text-red-600 font-bold">${fmt(r.diff)}</span>` : '0';
+            rowCells.push(`<td class="p-2 border text-right">${diffFormatted}</td>`);
+        }
+        if (hasCashValue) {
+             // Round cash values to thousands for display
+            rowCells.push(`<td class="p-2 border text-right">${fmt(roundDownTo1000(r.gttk_guaranteed))}</td>`);
+            rowCells.push(`<td class="p-2 border text-right">${fmt(roundDownTo1000(r.gttk_capped))}</td>`);
+            rowCells.push(`<td class="p-2 border text-right">${fmt(roundDownTo1000(r.gttk_full))}</td>`);
+        }
+        return `<tr>${rowCells.join('')}</tr>`;
+    }).join('');
+
+    // --- Footer Row (Totals) ---
+    let footerCells = [
+        `<td class="p-2 border" colspan="2">Tổng cộng</td>`,
+        `<td class="p-2 border text-right">${fmt(sums.main)}</td>`
+    ];
+    if (!extraAllZero) {
+        footerCells.push(`<td class="p-2 border text-right">${fmt(sums.extra)}</td>`);
+    }
+    sums.supp.forEach(s => {
+        footerCells.push(`<td class="p-2 border text-right">${fmt(s)}</td>`);
+    });
+    if (!isAnnual) {
+        footerCells.push(`<td class="p-2 border text-right">${fmt(sums.totalEq)}</td>`);
+    }
+    footerCells.push(`<td class="p-2 border text-right font-semibold">${fmt(sums.totalBase)}</td>`);
+    if (!isAnnual) {
+        const diffFormatted = sums.diff !== 0 ? `<span class="text-red-600 font-bold">${fmt(sums.diff)}</span>` : '0';
+        footerCells.push(`<td class="p-2 border text-right">${diffFormatted}</td>`);
+    }
+    if (hasCashValue) {
+        footerCells.push('<td class="p-2 border"></td>', '<td class="p-2 border"></td>', '<td class="p-2 border"></td>'); // Empty cells for cash value totals
+    }
+    const footer = `<tr class="bg-gray-50 font-bold">${footerCells.join('')}</tr>`;
+
+    const title = hasCashValue ? "Phần 3 · Bảng phí & Minh họa giá trị tài khoản" : "Phần 3 · Bảng phí";
+    return `<h3 class="text-lg font-bold mt-6 mb-2">${title}</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-sm">
+                    <thead>${header}</thead>
+                    <tbody>${body}${footer}</tbody>
+                </table>
+            </div>`;
+}
+
+// --- Footer Section ---
+function buildFooterSectionHtml(summaryData) {
+    return `<div class="mt-6 text-xs text-gray-600 italic">(*) Công cụ này chỉ mang tính chất tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA. Quyền lợi và mức phí cụ thể sẽ được xác nhận trong hợp đồng do AIA phát hành. Vui lòng liên hệ tư vấn viên AIA để được tư vấn chi tiết và nhận bảng minh họa chính thức.</div>`;
+}
+
+// ===================================================================================
+// ===== MODULE: BENEFIT MATRIX LOGIC (ADAPTED - Requires careful review)
+// ===================================================================================
+// NOTE: These functions interact heavily with BENEFIT_MATRIX_SCHEMAS and PRODUCT_CATALOG
+
+// Finds the schema config for a given product key
+function bm_findSchema(productKey) {
+    const productConfig = PRODUCT_CATALOG[productKey];
+    if (!productConfig) return null;
+    const schemaKey = productConfig.benefitSchemaKey;
+    if (!schemaKey) return null; // Product doesn't link to a schema
+    return BENEFIT_MATRIX_SCHEMAS.find(s => s.key === schemaKey);
+}
+
+// Collects and groups data needed to render columns in the benefit matrix
+function bm_collectColumns(summaryData) {
+    const colsBySchema = {}; // Key: schemaKey, Value: Array of column data objects
+    const { mainPerson, supplementaryPersons, policyOwner, mainProduct, fees, supplementsState } = summaryData;
+    const allInsured = [mainPerson, ...supplementaryPersons].filter(p => p);
+    const mainKey = mainProduct.key;
+    const mainConfig = PRODUCT_CATALOG[mainKey];
+    const isFemale = (p) => (p?.gender || '').toLowerCase() === 'nữ' || (p?.gender || '') === 'F';
+
+    // --- Main Product Column ---
+    if (mainKey && mainConfig?.benefitSchemaKey) {
+        const schemaKey = mainConfig.benefitSchemaKey;
+        const stbh = mainConfig.calculation.method === 'package' ? mainConfig.packageConfig.fixedValues.stbh : mainProduct.stbh;
+        colsBySchema[schemaKey] = colsBySchema[schemaKey] || [];
+        colsBySchema[schemaKey].push({
+             productKey: mainKey,
+             programKey: mainProduct.program, // Pass selected program key
+             sumAssured: stbh,
+             persons: [mainPerson] // Array always, even if single person
+        });
+    }
+     // Special case for TRON_TAM_AN which includes AN_BINH_UU_VIET benefits
+     if (mainKey === 'TRON_TAM_AN') {
+        const abuvConfig = PRODUCT_CATALOG['AN_BINH_UU_VIET'];
+         if (abuvConfig?.benefitSchemaKey) {
+             const schemaKey = abuvConfig.benefitSchemaKey;
+             colsBySchema[schemaKey] = colsBySchema[schemaKey] || [];
+             colsBySchema[schemaKey].push({
+                 productKey: 'AN_BINH_UU_VIET', // Use the underlying product key
+                 programKey: mainConfig.packageConfig.fixedValues.program, // Use the fixed program key
+                 sumAssured: mainConfig.packageConfig.fixedValues.stbh, // Use the fixed STBH
+                 persons: [mainPerson]
+             });
+         }
+     }
+
+
+    // --- Rider Columns ---
+    allInsured.forEach(p => {
+        const personSupplements = p.supplements || {};
+        Object.keys(personSupplements).forEach(riderId => {
+            const suppData = personSupplements[riderId];
+            const riderConfig = PRODUCT_CATALOG[riderId];
+            const schemaKey = riderConfig?.benefitSchemaKey;
+
+            // Include only selected, paid riders with a schema
+            if (!schemaKey || !suppData?.selected || !(fees.byPerson[p.id]?.suppDetails?.[riderId] > 0)) {
+                return;
+            }
+
+            colsBySchema[schemaKey] = colsBySchema[schemaKey] || [];
+            let uniqueSignature = `${riderId}|${suppData.program || ''}|${suppData.stbh || 0}|${suppData.scope || ''}`; // Base signature
+            let colData = {};
+            const flags = {}; // Flags for conditional benefits (maternity, child, elder)
+
+            if (riderId === 'HEALTH_SCL' || riderId === 'OUTPATIENT_SCL' || riderId === 'DENTAL_SCL') {
+                const programKey = suppData.program;
+                const programData = BM_SCL_PROGRAMS[programKey];
+                flags.maternity = programData?.maternity && isFemale(p);
+                 // Determine if outpatient/dental are ACTUALLY selected for THIS person (check state directly)
+                flags.outpatient = !!p.supplements?.['OUTPATIENT_SCL']?.selected;
+                flags.dental = !!p.supplements?.['DENTAL_SCL']?.selected;
+                uniqueSignature += `|mat:${flags.maternity}|out:${flags.outpatient}|den:${flags.dental}`;
+                 colData = {
+                     productKey: riderId,
+                     programKey: programKey,
+                     scope: suppData.scope, // Needed for SCL schema rendering
+                     flags: flags,
+                     persons: [] // Initialize persons array
+                 };
+            } else if (riderId === 'BHN_2_0') {
+                 flags.child = p.age < 21;
+                 flags.elder = p.age >= 55;
+                 uniqueSignature += `|ch:${flags.child}|el:${flags.elder}`;
+                 colData = {
+                     productKey: riderId,
+                     sumAssured: suppData.stbh,
+                     flags: flags,
+                     persons: []
+                 };
+            } else if (riderId === 'HOSPITAL_SUPPORT') {
+                 colData = {
+                     productKey: riderId,
+                     sumAssured: suppData.stbh,
+                     dailyBenefit: suppData.stbh, // Pass daily amount specifically
+                     persons: []
+                 };
+            } else { // Generic rider (e.g., Accident)
+                 colData = {
+                     productKey: riderId,
+                     sumAssured: suppData.stbh,
+                     persons: []
+                 };
+            }
+
+            // Find existing column or create new
+            let existingCol = colsBySchema[schemaKey].find(c => c.sig === uniqueSignature);
+            if (existingCol) {
+                 existingCol.persons.push(p);
+            } else {
+                 colData.sig = uniqueSignature;
+                 colData.persons.push(p);
+                 colsBySchema[schemaKey].push(colData);
+            }
+        });
+    });
+
+    // --- Generate Labels for Columns ---
+    Object.values(colsBySchema).forEach(schemaColumns => {
+        schemaColumns.forEach(col => {
+            const productConfig = PRODUCT_CATALOG[col.productKey];
+            const names = col.persons.map(p => p?.name || 'N/A').join(', ');
+            let label = names;
+
+            if (col.productKey === 'HEALTH_SCL' || col.productKey === 'OUTPATIENT_SCL' || col.productKey === 'DENTAL_SCL') {
+                 const programLabel = BM_SCL_PROGRAMS[col.programKey]?.label || col.programKey;
+                 label += ` - ${programLabel || ''}`;
+                 if(col.productKey === 'HEALTH_SCL') { // Add scope only to main SCL label
+                    const scopeLabel = productConfig?.uiInputs?.scope?.options.find(o => o.value === col.scope)?.label;
+                    if(scopeLabel) label += ` (${scopeLabel})`;
+                 }
+            } else if (col.sumAssured) {
+                 label += ` - STBH: ${formatDisplayCurrency(col.sumAssured)}`;
+            } else if (productConfig?.type === 'main' && col.programKey) { // Main product with program (ABUV)
+                 const programLabel = productConfig.programs?.options.find(p=>p.key === col.programKey)?.label;
+                 if(programLabel) label += ` - ${programLabel}`;
+            }
+
+            col.label = label;
+        });
+    });
+
+    return colsBySchema;
+}
+
+
+// Renders the HTML tables for a specific benefit schema
+function bm_renderSchemaTables(schemaKey, columns, summaryData) {
+    const schema = BENEFIT_MATRIX_SCHEMAS.find(s => s.key === schemaKey);
+    const mainProductConfig = PRODUCT_CATALOG[summaryData.productKey]; // Need main product for context
+
+    if (!schema || !columns || columns.length === 0) return '';
+
+    // Determine the main title for this schema block
+    // Use displayName from the first product/rider using this schema
+    let titleProductConfig = PRODUCT_CATALOG[columns[0].productKey];
+    // If it's a sub-rider grouped under a parent, use the parent's name for the title
+    if (schema.displayGroup) {
+        titleProductConfig = PRODUCT_CATALOG[schema.displayGroup] || titleProductConfig;
+    }
+    const title = titleProductConfig?.displayName || schemaKey;
+
+
+    // Build table header row with column labels
+    const headColsHtml = columns.map(c => `<th class="border px-2 py-2 text-left align-top">${sanitizeHtml(c.label)}</th>`).join('');
+
+    let rowsHtml = '';
+    let currentCategory = null; // Track category headers
+
+    // Iterate through benefits defined in the schema
+    schema.benefits.forEach(benef => {
+        // --- Handle Category Headers ---
+        if (benef.isHeader) {
+            // Check if this header is relevant for *any* of the current columns
+            let needed = false;
+            if (benef.maternityOnly) needed = columns.some(c => c.flags?.maternity);
+            else if (benef.outpatientOnly) needed = columns.some(c => c.flags?.outpatient);
+            else if (benef.dentalOnly) needed = columns.some(c => c.flags?.dental);
+            else needed = true; // Assume general headers are always needed if present
+
+            if (needed) {
+                 rowsHtml += `<tr><td colspan="${1 + columns.length}" class="border px-2 py-2 font-semibold bg-gray-50">${sanitizeHtml(benef.labelBase)}</td></tr>`;
+                 currentCategory = benef.id; // Store current category if needed later
+            }
+            return; // Skip to next benefit after rendering header
+        }
+
+        // --- Render Benefit Row ---
+        let cellsHtml = '';
+        let anyValueDisplayed = false; // Track if any cell in this row has content
+
+        columns.forEach(col => {
+             // Check visibility conditions based on column data and benefit rules
+             const productConfigForCol = PRODUCT_CATALOG[col.productKey];
+             let isVisible = true;
+             let cellValue = '';
+
+             // Condition checks:
+             if (benef.productCond && !benef.productCond.includes(col.productKey)) isVisible = false;
+             if (benef.programCond && !benef.programCond.includes(col.programKey)) isVisible = false;
+             if (benef.minAge && !col.persons.some(p => p.age >= benef.minAge)) isVisible = false;
+             if (benef.maxAge && !col.persons.some(p => p.age <= benef.maxAge)) isVisible = false; // Added maxAge check
+             if (benef.maternityOnly && !col.flags?.maternity) isVisible = false;
+             if (benef.outpatientOnly && !col.flags?.outpatient) isVisible = false;
+             if (benef.dentalOnly && !col.flags?.dental) isVisible = false;
+             if (benef.childOnly && !col.persons.some(p => p.age < 21)) isVisible = false; // Use age from person data
+             if (benef.elderOnly && !col.persons.some(p => p.age >= 55)) isVisible = false;// Use age from person data
+             // Add more conditions as needed
+
+             // Calculate value if visible
+             if (isVisible) {
+                 if (benef.valueType === 'number') {
+                     let rawValue = 0;
+                     const sa = col.sumAssured || 0;
+                     const daily = col.dailyBenefit || 0;
+                     const programData = BM_SCL_PROGRAMS[col.programKey]; // SCL program details
+
+                     // Execute computation based on type
+                     if (benef.compute) rawValue = benef.compute(sa);
+                     else if (benef.computeDaily) rawValue = benef.computeDaily(daily);
+                     else if (benef.computeProg && programData) rawValue = benef.computeProg(programData);
+                     // Add other computation functions if needed
+
+                     // Apply cap
+                     if (benef.cap != null && rawValue > benef.cap) rawValue = benef.cap;
+
+                     const singleValue = roundDownTo1000(rawValue); // Round down final value
+                     const displayValueNum = singleValue * (benef.multiClaim || 1);
+                     cellValue = displayValueNum > 0 ? formatDisplayCurrency(displayValueNum) : '';
+
+                 } else if (benef.valueType === 'text') {
+                     if (benef.computeTextByProgram && productConfigForCol?.programs?.enabled) {
+                         const progConfig = productConfigForCol.programs.options.find(p => p.key === col.programKey);
+                         cellValue = progConfig ? benef.computeTextByProgram(progConfig) : (benef.text || '');
+                     } else if (benef.computeRange) {
+                         cellValue = benef.computeRange(col.sumAssured || 0);
+                     } else if (benef.computeProg && BM_SCL_PROGRAMS[col.programKey]) {
+                         cellValue = benef.computeProg(BM_SCL_PROGRAMS[col.programKey]);
+                     } else {
+                         cellValue = benef.text || '';
+                     }
+                 }
+                 if (cellValue) anyValueDisplayed = true;
+             }
+
+             cellsHtml += `<td class="border px-2 py-1 text-right align-top">${cellValue}</td>`;
+        });
+
+        // Add row only if at least one cell has content
+        if (anyValueDisplayed) {
+             let labelHtml = sanitizeHtml(benef.labelBase);
+             if (benef.formulaLabel) labelHtml += ` <span class="text-xs text-gray-500">(${sanitizeHtml(benef.formulaLabel)})</span>`;
+
+             // Special handling for multiClaim display (find first non-zero calculation)
+             if (benef.multiClaim && benef.valueType === 'number') {
+                 let firstSingleValue = 0;
+                 // Find the first column that passes visibility and has a value
+                 for(const col of columns) {
+                    let isVisible = true;
+                    // ... (repeat visibility checks) ...
+                     if (benef.maternityOnly && !col.flags?.maternity) isVisible = false;
+                     if (benef.childOnly && !col.persons.some(p=>p.age < 21)) isVisible = false;
+                     if (benef.elderOnly && !col.persons.some(p=>p.age >= 55)) isVisible = false;
+                    
+                     if (isVisible) {
+                         let rawValue = 0;
+                         if (benef.compute) rawValue = benef.compute(col.sumAssured || 0);
+                         else if (benef.computeDaily) rawValue = benef.computeDaily(col.dailyBenefit || 0);
+                         // ... (other compute types) ...
+                         if (benef.cap != null && rawValue > benef.cap) rawValue = benef.cap;
+                         firstSingleValue = roundDownTo1000(rawValue);
+                         if (firstSingleValue > 0) break; // Found the first value
+                     }
+                 }
+                 if (firstSingleValue > 0) {
+                      labelHtml += ` <span class="text-xs text-gray-500">(${formatDisplayCurrency(firstSingleValue)} x ${benef.multiClaim})</span>`;
+                 }
+             }
+
+             rowsHtml += `<tr><td class="border px-2 py-1 align-top">${labelHtml}</td>${cellsHtml}</tr>`;
+        }
+    });
+
+    // --- Add Total Row (if schema requires it) ---
+    let totalRowHtml = '';
+    if (schema.hasTotal) {
+        // Calculate totals per column (summing only 'number' type benefits)
+        let totalCellsSumHtml = columns.map((col, colIndex) => {
+             let columnTotal = 0;
+             schema.benefits.forEach(benef => {
+                 if (benef.valueType === 'number' && !benef.isHeader) {
+                     // Re-check visibility and re-calculate single value for this column/benefit
+                     let isVisible = true;
+                      // ... (repeat visibility checks from above) ...
+                      // Simplified visibility check for total calculation
+                      if (benef.maternityOnly && !col.flags?.maternity) isVisible = false;
+                      if (benef.outpatientOnly && !col.flags?.outpatient) isVisible = false;
+                      if (benef.dentalOnly && !col.flags?.dental) isVisible = false;
+                      if (benef.childOnly && !col.persons.some(p=>p.age < 21)) isVisible = false;
+                      if (benef.elderOnly && !col.persons.some(p=>p.age >= 55)) isVisible = false;
+                      if (benef.minAge && !col.persons.some(p => p.age >= benef.minAge)) isVisible = false;
+                      if (benef.maxAge && !col.persons.some(p => p.age <= benef.maxAge)) isVisible = false;
+
+
+                     if (isVisible) {
+                         let rawValue = 0;
+                         // ... (repeat calculation logic from above) ...
+                          if (benef.compute) rawValue = benef.compute(col.sumAssured || 0);
+                          else if (benef.computeDaily) rawValue = benef.computeDaily(col.dailyBenefit || 0);
+                          else if (benef.computeProg && BM_SCL_PROGRAMS[col.programKey]) rawValue = benef.computeProg(BM_SCL_PROGRAMS[col.programKey]);
+                          if (benef.cap != null && rawValue > benef.cap) rawValue = benef.cap;
+                          const singleValue = roundDownTo1000(rawValue);
+                          columnTotal += singleValue * (benef.multiClaim || 1);
+                     }
+                 }
+             });
+             return `<td class="border px-2 py-1 text-right font-semibold">${columnTotal > 0 ? formatDisplayCurrency(columnTotal) : ''}</td>`;
+        }).join('');
+        totalRowHtml = `<tr><td class="border px-2 py-1 font-semibold">Tổng quyền lợi</td>${totalCellsSumHtml}</tr>`;
+    }
+
+    // --- Final Assembly ---
+    // Add margin bottom to separate tables
+    return `<div class="mb-6">
+                <h4 class="font-semibold mb-1">${sanitizeHtml(title)}</h4>
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-sm">
+                        <thead>
+                            <tr>
+                                <th class="border px-2 py-2 text-left" style="width:42%">Tên quyền lợi</th>
+                                ${headColsHtml}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                            ${totalRowHtml}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+}
+
+
+// --- Footer Section ---
+function buildFooterSectionHtml(summaryData) {
+    return `<div class="mt-6 text-xs text-gray-600 italic">(*) Công cụ này chỉ mang tính chất tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA. Quyền lợi và mức phí cụ thể sẽ được xác nhận trong hợp đồng do AIA phát hành. Vui lòng liên hệ tư vấn viên AIA để được tư vấn chi tiết và nhận bảng minh họa chính thức.</div>`;
+}
+
+// ===================================================================================
+// ===== Cash Value Projection (Copied from V1, Needs integration with new state) ====
+// ===================================================================================
+
+function calculateAccountValueProjection(
+    mainPerson,
+    mainProductInfo,
+    basePremiumAnnual, // Pass annual fees
+    extraPremiumAnnual,
+    targetAge,
+    customInterestRateStr,
+    paymentFrequency // Pass frequency string ('year', 'half', 'quarter')
+) {
+    const { gender, age: initialAge } = mainPerson;
+    const { key: productKey, program: programKey, stbh: stbhInitial = 0 } = mainProductInfo;
+    const productConfig = PRODUCT_CATALOG[productKey];
+
+     if (!productConfig || !productConfig.cashValueConfig?.enabled) {
+        return { guaranteed: [], customCapped: [], customFull: [] }; // Return empty if no cash value
+     }
+
+     // Determine final payment term based on product/program
+     let paymentTerm = 0;
+     // ... (copy logic from buildViewerPayload/buildSummaryDataForHtml to get final paymentTerm) ...
+      if (productConfig?.calculation.method === 'package') {
+          const underlyingConfig = PRODUCT_CATALOG[productConfig.packageConfig.underlyingMainProduct];
+          const fixedProgramKey = productConfig.packageConfig.fixedValues.program;
+          const fixedProgram = underlyingConfig?.programs?.options.find(p => p.key === fixedProgramKey);
+          paymentTerm = fixedProgram?.defaultPaymentTerm || 0;
+      } else if (productConfig?.programs?.enabled) {
+          const selectedProgramKey = mainProductInfo.program;
+          if (productKey === 'AN_BINH_UU_VIET') {
+              paymentTerm = parseInt(selectedProgramKey, 10) || 0;
+          } else {
+              paymentTerm = mainProductInfo.paymentTerm || productConfig.programs.options.find(p => p.key === selectedProgramKey)?.defaultPaymentTerm || 0;
+          }
+      } else {
+          paymentTerm = mainProductInfo.paymentTerm || 0;
+      }
+
+
+     if (paymentTerm <= 0) {
+         console.warn("Cannot calculate projection without valid payment term.");
+         return { guaranteed: [], customCapped: [], customFull: [] };
+     }
+
+
+    const {
+        pul_cost_of_insurance_rates,
+        mul_cost_of_insurance_rates,
+        initial_fees,
+        guaranteed_interest_rates,
+        admin_fees,
+        persistency_bonus
+    } = investment_data;
+
+    const totalYears = targetAge - initialAge + 1;
+    const totalMonths = totalYears * 12;
+    if (totalMonths <= 0) return { guaranteed: [], customCapped: [], customFull: [] };
+
+    let parsedCustom = parseFloat(customInterestRateStr) || 0;
+    // Assume input is percentage (e.g., 4.7 means 4.7%)
+    const customRate = (parsedCustom / 100);
+
+    const roundVND = (v) => Math.round(v || 0);
+
+    let scenarios = {
+        guaranteed: { accountValue: 0, yearEndValues: [] },
+        customCapped: { accountValue: 0, yearEndValues: [] },
+        customFull: { accountValue: 0, yearEndValues: [] },
+    };
+
+    // Determine periods per year based on frequency string
+    const periods = paymentFrequency === 'half' ? 2 : (paymentFrequency === 'quarter' ? 4 : 1);
+
+    // Calculate premium per period (using getFeePerPeriod without rider factor)
+    const basePremiumPerPeriod = getFeePerPeriod(basePremiumAnnual, paymentFrequency, false);
+    const extraPremiumPerPeriod = getFeePerPeriod(extraPremiumAnnual, paymentFrequency, false);
+
+    const startDate = GLOBAL_CONFIG.REFERENCE_DATE || new Date();
+    const startYear = startDate.getFullYear();
+    const startMonth = startDate.getMonth() + 1; // 1-based month
+
+    const getCalendarYearFromStart = (month) => {
+        const startMonthZero = startMonth - 1; // 0-based start month
+        const monthIndexFromStart = startMonthZero + (month - 1); // 0-based index from policy start
+        return startYear + Math.floor(monthIndexFromStart / 12);
+    };
+
+    // Function to get STBH for Khoe Binh An increasing benefit
+    const getStbhForPolicyYear = (policyYear) => {
+        if (productKey === 'KHOE_BINH_AN') {
+            const initial = Number(stbhInitial) || 0;
+            if (policyYear <= 1) return initial; // Year 1 has initial STBH
+            if (policyYear >= 2 && policyYear <= 11) {
+                const extraYears = policyYear - 1;
+                // Rounding might be needed based on specific rules
+                return initial + Math.round(initial * 0.05 * extraYears);
+            }
+            // Max increase applies from year 11 onwards
+            return initial + Math.round(initial * 0.05 * 10);
+        }
+         // Vững Tương Lai also has increasing STBH (assuming same logic as KBA for now)
+         if (productKey === 'VUNG_TUONG_LAI') {
+            const initial = Number(stbhInitial) || 0;
+             if (policyYear <= 1) return initial;
+             if (policyYear >= 2 && policyYear <= 11) { // Assuming 10 years of increase
+                 const extraYears = policyYear - 1;
+                 return initial + Math.round(initial * 0.05 * extraYears);
+             }
+             return initial + Math.round(initial * 0.05 * 10);
+        }
+        // Other products have fixed STBH for COI calc
+        return Number(stbhInitial) || 0;
+    };
+
+
+    const getAdminFeeForYear = (calendarYear) => {
+        if (!admin_fees) return 0;
+        const yearStr = String(calendarYear);
+        // Look for specific year, then default
+        return Number(admin_fees[yearStr] ?? admin_fees.default ?? 0) || 0;
+    };
+
+    // Determine which COI table to use based on product config (PUL/MUL)
+    const isPulProduct = productConfig?.cashValueConfig?.sarIncludesExtraPremium === true; // PUL flag
+    const coiRatesTable = isPulProduct ? pul_cost_of_insurance_rates : mul_cost_of_insurance_rates;
+
+    // --- Monthly Projection Loop ---
+    for (let month = 1; month <= totalMonths; month++) {
+        const policyYear = Math.floor((month - 1) / 12) + 1;
+        const attainedAge = initialAge + policyYear - 1;
+         // Handle edge case where attained age might exceed table max (e.g., > 100)
+         const ageForCoiLookup = Math.min(attainedAge, coiRatesTable?.[coiRatesTable.length - 1]?.age ?? attainedAge);
+
+        const genderKey = (gender === 'Nữ' || gender === 'Nu' || gender === 'nu') ? 'nu' : 'nam';
+        const calendarYear = getCalendarYearFromStart(month);
+
+        // Determine if it's a payment month based on frequency
+        let isPaymentMonth = false;
+        const monthInYear = ((month - 1) % 12); // 0-11 for easier modulo checks
+        if (periods === 1 && monthInYear === 0) isPaymentMonth = true; // Month 1 (index 0)
+        if (periods === 2 && (monthInYear === 0 || monthInYear === 6)) isPaymentMonth = true; // Month 1, 7 (index 0, 6)
+        if (periods === 4 && (monthInYear === 0 || monthInYear === 3 || monthInYear === 6 || monthInYear === 9)) isPaymentMonth = true; // Month 1, 4, 7, 10 (index 0, 3, 6, 9)
+
+        for (const key in scenarios) { // Loop through guaranteed, customCapped, customFull
+            let currentAccountValue = scenarios[key].accountValue || 0;
+            let premiumIn = 0;
+            let initialFee = 0;
+
+            // Apply premium and initial fee if it's a payment month within the term
+            if (isPaymentMonth && policyYear <= paymentTerm) {
+                 const baseIn = basePremiumPerPeriod;
+                 const extraIn = extraPremiumPerPeriod;
+                 premiumIn = baseIn + extraIn;
+
+                 // Calculate initial fee based on policy year
+                 // Use productKey from mainProductInfo, not productConfig which might be underlying for package
+                 const initialFeeRateBase = ((initial_fees && initial_fees[mainProductInfo.key]) || {})[policyYear] || 0;
+                 const extraInitRate = (initial_fees && initial_fees.EXTRA) ? initial_fees.EXTRA : 0;
+                 initialFee = roundVND((baseIn * Number(initialFeeRateBase || 0)) +
+                                       (extraIn * Number(extraInitRate || 0)));
+            }
+
+            // --- Core Monthly Calculation ---
+            const valueBeforeInterest = currentAccountValue + premiumIn - initialFee;
+            const adminFee = getAdminFeeForYear(calendarYear);
+            const stbhCurrent = getStbhForPolicyYear(policyYear); // Get potentially increasing STBH
+
+            // Cost of Insurance (COI)
+            const riskRateRecord = coiRatesTable?.find(r => Number(r.age) === Number(ageForCoiLookup));
+            const riskRate = riskRateRecord ? (Number(riskRateRecord[genderKey]) || 0) : 0;
+
+             // Sum At Risk (SAR) depends on PUL/MUL config
+             const sarBase = valueBeforeInterest; // AV before COI/Admin/Interest
+             let sumAtRisk = Math.max(0, stbhCurrent - sarBase);
+             // For MUL, if sarIncludesExtraPremium is false, SAR should not be reduced by extra premium
+             if (!productConfig.cashValueConfig.sarIncludesExtraPremium && isPaymentMonth && policyYear <= paymentTerm) {
+                  sumAtRisk = Math.max(0, stbhCurrent - (sarBase - extraPremiumPerPeriod)); // Effectively add back extra premium before calculating SAR
+             }
+
+
+            let costOfInsurance = (sumAtRisk * riskRate) / 1000 / 12; // Monthly COI rate
+            costOfInsurance = roundVND(costOfInsurance);
+
+            const netInvestmentAmount = valueBeforeInterest - adminFee - costOfInsurance;
+
+            // Interest Calculation
+            let guaranteedRateRaw = (guaranteed_interest_rates && (guaranteed_interest_rates[policyYear] !== undefined))
+                ? guaranteed_interest_rates[policyYear]
+                : (guaranteed_interest_rates?.default ?? 0); // Use default if year specific not found
+            let guaranteedRate = Number(guaranteedRateRaw) || 0;
+            // Assuming rates in data are decimals (e.g., 0.04 for 4%)
+            // guaranteedRate = guaranteedRate; // No division by 100 needed if data is already decimal
+
+            let interestRateYearly = 0;
+             if (!productConfig.cashValueConfig.useGuaranteedInterest) {
+                 // If not using guaranteed, only apply custom rate
+                 interestRateYearly = customRate;
+             } else if (key === 'guaranteed') {
+                interestRateYearly = guaranteedRate;
+            } else if (key === 'customCapped') {
+                // Apply custom rate up to year 20, then guaranteed, but always at least guaranteed
+                interestRateYearly = (policyYear <= 20) ? Math.max(customRate, guaranteedRate) : guaranteedRate;
+            } else { // customFull
+                // Apply custom rate throughout, but always at least guaranteed
+                interestRateYearly = Math.max(customRate, guaranteedRate);
+            }
+
+
+            const monthlyInterestRate = Math.pow(1 + interestRateYearly, 1 / 12) - 1;
+            let interest = Math.max(0, netInvestmentAmount) * monthlyInterestRate; // Interest only on positive balance
+            interest = roundVND(interest);
+
+            // Persistency Bonus (Applied at the end of specific policy years)
+            let bonus = 0;
+            const isLastMonthOfPolicyYear = (month % 12 === 0);
+             if (isLastMonthOfPolicyYear) {
+                 const bonusInfo = (persistency_bonus || []).find(b => b.year === policyYear);
+                  // Check if within payment term for bonus eligibility
+                 if (policyYear <= paymentTerm) {
+                     if (bonusInfo) { // Standard bonus (PUL style)
+                          bonus = basePremiumAnnual * bonusInfo.rate;
+                     } else if (!isPulProduct && policyYear >= 5) { // Specific MUL bonus (3% from year 5)
+                          bonus = basePremiumAnnual * 0.03;
+                     }
+                 }
+             }
+             bonus = roundVND(bonus);
+
+
+            // Update Account Value for the next month
+            scenarios[key].accountValue = Math.max(0, roundVND(netInvestmentAmount + interest + bonus));
+
+            // Store year-end value
+            if (isLastMonthOfPolicyYear) {
+                scenarios[key].yearEndValues.push(scenarios[key].accountValue);
+            }
+        } // End scenario loop
+    } // End month loop
+
+    return {
+        guaranteed: scenarios.guaranteed.yearEndValues,
+        customCapped: scenarios.customCapped.yearEndValues,
+        customFull: scenarios.customFull.yearEndValues,
+    };
+}
