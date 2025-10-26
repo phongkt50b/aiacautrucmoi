@@ -1005,38 +1005,82 @@ function initOccupationAutocomplete(input, container) {
   if (!input) return;
   const autocompleteContainer = container.querySelector('.occupation-autocomplete');
   const riskGroupSpan = container.querySelector('.risk-group-span');
+
   const applyOccupation = (occ) => {
-    input.value = occ.name; input.dataset.group = occ.group;
+    input.value = occ.name;
+    input.dataset.group = occ.group;
     if (riskGroupSpan) riskGroupSpan.textContent = occ.group;
-    clearFieldError(input); autocompleteContainer.classList.add('hidden');
-    runWorkflow();
+    clearFieldError(input);
+    autocompleteContainer.classList.add('hidden');
+    // NOTE: runWorkflow() is intentionally omitted here;
+    // it will be reliably called by the 'blur' event handler.
   };
+
   const renderList = (filtered) => {
     autocompleteContainer.innerHTML = '';
-    if (!filtered.length) { autocompleteContainer.classList.add('hidden'); return; }
+    if (!filtered.length) {
+      autocompleteContainer.classList.add('hidden');
+      return;
+    }
     filtered.forEach(occ => {
       const item = document.createElement('div');
-      item.className = 'p-2 hover:bg-gray-100 cursor-pointer'; item.textContent = occ.name;
-      item.addEventListener('mousedown', (ev) => { ev.preventDefault(); applyOccupation(occ); });
+      item.className = 'p-2 hover:bg-gray-100 cursor-pointer';
+      item.textContent = occ.name;
+      // Use mousedown instead of click to fire before blur
+      item.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        applyOccupation(occ);
+        input.blur(); // Manually blur to trigger the final state update
+      });
       autocompleteContainer.appendChild(item);
     });
     autocompleteContainer.classList.remove('hidden');
   };
+
   input.addEventListener('input', () => {
     const value = input.value.trim().toLowerCase();
-    if (value.length < 2) { autocompleteContainer.classList.add('hidden'); return; }
+    if (value.length < 2) {
+      autocompleteContainer.classList.add('hidden');
+      return;
+    }
     const filtered = product_data.occupations.filter(o => o.group > 0 && o.name.toLowerCase().includes(value));
     renderList(filtered);
   });
+
   input.addEventListener('blur', () => {
+    // Use a short timeout to allow mousedown to fire first
     setTimeout(() => {
       autocompleteContainer.classList.add('hidden');
+      
       const match = product_data.occupations.find(o => o.group > 0 && o.name.trim().toLowerCase() === (input.value || '').trim().toLowerCase());
-      if (!match) { input.dataset.group = ''; if(riskGroupSpan) riskGroupSpan.textContent = '...'; }
+      
+      if (match) {
+        // If a valid match is found (from typing or clicking), normalize the input field and set data.
+        if (input.value !== match.name) {
+            input.value = match.name;
+        }
+        if (String(input.dataset.group) !== String(match.group)) {
+            input.dataset.group = match.group;
+        }
+        if (riskGroupSpan) {
+            riskGroupSpan.textContent = match.group;
+        }
+        clearFieldError(input);
+      } else {
+        // If no match, clear the input to prevent inconsistent state.
+        // This indicates to the user that their input was not valid.
+        input.value = '';
+        input.dataset.group = '';
+        if (riskGroupSpan) {
+            riskGroupSpan.textContent = '...';
+        }
+      }
+      // This is the single source of truth for updating the state after an occupation interaction.
       runWorkflow();
-    }, 200);
+    }, 150); // 150ms is enough for click events
   });
 }
+
 function initDateFormatter(input) {
   if (!input) return;
   input.addEventListener('input', (e) => {
