@@ -1,4 +1,5 @@
 
+
 /**
  * @file data.js
  * @description
@@ -524,6 +525,7 @@ export const PRODUCT_CATALOG = {
         type: 'rider',
         name: 'Miễn đóng phí 3.0',
         slug: 'mien-dong-phi-3',
+        isStandalone: true,
         ui: {
             controls: []
         },
