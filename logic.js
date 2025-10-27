@@ -1,5 +1,3 @@
-
-
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
 // ===================================================================================
@@ -335,7 +333,10 @@ function calculateMainPremium(customer, productInfo) {
             }
 
             if (rateTable) {
-                rate = rateTable.find(r => r.age === customer.age)?.[genderKey] || 0;
+                const rateEntry = rateTable.find(r => r.age === customer.age);
+                if (rateEntry) {
+                    rate = rateEntry[genderKey] ?? 0;
+                }
             }
             premium = Math.round((stbh / 1000) * rate);
             break;
@@ -420,8 +421,10 @@ function calculateSimpleRiderPremium(prodConfig, customer, rateFinder, divisor, 
 }
 
 function calculateBhnPremium(prodConfig, customer, mainPremium, totalHospitalSupportStbh, ageOverride = null) {
-    const rateFinder = (cust, age) => product_data.bhn_rates
-        .find(r => age >= r.ageMin && age <= r.ageMax)?.[cust.gender === 'Nữ' ? 'nu' : 'nam'] || 0;
+    const rateFinder = (cust, age) => {
+        const rateEntry = product_data.bhn_rates.find(r => age >= r.ageMin && age <= r.ageMax);
+        return rateEntry ? (rateEntry[cust.gender === 'Nữ' ? 'nu' : 'nam'] ?? 0) : 0;
+    };
     return calculateSimpleRiderPremium(prodConfig, customer, rateFinder, 1000, ageOverride);
 }
 
@@ -434,11 +437,13 @@ function calculateAccidentPremium(prodConfig, customer, mainPremium, totalHospit
 }
 
 function calculateHospitalSupportPremium(prodConfig, customer, mainPremium, totalHospitalSupportStbh, ageOverride = null) {
-    const rateFinder = (cust, age) => product_data.hospital_fee_support_rates
-        .find(r => age >= r.ageMin && age <= r.ageMax)?.rate || 0;
+    const rateFinder = (cust, age) => {
+        const rateEntry = product_data.hospital_fee_support_rates.find(r => age >= r.ageMin && age <= r.ageMax);
+        return rateEntry ? (rateEntry.rate ?? 0) : 0;
+    };
     return calculateSimpleRiderPremium(prodConfig, customer, rateFinder, 100, ageOverride);
 }
-// Dán hàm mới này vào logic.js
+
 function calculateAccountValueProjection(mainPerson, mainProduct, basePremium, extraPremium, targetAge, customInterestRate, paymentFrequency) {
     const { gender, age: initialAge } = mainPerson;
     const { key: productKey, stbh: stbhInitial = 0, paymentTerm } = mainProduct;
@@ -466,20 +471,14 @@ function calculateAccountValueProjection(mainPerson, mainProduct, basePremium, e
         customFull: { accountValue: 0, yearEndValues: [] },
     };
     
-    // --- BẮT ĐẦU PHẦN SỬA ---
-
-    // 1. Xác định số kỳ đóng phí trong một năm
     let periods = 1;
     if (paymentFrequency === 'half') periods = 2;
     if (paymentFrequency === 'quarter') periods = 4;
 
-    // 2. Tính toán phí cho mỗi kỳ (dựa trên phí năm)
     const annualBasePremium = Number(basePremium || 0);
     const annualExtraPremium = Number(extraPremium || 0);
     const basePremiumPerPeriod = periods > 1 ? roundDownTo1000(annualBasePremium / periods) : annualBasePremium;
     const extraPremiumPerPeriod = periods > 1 ? roundDownTo1000(annualExtraPremium / periods) : annualExtraPremium;
-
-    // --- KẾT THÚC PHẦN SỬA ---
 
     const startDate = (typeof GLOBAL_CONFIG !== 'undefined' && GLOBAL_CONFIG.REFERENCE_DATE) ? GLOBAL_CONFIG.REFERENCE_DATE : new Date();
     const startYear = startDate.getFullYear();
@@ -520,31 +519,22 @@ function calculateAccountValueProjection(mainPerson, mainProduct, basePremium, e
         const genderKey = (gender === 'Nữ' || gender === 'Nu' || gender === 'nu') ? 'nu' : 'nam';
         const calendarYear = getCalendarYearFromStart(month);
         
-        // --- BẮT ĐẦU PHẦN SỬA ---
-
-        // 3. Kiểm tra xem tháng hiện tại có phải là tháng đóng phí không
         let isPaymentMonth = false;
-        const monthInYear = ((month - 1) % 12) + 1; // Lấy tháng trong năm (từ 1 đến 12)
+        const monthInYear = ((month - 1) % 12) + 1;
 
         if (periods === 1 && monthInYear === 1) isPaymentMonth = true;
         if (periods === 2 && (monthInYear === 1 || monthInYear === 7)) isPaymentMonth = true;
         if (periods === 4 && (monthInYear === 1 || monthInYear === 4 || monthInYear === 7 || monthInYear === 10)) isPaymentMonth = true;
-
-        // --- KẾT THÚC PHẦN SỬA ---
 
         for (const key in scenarios) {
             let currentAccountValue = scenarios[key].accountValue || 0;
             let premiumIn = 0;
             let initialFee = 0;
             
-            // --- BẮT ĐẦU PHẦN SỬA ---
-
-            // 4. Áp dụng phí và khấu trừ nếu đúng tháng đóng phí
             if (isPaymentMonth && policyYear <= paymentTerm) {
                 if (isMulProduct) {
                     premiumIn = basePremiumPerPeriod;
                     const initialFeeRateBase = ((initial_fees && initial_fees[productKey]) || {})[policyYear] || 0;
-                    // Áp dụng tỷ lệ phí ban đầu cho phí của kỳ này
                     initialFee = roundVND(premiumIn * Number(initialFeeRateBase || 0));
                 } else {
                     premiumIn = basePremiumPerPeriod + extraPremiumPerPeriod;
@@ -554,8 +544,6 @@ function calculateAccountValueProjection(mainPerson, mainProduct, basePremium, e
                                           (extraPremiumPerPeriod * Number(extraInitRate || 0)));
                 }
             }
-
-            // --- KẾT THÚC PHẦN SỬA ---
 
             const investmentAmount = currentAccountValue + premiumIn - initialFee;
             const adminFee = getAdminFeeForYear(calendarYear);
@@ -592,12 +580,11 @@ function calculateAccountValueProjection(mainPerson, mainProduct, basePremium, e
             let bonus = 0;
             const bonusInfo = (persistency_bonus || []).find(b => b.year === policyYear);
             
-            // Logic thưởng duy trì vẫn dựa trên tháng cuối cùng của năm hợp đồng (tháng 12, 24, 36...)
             const isLastMonthOfPolicyYear = (month % 12 === 0);
 
             if (isMulProduct) {
                 if (policyYear >= 5 && policyYear <= paymentTerm && isLastMonthOfPolicyYear) {
-                    bonus = annualBasePremium * 0.03; // Thưởng dựa trên phí năm
+                    bonus = annualBasePremium * 0.03; 
                 }
             } else {
                 if (bonusInfo && isLastMonthOfPolicyYear) {
@@ -605,7 +592,7 @@ function calculateAccountValueProjection(mainPerson, mainProduct, basePremium, e
                     if ( (bonusYear === 10 && paymentTerm >= 10) ||
                          (bonusYear === 20 && paymentTerm >= 20) ||
                          (bonusYear === 30 && paymentTerm >= 30) ) {
-                        bonus = annualBasePremium * bonusInfo.rate; // Thưởng dựa trên phí năm
+                        bonus = annualBasePremium * bonusInfo.rate; 
                     }
                 }
             }
@@ -625,12 +612,7 @@ function calculateAccountValueProjection(mainPerson, mainProduct, basePremium, e
         customFull: scenarios.customFull.yearEndValues,
     };
 }
-/**
- * Checks eligibility for PUL products based on STBH and premium.
- * @param {number} stbh - The sum assured for the main product.
- * @param {number} premium - The calculated base premium for the main product.
- * @returns {object} An object with validation status and reasons.
- */
+
 function getPulEligibilityState(stbh, premium) {
     const { MAIN_PRODUCT_MIN_STBH, PUL_MIN_STBH_OR, PUL_MIN_PREMIUM_OR, MAIN_PRODUCT_MIN_PREMIUM } = GLOBAL_CONFIG;
 
@@ -845,15 +827,18 @@ function renderMainProductSection(customer, mainProductKey) {
     const paymentTermInput = document.getElementById('payment-term');
     if (paymentTermInput) {
         const defaultTerm = productConfig.rules.paymentTerm?.default;
-        // If there's a default and the current value doesn't match, update it
-        if (defaultTerm && paymentTermInput.value != defaultTerm) {
-            paymentTermInput.value = defaultTerm;
-            // Trigger recalculation
+        
+        // Use default if current value is invalid or empty
+        if (defaultTerm) {
+            const currentVal = parseInt(paymentTermInput.value, 10);
+            if (!currentVal || (lastRenderedProductKey !== mainProductKey && currentVal !== defaultTerm) ) {
+                paymentTermInput.value = defaultTerm;
+            }
+        }
+        
+        if (lastRenderedProductKey !== mainProductKey) {
             updateTargetAge();
             runWorkflowDebounced();
-        } else if (!paymentTermInput.value && defaultTerm) {
-            // Fill if empty
-            paymentTermInput.value = defaultTerm;
         }
     }
 
@@ -1182,11 +1167,13 @@ function validateMainProductInputs(customer, productInfo, basePremium) {
                 ok = false; premiumError = true;
             } else if (rules.premium?.special === 'MUL_FACTOR_CHECK' && stbh > 0) {
                 const factorRow = product_data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
-                const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
-                const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
-                if (premium < minFee || premium > maxFee) {
-                     setFieldError(premiumEl, 'Phí không hợp lệ so với STBH');
-                     ok = false; premiumError = true;
+                if (factorRow) {
+                    const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
+                    const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
+                    if (premium < minFee || premium > maxFee) {
+                         setFieldError(premiumEl, 'Phí không hợp lệ so với STBH');
+                         ok = false; premiumError = true;
+                    }
                 }
             }
         }
@@ -1915,7 +1902,7 @@ window.MDP3 = (function () {
                 lastSelectedId = selectedId || null;
                 const otherForm = document.getElementById('mdp3-other-form');
                 if (selectedId === 'other') showOtherForm();
-                else otherForm.classList.add('hidden');
+                else if(otherForm) otherForm.classList.add('hidden');
                 runWorkflow();
             }
         });
@@ -1993,7 +1980,8 @@ window.MDP3 = (function () {
             if (feeEl) feeEl.textContent = `STBH: ${formatCurrency(stbhBase)} | Phí: —`;
             return 0;
         }
-        const rate = product_data.mdp3_rates.find(r => age >= r.ageMin && age <= r.ageMax)?.[gender === 'Nữ' ? 'nu' : 'nam'] || 0;
+        const rateEntry = product_data.mdp3_rates.find(r => age >= r.ageMin && age <= r.ageMax);
+        const rate = rateEntry ? (rateEntry[gender === 'Nữ' ? 'nu' : 'nam'] ?? 0) : 0;
         const premium = roundDownTo1000((stbhBase / 1000) * rate);
         if (feeEl) {
             feeEl.textContent = premium > 0
@@ -2045,7 +2033,7 @@ function showGlobalErrors(errors) {
   box.innerHTML = `
     <div class="border border-red-300 bg-red-50 text-red-700 rounded p-3 text-sm">
       <div class="font-medium mb-1">Vui lòng sửa các lỗi sau:</div>
-      ${errors.map(e => `<div class="flex gap-1"><span>•</span><span>${e}</span></div>`).join('')}
+      ${errors.map(e => `<div class="flex gap-1"><span>•</span><span>${sanitizeHtml(e)}</span></div>`).join('')}
     </div>
   `;
 }
@@ -2277,7 +2265,6 @@ function initViewerModal() {
     const closeModal = () => {
         modal.classList.remove('visible', 'loading');
         iframe.src = 'about:blank';
-        document.removeEventListener('keydown', handleKeydown);
     };
 
     closeBtn.addEventListener('click', closeModal);
@@ -2294,4 +2281,474 @@ function initViewerModal() {
     };
     
     document.addEventListener('keydown', handleKeydown);
+}
+
+
+// ===================================================================================
+// ===== LOGIC TẠO BẢNG MINH HỌA (PORTED & FIXED FROM V1)
+// ===================================================================================
+
+function __exportExactSummaryHtml() {
+    try {
+        const data = buildSummaryData();
+        const introHtml = buildIntroSection(data);
+        const part1Html = buildPart1Section(data);
+        const part2Html = buildPart2BenefitsSection(data);
+        let part3Html = buildPart3ScheduleSection(data);
+        const footerHtml = buildFooterSection(data);
+        return introHtml + part1Html + part2Html + part3Html + footerHtml;
+    } catch (e) {
+        console.error('[__exportExactSummaryHtml] error:', e);
+        return '<div style="color:red">Lỗi tạo summaryHtml</div>';
+    }
+}
+
+function buildSummaryData() {
+    const freq = appState.paymentFrequency;
+    const periods = freq === 'half' ? 2 : (freq === 'quarter' ? 4 : 1);
+    const isAnnual = periods === 1;
+    const riderFactor = periods === 2 ? 1.02 : (periods === 4 ? 1.04 : 1);
+    const mainInfo = appState.mainPerson;
+    let targetAge = parseInt(document.getElementById('target-age-input')?.value || '0', 10) || 0;
+    const productKey = appState.mainProduct.key;
+    let paymentTerm = appState.mainProduct.paymentTerm || 0;
+
+    const productConfig = PRODUCT_CATALOG[productKey];
+    if (productConfig) {
+        if (productConfig.group === 'PACKAGE') {
+            paymentTerm = productConfig.packageConfig.fixedValues.paymentTerm;
+        } else if (productConfig.ui.options?.paymentTerm) {
+            paymentTerm = parseInt(appState.mainProduct.options.paymentTerm || '0', 10) || paymentTerm;
+        }
+    }
+    
+    const minTerm = productConfig?.rules?.paymentTerm?.min || 4;
+    if (!paymentTerm || paymentTerm < minTerm) paymentTerm = minTerm;
+    
+    const minTargetAge = mainInfo.age + paymentTerm - 1;
+    if (!targetAge || targetAge < minTargetAge) targetAge = minTargetAge;
+
+    const persons = [mainInfo, ...appState.supplementaryPersons];
+    const mdpEnabled = appState.mdp3.enabled;
+    const mdpTargetId = appState.mdp3.selectedId;
+    const mdpFeeYear = mdpEnabled ? (window.MDP3?.getPremium() || 0) : 0;
+    
+    if (mdpEnabled && mdpTargetId === 'other') {
+        const form = document.getElementById('person-container-mdp3-other');
+        const info = form ? collectPersonData(form, false) : {};
+        if (info.age >= 18 && info.age <= 60) {
+            persons.push({
+                id: 'mdp3_other', isMain: false, name: info.name || 'Người khác (MDP3)',
+                gender: info.gender, age: info.age, supplements: {}
+            });
+        }
+    }
+
+    const part1 = buildPart1RowsData({ persons, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, mdpEnabled, mdpTargetId, mdpFeeYear });
+    const schedule = buildPart2ScheduleRows({ persons, mainInfo, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, mdpEnabled, mdpTargetId, mdpFeeYear });
+
+    return { freq, periods, isAnnual, riderFactor, productKey, paymentTerm, targetAge, mainInfo, persons, mdpEnabled, mdpTargetId, mdpFeeYear, part1, schedule };
+}
+
+function buildPart1RowsData(ctx) {
+    const { persons, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, mdpEnabled, mdpTargetId, mdpFeeYear } = ctx;
+    const mainAge = persons.find(p => p.isMain)?.age || 0;
+    const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
+
+    let mdp3StbhBase = 0;
+    if (mdpEnabled) {
+        try {
+            const feesModel = appState.fees;
+            for (const pid in window.personFees) {
+                if (pid === 'mdp3_other') continue;
+                const pf = window.personFees[pid];
+                const mdp3Part = feesModel?.byPerson?.[pid]?.suppDetails?.mdp3 || 0;
+                const suppNet = (pf.supp || 0) - mdp3Part;
+                mdp3StbhBase += (pf.mainBase || 0) + Math.max(0, suppNet);
+            }
+            if (mdpTargetId && mdpTargetId !== 'other' && window.personFees[mdpTargetId]) {
+                const mdp3Part = feesModel?.byPerson?.[mdpTargetId]?.suppDetails?.mdp3 || 0;
+                const suppNet = (window.personFees[mdpTargetId].supp || 0) - mdp3Part;
+                mdp3StbhBase -= Math.max(0, suppNet);
+            }
+            if (mdp3StbhBase < 0) mdp3StbhBase = 0;
+        } catch (e) {
+            console.warn("Lỗi tính mdp3StbhBase:", e);
+        }
+    }
+
+    let rows = [], perPersonTotals = [], grand = { per: 0, eq: 0, base: 0, diff: 0 };
+    
+    const pushRow = (acc, personName, prodName, stbhDisplay, years, baseAnnual, isRider) => {
+        if (baseAnnual <= 0) return;
+        let perPeriod = 0, annualEq = 0, diff = 0;
+        if (!isAnnual) {
+            if (isRider) {
+                perPeriod = riderPerPeriod(baseAnnual, periods, riderFactor);
+                annualEq = perPeriod * periods;
+                diff = annualEq - baseAnnual;
+            } else {
+                perPeriod = roundDownTo1000(baseAnnual / periods);
+                annualEq = perPeriod * periods;
+                diff = annualEq - baseAnnual;
+            }
+        }
+        acc.per += perPeriod; acc.eq += annualEq; acc.base += baseAnnual; acc.diff += diff;
+        rows.push({ personName, prodName, stbhDisplay, years, perPeriod, annualEq, diff, annualBase: baseAnnual, factorRider: !!isRider });
+    };
+
+    persons.forEach(p => {
+        const acc = { per: 0, eq: 0, base: 0, diff: 0 };
+        if (p.isMain && appState.mainProduct.key) {
+            const baseAnnual = calculateMainPremium(p, appState.mainProduct);
+            const stbhVal = appState.mainProduct.stbh;
+            if(baseAnnual > 0){
+                pushRow(acc, p.name, getProductLabel(appState.mainProduct.key), formatDisplayCurrency(stbhVal), paymentTerm || '—', baseAnnual, false);
+            }
+        }
+        if (p.isMain && (appState.mainProduct.extraPremium || 0) > 0) {
+            pushRow(acc, p.name, 'Phí đóng thêm', '—', paymentTerm || '—', appState.mainProduct.extraPremium || 0, false);
+        }
+        for (const rid in p.supplements) {
+            const baseAnnual = calculateRiderPremium(rid, p, appState.fees.baseMain, 0);
+            if (baseAnnual <= 0) continue;
+
+            const maxA = riderMaxAge(rid);
+            const years = Math.max(0, Math.min(maxA - p.age, targetAge - mainAge) + 1);
+            let stbh = p.supplements[rid].stbh;
+            let prodName = getProductLabel(rid);
+
+            if (rid === 'health_scl') {
+                const scl = p.supplements.health_scl;
+                const programMap = {co_ban:'Cơ bản', nang_cao:'Nâng cao', toan_dien:'Toàn diện', hoan_hao:'Hoàn hảo'};
+                const programName = programMap[scl.program] || '';
+                const scopeStr = (scl.scope==='main_global'?'Nước ngoài':'Việt Nam')
+                    + (scl.outpatient?', Ngoại trú':'')
+                    + (scl.dental?', Nha khoa':'');
+                prodName = `Sức khoẻ Bùng Gia Lực – ${programName} (${scopeStr})`;
+                stbh = getHealthSclStbhByProgram(p.supplements[rid].program);
+            }
+            
+            pushRow(acc, p.name, prodName, formatDisplayCurrency(stbh), years, baseAnnual, true);
+        }
+        if (mdpEnabled && mdpFeeYear > 0 && (mdpTargetId === p.id || (mdpTargetId === 'other' && p.id === 'mdp3_other'))) {
+            const years = Math.max(0, Math.min(64 - p.age, targetAge - mainAge) + 1);
+            pushRow(acc, p.name, 'Miễn đóng phí 3.0', formatDisplayCurrency(mdp3StbhBase), years, mdpFeeYear, true);
+        }
+        perPersonTotals.push({ personName: p.name, ...acc });
+        grand.per += acc.per; grand.eq += acc.eq; grand.base += acc.base; grand.diff += acc.diff;
+    });
+
+    return { rows, perPersonTotals, grand, isAnnual, periods, riderFactor };
+}
+
+function buildPart2ScheduleRows(ctx) {
+    const { persons, mainInfo, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, mdpEnabled, mdpTargetId, mdpFeeYear } = ctx;
+    const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
+    const rows = [];
+    const baseMainAnnual = appState?.fees?.baseMain || 0;
+    const extraAnnual = appState?.mainProduct?.extraPremium || 0;
+
+    for (let year = 1; mainInfo.age + year - 1 <= targetAge; year++) {
+        const currentAge = mainInfo.age + year - 1;
+        const inTerm = year <= paymentTerm;
+        const mainYearBase = inTerm ? baseMainAnnual : 0;
+        const extraYearBase = inTerm ? extraAnnual : 0;
+        const perPersonSuppBase = [], perPersonSuppPerPeriod = [], perPersonSuppAnnualEq = [];
+
+        persons.forEach(p => {
+            let sumBase = 0, sumPer = 0;
+            const attained = p.age + year - 1;
+            const addRider = (key, baseFee) => {
+                if (!baseFee || attained > riderMaxAge(key)) return;
+                sumBase += baseFee;
+                if (!isAnnual) sumPer += riderPerPeriod(baseFee, periods, riderFactor);
+            };
+
+            for(const rid in p.supplements) {
+                addRider(rid, calculateRiderPremium(rid, p, baseMainAnnual, 0, attained));
+            }
+
+            if (mdpEnabled && mdpFeeYear > 0 && (mdpTargetId === p.id || (mdpTargetId === 'other' && p.id === 'mdp3_other'))) {
+                 addRider('mdp3', mdpFeeYear); // Use a consistent key for MDP3
+            }
+            perPersonSuppBase.push(sumBase);
+            perPersonSuppPerPeriod.push(sumPer);
+            perPersonSuppAnnualEq.push(isAnnual ? sumBase : sumPer * periods);
+        });
+
+        const suppBaseTotal = perPersonSuppBase.reduce((a, b) => a + b, 0);
+        const suppAnnualEqTotal = perPersonSuppAnnualEq.reduce((a, b) => a + b, 0);
+        const totalYearBase = mainYearBase + extraYearBase + suppBaseTotal;
+        const totalAnnualEq = isAnnual ? totalYearBase : roundDownTo1000((mainYearBase + extraYearBase)/periods)*periods + suppAnnualEqTotal;
+        const diff = totalAnnualEq - totalYearBase;
+        rows.push({ year, age: currentAge, mainYearBase, extraYearBase, perPersonSuppBase, perPersonSuppPerPeriod, perPersonSuppAnnualEq, totalYearBase, totalAnnualEq, diff });
+    }
+    return { rows, extraAllZero: rows.every(r => r.extraYearBase === 0) };
+}
+
+function buildIntroSection(data) {
+    const sel = document.getElementById('payment-frequency');
+    let freqLabel = sel ? sel.options[sel.selectedIndex].text : data.freq;
+    return `<div class="mb-4"><h2 class="text-xl font-bold">BẢNG MINH HỌA PHÍ & QUYỀN LỢI</h2><div class="text-sm text-gray-700">Sản phẩm chính: <strong>${sanitizeHtml(getProductLabel(data.productKey) || '—')}</strong>&nbsp;|&nbsp; Kỳ đóng: <strong>${sanitizeHtml(freqLabel)}</strong>&nbsp;|&nbsp; Minh họa đến tuổi: <strong>${sanitizeHtml(data.targetAge)}</strong></div></div>`;
+}
+
+function buildPart1Section(data) {
+    const { part1, isAnnual, periods } = data;
+    const { rows, perPersonTotals, grand } = part1;
+    const r1000 = n => Math.round((n || 0) / 1000) * 1000;
+    const formatDiffCell = n => !n ? '0' : `<span class="text-red-600 font-bold">${formatDisplayCurrency(r1000(n))}</span>`;
+    
+    const headerHtml = isAnnual ? `<tr><th class="p-2 border">Tên NĐBH</th><th class="p-2 border">Sản phẩm</th><th class="p-2 border">STBH</th><th class="p-2 border">Số năm đóng phí</th><th class="p-2 border">Phí theo năm</th></tr>`
+        : `<tr><th class="p-2 border">Tên NĐBH</th><th class="p-2 border">Sản phẩm</th><th class="p-2 border">STBH</th><th class="p-2 border">Số năm đóng phí</th><th class="p-2 border">Phí (${periods === 2 ? 'nửa năm' : 'theo quý'})</th><th class="p-2 border">Phí năm đầu</th><th class="p-2 border">Phí theo năm</th><th class="p-2 border">Chênh lệch</th></tr>`;
+    
+    let body = [];
+    perPersonTotals.forEach(agg => {
+        if (agg.base <= 0) return;
+        body.push(isAnnual ? `<tr class="bg-gray-50 font-bold"><td class="p-2 border">${sanitizeHtml(agg.personName)}</td><td class="p-2 border">Tổng theo người</td><td class="p-2 border text-right">—</td><td class="p-2 border text-center">—</td><td class="p-2 border text-right">${formatDisplayCurrency(r1000(agg.base))}</td></tr>`
+            : `<tr class="bg-gray-50 font-bold"><td class="p-2 border">${sanitizeHtml(agg.personName)}</td><td class="p-2 border">Tổng theo người</td><td class="p-2 border text-right">—</td><td class="p-2 border text-center">—</td><td class="p-2 border text-right">${formatDisplayCurrency(r1000(agg.per))}</td><td class="p-2 border text-right">${formatDisplayCurrency(r1000(agg.eq))}</td><td class="p-2 border text-right">${formatDisplayCurrency(r1000(agg.base))}</td><td class="p-2 border text-right">${formatDiffCell(agg.diff)}</td></tr>`);
+        
+        rows.filter(r => r.personName === agg.personName).forEach(r => {
+            body.push(isAnnual ? `<tr><td class="p-2 border"></td><td class="p-2 border">${sanitizeHtml(r.prodName)}</td><td class="p-2 border text-right">${r.stbhDisplay}</td><td class="p-2 border text-center">${r.years}</td><td class="p-2 border text-right">${formatDisplayCurrency(r.annualBase)}</td></tr>`
+                : `<tr><td class="p-2 border"></td><td class="p-2 border">${sanitizeHtml(r.prodName)}</td><td class="p-2 border text-right">${r.stbhDisplay}</td><td class="p-2 border text-center">${r.years}</td><td class="p-2 border text-right">${formatDisplayCurrency(r.perPeriod)}</td><td class="p-2 border text-right">${formatDisplayCurrency(r.annualEq)}</td><td class="p-2 border text-right">${formatDisplayCurrency(r.annualBase)}</td><td class="p-2 border text-right">${formatDiffCell(r.diff)}</td></tr>`);
+        });
+    });
+    
+    body.push(isAnnual ? `<tr class="bg-gray-100 font-bold"><td class="p-2 border" colspan="4">Tổng tất cả</td><td class="p-2 border text-right">${formatDisplayCurrency(r1000(grand.base))}</td></tr>`
+        : `<tr class="bg-gray-100 font-bold"><td class="p-2 border" colspan="4">Tổng tất cả</td><td class="p-2 border text-right">${formatDisplayCurrency(r1000(grand.per))}</td><td class="p-2 border text-right">${formatDisplayCurrency(r1000(grand.eq))}</td><td class="p-2 border text-right">${formatDisplayCurrency(r1000(grand.base))}</td><td class="p-2 border text-right">${formatDiffCell(grand.diff)}</td></tr>`);
+    
+    return `<h3 class="text-lg font-bold mb-2">Phần 1 · Tóm tắt sản phẩm</h3><div class="overflow-x-auto"><table class="w-full border-collapse text-sm"><thead>${headerHtml}</thead><tbody>${body.join('')}</tbody></table></div>`;
+}
+
+function buildPart3ScheduleSection(summaryData) {
+    const isPulMul = ['PUL', 'MUL'].includes(PRODUCT_CATALOG[summaryData.productKey]?.group);
+    if (!isPulMul) {
+        // Render simple schedule
+        const { schedule, isAnnual, persons } = summaryData;
+        const rows = schedule.rows;
+        if (!rows.length) return '';
+        const activePersonIdx = persons.map((p, i) => rows.some(r => (r.perPersonSuppAnnualEq[i] || 0) > 0) ? i : -1).filter(i => i !== -1);
+        const header = ['<th class="p-2 border">Năm HĐ</th>', '<th class="p-2 border">Tuổi</th>', '<th class="p-2 border">Phí chính</th>', (schedule.extraAllZero ? '' : '<th class="p-2 border">Phí đóng thêm</th>'), ...activePersonIdx.map(i => `<th class="p-2 border">Phí BS (${sanitizeHtml(persons[i].name)})</th>`), (!isAnnual ? '<th class="p-2 border">Tổng quy năm</th>' : ''), '<th class="p-2 border">Tổng đóng/năm</th>', (!isAnnual ? '<th class="p-2 border">Chênh lệch</th>' : '')].filter(Boolean);
+        let sums = { main: 0, extra: 0, supp: activePersonIdx.map(() => 0), totalEq: 0, totalBase: 0, diff: 0 };
+        const body = rows.map(r => {
+            sums.main += r.mainYearBase; sums.extra += r.extraYearBase; sums.totalEq += r.totalAnnualEq; sums.totalBase += r.totalYearBase; sums.diff += r.diff;
+            activePersonIdx.forEach((pIdx, i) => sums.supp[i] += r.perPersonSuppAnnualEq[pIdx]);
+            return `<tr><td class="p-2 border text-center">${r.year}</td><td class="p-2 border text-center">${r.age}</td><td class="p-2 border text-right">${formatDisplayCurrency(r.mainYearBase)}</td>${schedule.extraAllZero ? '' : `<td class="p-2 border text-right">${formatDisplayCurrency(r.extraYearBase)}</td>`}${activePersonIdx.map(i => `<td class="p-2 border text-right">${formatDisplayCurrency(r.perPersonSuppAnnualEq[i])}</td>`).join('')}${!isAnnual ? `<td class="p-2 border text-right">${formatDisplayCurrency(r.totalAnnualEq)}</td>` : ''}<td class="p-2 border text-right">${formatDisplayCurrency(r.totalYearBase)}</td>${!isAnnual ? `<td class="p-2 border text-right">${r.diff ? `<span class="text-red-600 font-bold">${formatDisplayCurrency(r.diff)}</span>` : '0'}</td>` : ''}</tr>`;
+        }).join('');
+        const footer = `<tr class="bg-gray-50 font-bold"><td class="p-2 border" colspan="2">Tổng</td><td class="p-2 border text-right">${formatDisplayCurrency(sums.main)}</td>${schedule.extraAllZero ? '' : `<td class="p-2 border text-right">${formatDisplayCurrency(sums.extra)}</td>`}${sums.supp.map(s => `<td class="p-2 border text-right">${formatDisplayCurrency(s)}</td>`).join('')}${!isAnnual ? `<td class="p-2 border text-right">${formatDisplayCurrency(sums.totalEq)}</td>` : ''}<td class="p-2 border text-right">${formatDisplayCurrency(sums.totalBase)}</td>${!isAnnual ? `<td class="p-2 border text-right">${sums.diff?`<span class="text-red-600 font-bold">${formatDisplayCurrency(sums.diff)}</span>`:'0'}</td>` : ''}</tr>`;
+        return `<h3 class="text-lg font-bold mt-6 mb-2">Phần 3 · Bảng phí</h3><div class="overflow-x-auto"><table class="w-full border-collapse text-sm"><thead><tr>${header.join('')}</tr></thead><tbody>${body}${footer}</tbody></table></div>`;
+    }
+
+    // Render schedule with account value projection
+    const customRateInput = document.getElementById('custom-interest-rate-input')?.value;
+    const projection = calculateAccountValueProjection(appState.mainPerson, appState.mainProduct, appState.fees.baseMain, appState.mainProduct.extraPremium, summaryData.targetAge, customRateInput, summaryData.freq);
+    const { schedule, isAnnual, persons } = summaryData;
+    const rows = schedule.rows;
+    if (!rows.length) return '';
+    const activePersonIdx = persons.map((p, i) => rows.some(r => (r.perPersonSuppAnnualEq[i] || 0) > 0) ? i : -1).filter(i => i !== -1);
+    const header = ['<th class="p-2 border">Năm HĐ</th>', '<th class="p-2 border">Tuổi</th>', '<th class="p-2 border">Phí chính</th>', (schedule.extraAllZero ? '' : '<th class="p-2 border">Phí đóng thêm</th>'), ...activePersonIdx.map(i => `<th class="p-2 border">Phí BS (${sanitizeHtml(persons[i].name)})</th>`), '<th class="p-2 border">Tổng đóng/năm</th>', '<th class="p-2 border">Giá trị TK (Lãi suất cam kết)</th>', `<th class="p-2 border">Giá trị TK (Lãi suất ${customRateInput || "minh họa"}% trong 20 năm đầu, từ năm 21 là lãi suất cam kết)</th>`, `<th class="p-2 border">Giá trị TK (Lãi suất ${customRateInput || "minh họa"}% xuyên suốt hợp đồng)</th>`].filter(Boolean);
+    let sums = { main: 0, extra: 0, supp: activePersonIdx.map(() => 0), totalBase: 0 };
+    const body = rows.map((r, i) => {
+        sums.main += r.mainYearBase; sums.extra += r.extraYearBase; sums.totalBase += r.totalYearBase;
+        activePersonIdx.forEach((pIdx, idx) => sums.supp[idx] += r.perPersonSuppAnnualEq[pIdx]);
+        const gttk_guaranteed = Math.round((projection.guaranteed[i] || 0) / 1000) * 1000;
+        const gttk_capped = Math.round((projection.customCapped[i] || 0) / 1000) * 1000;
+        const gttk_full = Math.round((projection.customFull[i] || 0) / 1000) * 1000;
+        return `<tr><td class="p-2 border text-center">${r.year}</td><td class="p-2 border text-center">${r.age}</td><td class="p-2 border text-right">${formatDisplayCurrency(r.mainYearBase)}</td>${schedule.extraAllZero ? '' : `<td class="p-2 border text-right">${formatDisplayCurrency(r.extraYearBase)}</td>`}${activePersonIdx.map(pIdx => `<td class="p-2 border text-right">${formatDisplayCurrency(r.perPersonSuppAnnualEq[pIdx])}</td>`).join('')}<td class="p-2 border text-right font-semibold">${formatDisplayCurrency(r.totalYearBase)}</td><td class="p-2 border text-right">${formatDisplayCurrency(gttk_guaranteed)}</td><td class="p-2 border text-right">${formatDisplayCurrency(gttk_capped)}</td><td class="p-2 border text-right">${formatDisplayCurrency(gttk_full)}</td></tr>`;
+    }).join('');
+    const footer = `<tr class="bg-gray-50 font-bold"><td class="p-2 border" colspan="2">Tổng</td><td class="p-2 border text-right">${formatDisplayCurrency(sums.main)}</td>${schedule.extraAllZero ? '' : `<td class="p-2 border text-right">${formatDisplayCurrency(sums.extra)}</td>`}${sums.supp.map(s => `<td class="p-2 border text-right">${formatDisplayCurrency(s)}</td>`).join('')}<td class="p-2 border text-right">${formatDisplayCurrency(sums.totalBase)}</td><td class="p-2 border"></td><td class="p-2 border"></td><td class="p-2 border"></td></tr>`;
+    return `<h3 class="text-lg font-bold mt-6 mb-2">Phần 3 · Bảng phí & Minh họa giá trị tài khoản</h3><div class="overflow-x-auto"><table class="w-full border-collapse text-sm"><thead><tr>${header.join('')}</tr></thead><tbody>${body}${footer}</tbody></table></div>`;
+}
+
+
+function buildFooterSection(data) {
+    return `<div class="mt-6 text-xs text-gray-600 italic">(*) Công cụ này chỉ mang tính chất tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA. Quyền lợi và mức phí cụ thể sẽ được xác nhận trong hợp đồng do AIA phát hành. Vui lòng liên hệ tư vấn viên AIA để được tư vấn chi tiết và nhận bảng minh họa chính thức.</div>`;
+}
+
+// ===================================================================================
+// ===== LOGIC TẠO BẢNG QUYỀN LỢI (KHÔI PHỤC TỪ V1 & ADAPTED)
+// ===================================================================================
+// NOTE: All functions prefixed with bm_ (Benefit Matrix) are part of this ported logic.
+// They are adapted to read from BENEFIT_MATRIX_SCHEMAS and PRODUCT_CATALOG.
+function buildPart2BenefitsSection(summaryData) {
+    const colsBySchema = bm_collectColumns(summaryData);
+    const order = ['AN_BINH_UU_VIET', 'KHOE_BINH_AN', 'VUNG_TUONG_LAI', 'PUL_FAMILY', 'HEALTH_SCL', 'BHN_2_0', 'HOSPITAL_SUPPORT', 'ACCIDENT'];
+    const blocks = order.map(sk => colsBySchema[sk] ? bm_renderSchemaTables(sk, colsBySchema[sk], summaryData) : '').filter(Boolean);
+    if (!blocks.length) return `<h3 class="text-lg font-bold mt-6 mb-3">Phần 2 · Tóm tắt quyền lợi sản phẩm</h3><div class="text-sm text-gray-500 italic mb-4">Không có quyền lợi nào để hiển thị.</div>`;
+    return `<h3 class="text-lg font-bold mt-6 mb-3">Phần 2 · Tóm tắt quyền lợi sản phẩm</h3>${blocks.join('')}`;
+}
+
+function bm_findSchema(productKey) {
+    if (productKey === 'bhn') return BENEFIT_MATRIX_SCHEMAS.find(s => s.key === 'BHN_2_0');
+    if (PRODUCT_CATALOG[productKey]?.group === 'TRADITIONAL' && productKey === 'AN_BINH_UU_VIET') return BENEFIT_MATRIX_SCHEMAS.find(s => s.key === 'AN_BINH_UU_VIET');
+    if (PRODUCT_CATALOG[productKey]?.group === 'MUL') return BENEFIT_MATRIX_SCHEMAS.find(s => s.key === productKey);
+    if (PRODUCT_CATALOG[productKey]?.group === 'PUL') return BENEFIT_MATRIX_SCHEMAS.find(s => s.key === 'PUL_FAMILY');
+    return BENEFIT_MATRIX_SCHEMAS.find(s => s.key.toLowerCase() === productKey.toLowerCase() || s.productKeys?.includes(productKey));
+}
+
+function bm_collectColumns(summaryData) {
+    const colsBySchema = {};
+    const persons = summaryData.persons || [];
+    const mainKey = summaryData.productKey;
+    const mainSa = appState?.mainProduct?.stbh || 0;
+    const isFemale = (p) => (p.gender || '').toLowerCase().startsWith('n');
+
+    // Main product column
+    if (mainKey) {
+        const schema = bm_findSchema(mainKey);
+        if (schema) {
+            colsBySchema[schema.key] = colsBySchema[schema.key] || [];
+            colsBySchema[schema.key].push({ productKey: mainKey, sumAssured: mainSa, persons: [summaryData.mainInfo] });
+        }
+    }
+    // Special case for TRON_TAM_AN which includes AN_BINH_UU_VIET
+    if (mainKey === 'TRON_TAM_AN') {
+        const schemaABUV = bm_findSchema('AN_BINH_UU_VIET');
+        if (schemaABUV) {
+            colsBySchema[schemaABUV.key] = colsBySchema[schemaABUV.key] || [];
+            colsBySchema[schemaABUV.key].push({ productKey: 'AN_BINH_UU_VIET', sumAssured: 100000000, persons: [summaryData.mainInfo] });
+        }
+    }
+
+    persons.forEach(p => {
+        const supp = p.supplements || {};
+        for (const rid in supp) {
+            const schema = bm_findSchema(rid);
+            if (!schema) continue;
+
+            const fee = calculateRiderPremium(rid, p, appState.fees.baseMain, 0);
+            if (fee <= 0) continue;
+
+            colsBySchema[schema.key] = colsBySchema[schema.key] || [];
+            let sig = rid, sa = supp[rid].stbh;
+            let colData;
+            
+            if (rid === 'health_scl') {
+                const { program, outpatient, dental } = supp.health_scl;
+                const maternity = BM_SCL_PROGRAMS[program]?.maternity && isFemale(p);
+                sig += `|${program}|${outpatient ? 1:0}|${dental ? 1:0}|${maternity ? 1:0}`;
+                colData = { productKey: rid, program, flags: { outpatient, dental, maternity }, persons: [p] };
+            } else if (rid === 'bhn') {
+                const child = p.age < 21;
+                const elder = p.age >= 55;
+                sig += `|${sa}|${child ? 1:0}|${elder ? 1:0}`;
+                colData = { productKey: rid, sumAssured: sa, flags: { child, elder }, persons: [p] };
+            } else if (rid === 'hospital_support') {
+                 sig += `|${sa}`;
+                 colData = { productKey: rid, sumAssured: sa, daily: sa, persons: [p] };
+            } else { // Accident and others
+                 sig += `|${sa}`;
+                 colData = { productKey: rid, sumAssured: sa, persons: [p] };
+            }
+
+            let existingCol = colsBySchema[schema.key].find(c => c.sig === sig);
+            if (existingCol) {
+                existingCol.persons.push(p);
+            } else {
+                colData.sig = sig;
+                colsBySchema[schema.key].push(colData);
+            }
+        }
+    });
+
+    Object.values(colsBySchema).forEach(arr => arr.forEach(col => {
+        const names = (col.persons || []).map(p => p.name || p.id).join(', ');
+        let label = names;
+        if (col.productKey === 'health_scl') {
+            label += ` - ${BM_SCL_PROGRAMS[col.program]?.label || ''}`;
+        }
+        if (col.sumAssured) {
+            label += ` - STBH: ${formatDisplayCurrency(col.sumAssured)}`;
+        }
+        col.label = label;
+    }));
+    
+    return colsBySchema;
+}
+
+function bm_renderSchemaTables(schemaKey, columns, summaryData) {
+    const schema = BENEFIT_MATRIX_SCHEMAS.find(s => s.key === schemaKey);
+    if (!schema || !columns.length) return '';
+
+    const titleMap = { 'AN_BINH_UU_VIET': 'An Bình Ưu Việt', 'KHOE_BINH_AN': 'Khoẻ Bình An', 'VUNG_TUONG_LAI': 'Vững Tương Lai', 'PUL_FAMILY': 'Khoẻ Trọn Vẹn', 'HEALTH_SCL': 'Sức khỏe Bùng Gia Lực', 'BHN_2_0': 'Bệnh hiểm nghèo 2.0', 'HOSPITAL_SUPPORT': 'Hỗ trợ Chi phí Nằm viện', 'ACCIDENT': 'Tai nạn' };
+    const title = titleMap[schema.key] || schema.key;
+    const headCols = columns.map(c => `<th class="border px-2 py-2 text-left align-top">${sanitizeHtml(c.label)}</th>`).join('');
+    
+    let rows = [];
+    schema.benefits.forEach(benef => {
+        // Handle group headers
+        if (benef.headerCategory) {
+            let needed = false;
+            if (benef.headerCategory === 'maternity') needed = columns.some(c => c.flags?.maternity);
+            else if (benef.headerCategory === 'outpatient') needed = columns.some(c => c.flags?.outpatient);
+            else if (benef.headerCategory === 'dental') needed = columns.some(c => c.flags?.dental);
+            if (needed) rows.push({ isHeader: true, benef, colspan: 1 + columns.length });
+            return;
+        }
+
+        let cellsData = [];
+        let anyVisible = false;
+        columns.forEach(col => {
+            // Visibility checks
+            if ((benef.productCond && benef.productCond !== col.productKey) || 
+                (benef.minAge && !col.persons.some(p => p.age >= benef.minAge)) || 
+                (benef.maternityOnly && !col.flags?.maternity) ||
+                (benef.outpatientOnly && !col.flags?.outpatient) ||
+                (benef.dentalOnly && !col.flags?.dental) ||
+                (benef.childOnly && !(col.flags && col.flags.child)) ||
+                (benef.elderOnly && !(col.flags && col.flags.elder))) {
+                cellsData.push({ displayValue: '', singleValue: 0 }); return;
+            }
+            
+            let displayValue = '', singleValue = 0;
+            if (benef.valueType === 'number') {
+                let raw = 0;
+                if(benef.compute) raw = benef.compute(col.sumAssured);
+                else if(benef.computeDaily) raw = benef.computeDaily(col.daily);
+                else if(benef.computeProg) raw = benef.computeProg(BM_SCL_PROGRAMS[col.program]);
+                if (benef.cap && raw > benef.cap) raw = benef.cap;
+                singleValue = roundDownTo1000(raw);
+                displayValue = singleValue ? formatDisplayCurrency(singleValue * (benef.multiClaim || 1)) : '';
+            } else {
+                if (benef.computeRange) displayValue = benef.computeRange(col.sumAssured);
+                else if (benef.computeProg) displayValue = benef.computeProg(BM_SCL_PROGRAMS[col.program]);
+                else displayValue = benef.text || '';
+            }
+
+            if (displayValue) anyVisible = true;
+            cellsData.push({ displayValue, singleValue });
+        });
+        if (anyVisible) rows.push({ benef, cellsData });
+    });
+
+    const bodyHtml = rows.map(r => {
+        if (r.isHeader) {
+            return `<tr><td colspan="${r.colspan}" class="border px-2 py-2 font-semibold bg-gray-50">${sanitizeHtml(r.benef.labelBase)}</td></tr>`;
+        }
+        let labelHtml = `${sanitizeHtml(r.benef.labelBase)}${r.benef.formulaLabel ? ` - ${sanitizeHtml(r.benef.formulaLabel)}` : ''}`;
+        
+        if (r.benef.multiClaim) {
+            const firstCellWithValue = r.cellsData.find(c => c.singleValue > 0);
+            if (firstCellWithValue) {
+                const calculationStr = ` - ${formatDisplayCurrency(firstCellWithValue.singleValue)} x ${r.benef.multiClaim}`;
+                labelHtml += calculationStr;
+            }
+        }
+
+        const cellsHtml = r.cellsData.map(c => `<td class="border px-2 py-1 text-right">${c.displayValue}</td>`).join('');
+        return `<tr><td class="border px-2 py-1">${labelHtml}</td>${cellsHtml}</tr>`;
+    }).join('');
+
+    let totalRowHtml = '';
+    if (schema.hasTotal) {
+        let totalCellsSum = columns.map((_, i) => rows.reduce((sum, r) => {
+            if (r.benef.valueType === 'number' && r.cellsData[i].singleValue) {
+               return sum + (r.cellsData[i].singleValue * (r.benef.multiClaim || 1));
+            }
+            return sum;
+        }, 0));
+        totalRowHtml = `<tr><td class="border px-2 py-1 font-semibold">Tổng quyền lợi</td>${totalCellsSum.map(s => `<td class="border px-2 py-1 text-right font-semibold">${s ? formatDisplayCurrency(s) : ''}</td>`).join('')}</tr>`;
+    }
+
+    return `<div class="mb-6"><h4 class="font-semibold mb-1">${sanitizeHtml(title)}</h4><div class="overflow-x-auto"><table class="w-full border-collapse text-sm"><thead><tr><th class="border px-2 py-2 text-left" style="width:42%">Tên quyền lợi</th>${headCols}</tr></thead><tbody>${bodyHtml}${totalRowHtml}</tbody></table></div></div>`;
 }
