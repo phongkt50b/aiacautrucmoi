@@ -7,8 +7,8 @@
  *
  * The core workflow is:
  * 1. Collect user input from the DOM and update the central `appState` object.
- * 2. Run a validation engine that checks `appState` against declarative rules in `PRODUCT_CATALOG`.
- * 3. Run a calculation engine to determine all fees based on rules in `PRODUCT_CATALOG`.
+ * 2. Run a calculation engine to determine all fees based on rules in `PRODUCT_CATALOG`.
+ * 3. Run a validation engine that checks `appState` against declarative rules in `PRODUCT_CATALOG`.
  * 4. Render the entire UI, including dynamic controls, validation errors, and fee summaries,
  *    based on the updated `appState` and validation results.
  */
@@ -76,9 +76,9 @@ function initState() {
 function runWorkflow() {
     clearAllErrors();
     updateStateFromUI();
-    const validationResult = runAllValidations();
+    appState.fees = performCalculations(); // Calculate fees first
+    const validationResult = runAllValidations(); // Then validate using the calculated fees
     appState.validationErrors = validationResult.errors;
-    appState.fees = performCalculations();
     renderUI(validationResult);
 }
 const runWorkflowDebounced = debounce(runWorkflow, 200);
@@ -94,11 +94,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initEventListeners() {
     document.body.addEventListener('change', e => {
-        if (e.target.matches('select, input[type="checkbox"]')) {
-             if (e.target.id === APP_CONFIG.selectors.mainProduct.slice(1)) {
+        const target = e.target;
+        if (target.matches('select, input[type="checkbox"]')) {
+             if (target.id === APP_CONFIG.selectors.mainProduct.slice(1)) {
                 // When main product changes, reset its values and dependent states
                 appState.mainProduct.values = {};
                 appState.mainProduct.program = '';
+             }
+             if(target.id.startsWith('mdp3-')) {
+                handleMdp3Change(target);
              }
              runWorkflow();
         }
@@ -167,12 +171,14 @@ function initMainProductSelect() {
     });
 }
 
-function initPerson(container, isMain = false) {
+function initPerson(container, isMain = false, isWaiverBuyer = false) {
     if (!container) return;
     initDateFormatter(container.querySelector('.dob-input'));
-    initOccupationAutocomplete(container.querySelector('.occupation-input'), container);
+    if (!isWaiverBuyer) {
+        initOccupationAutocomplete(container.querySelector('.occupation-input'), container);
+    }
 
-    if (!isMain) {
+    if (!isMain && !isWaiverBuyer) {
         container.querySelector('.remove-supp-btn')?.addEventListener('click', () => {
             const personId = container.id;
             appState.supplementaryPersons = appState.supplementaryPersons.filter(p => p.id !== personId);
@@ -382,9 +388,9 @@ function renderPersonRiders(person) {
                 const mainPremium = appState.fees.baseMain;
                 const programEligibility = config.rules.dependencies?.programEligibilityByMainPremium;
                 
-                programSelect.querySelectorAll('option').forEach(opt => {
-                    let isOptEligible = true;
-                     if (programEligibility) {
+                if (programSelect && programEligibility) {
+                    programSelect.querySelectorAll('option').forEach(opt => {
+                        let isOptEligible = true;
                         const packageException = programEligibility.packageException?.[appState.mainProduct.key];
                         if (packageException) {
                             isOptEligible = packageException.allowed.includes(opt.value);
@@ -392,12 +398,12 @@ function renderPersonRiders(person) {
                             const rule = product_data[programEligibility.rulesRef].find(r => mainPremium >= r.minPremium);
                             isOptEligible = rule ? rule.allowed.includes(opt.value) : false;
                         }
+                        opt.disabled = !isOptEligible;
+                    });
+    
+                    if (programSelect.options[programSelect.selectedIndex]?.disabled) {
+                        programSelect.value = 'nang_cao'; 
                     }
-                    opt.disabled = !isOptEligible;
-                });
-
-                if (programSelect.options[programSelect.selectedIndex]?.disabled) {
-                    programSelect.value = 'nang_cao'; 
                 }
             }
 
@@ -639,7 +645,7 @@ function collectPersonData(container, isMain, isWaiverBuyer = false) {
         age: Math.max(0, age),
         daysFromBirth,
         gender: container.querySelector('.gender-select')?.value || 'Nam',
-        riskGroup: parseInt(container.querySelector('.occupation-input')?.dataset.group, 10) || 0,
+        riskGroup: isWaiverBuyer ? 0 : (parseInt(container.querySelector('.occupation-input')?.dataset.group, 10) || 0),
         supplements: newSupplements
     };
 }
@@ -730,7 +736,7 @@ function handleMdp3Change(target) {
                       <div class="flex items-end"><p>Tuổi: <span class="font-bold text-aia-red age-span">0</span></p></div>
                     </div>
                 </div>`;
-            initPerson(otherContainer.querySelector('.person-container'), false, true);
+            initPerson(otherContainer, false, true);
         } else {
             otherContainer.classList.add('hidden');
             otherContainer.innerHTML = '';
@@ -758,7 +764,8 @@ function renderWaiverSection(waiverKey) {
     }
 
     const waiverState = appState.waivers[waiverKey];
-    $('#mdp3-enable').checked = waiverState.selected;
+    const enableCheckbox = $('#mdp3-enable');
+    if (enableCheckbox) enableCheckbox.checked = waiverState.selected;
 
     const selectContainer = $('#mdp3-select-container');
     if (waiverState.selected && !selectContainer) {
@@ -768,8 +775,9 @@ function renderWaiverSection(waiverKey) {
     }
     
     if (waiverState.selected) {
-         $('#mdp3-person-select').value = waiverState.buyerId || '';
-         handleMdp3Change($('#mdp3-person-select')); // Show/hide 'other' form
+         const select = $('#mdp3-person-select');
+         if(select) select.value = waiverState.buyerId || '';
+         if(select) handleMdp3Change(select); // Show/hide 'other' form
     }
 }
 
@@ -823,7 +831,7 @@ function renderSuppListSummary(state) {
         }
      });
      if (state.waivers.MDP3.fee > 0) {
-        const buyerName = state.waivers.MDP3.buyerInfo?.name || state.waivers.MDP3.buyerId;
+        const buyerName = state.waivers.MDP3.buyerInfo?.name || allPersons.find(p => p.id === state.waivers.MDP3.buyerId)?.name || 'Bên mua BH';
         html += `<div class="flex justify-between text-sm"><span>${sanitizeHtml(buyerName)} (MĐP)</span><span>${formatCurrency(state.waivers.MDP3.fee)}</span></div>`;
      }
      container.innerHTML = html || '<div class="text-sm text-gray-500">Chưa có phí sản phẩm bổ sung.</div>';
@@ -873,48 +881,6 @@ function showGlobalErrors(errors) {
         </div>
     `;
     globalErrorBox.classList.remove('hidden');
-}
-
-
-function validateDobField(input) {
-    if (!input) return false;
-    const v = (input.value || '').trim();
-    if (!v) {
-        setFieldError(input.parentElement, APP_CONFIG.strings.validation.requiredDob());
-        return false;
-    }
-    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
-        setFieldError(input.parentElement, APP_CONFIG.strings.validation.requiredDob());
-        return false;
-    }
-    const [dd, mm, yyyy] = v.split('/').map(n => parseInt(n, 10));
-    const d = new Date(yyyy, mm - 1, dd);
-    const valid = d.getFullYear() === yyyy && d.getMonth() === (mm - 1) && d.getDate() === dd && d <= GLOBAL_CONFIG.REFERENCE_DATE;
-    if (!valid) {
-        setFieldError(input.parentElement, APP_CONFIG.strings.validation.invalidDob());
-        return false;
-    }
-    clearFieldError(input.parentElement);
-    return true;
-}
-
-function checkEligibility(person, rules) {
-    if (!rules || !person) return true;
-    for (const rule of rules) {
-        if (rule.condition && !rule.condition(person)) continue;
-
-        switch (rule.type) {
-            case 'daysFromBirth': if (person.daysFromBirth < rule.min) return false; break;
-            case 'age':
-                if ((rule.min != null && person.age < rule.min) || (rule.max != null && person.age > rule.max)) return false;
-                break;
-            case 'riskGroup':
-                if (rule.exclude && person.riskGroup > 0 && rule.exclude.includes(person.riskGroup)) return false;
-                if (rule.required && person.riskGroup === 0) return false;
-                break;
-        }
-    }
-    return true;
 }
 
 function initDateFormatter(input) {
@@ -993,7 +959,9 @@ function formatNumberInput(input) {
     
     const newLength = formatted.length;
     const diff = newLength - originalLength;
-    input.setSelectionRange(cursorPos + diff, cursorPos + diff);
+    if (cursorPos !== null) {
+      input.setSelectionRange(cursorPos + diff, cursorPos + diff);
+    }
   } else {
     input.value = '';
   }
@@ -1004,7 +972,7 @@ function roundInputToThousand(input) {
   const raw = parseFormattedNumber(input.value || '');
   if (!raw) { input.value = ''; return; }
   
-  if (input.dataset.stateKey === 'stbh' && input.closest('.product-options')?.dataset.riderKey === 'HOSPITAL_SUPPORT') {
+  if (input.dataset.stateKey === 'stbh' && input.closest('.product-section')?.dataset.riderKey === 'HOSPITAL_SUPPORT') {
       const rounded = Math.round(raw / GLOBAL_CONFIG.HOSPITAL_SUPPORT_STBH_MULTIPLE) * GLOBAL_CONFIG.HOSPITAL_SUPPORT_STBH_MULTIPLE;
       input.value = formatCurrency(rounded);
   } else {
@@ -1099,4 +1067,343 @@ function openFullViewer() {
         console.error("Error building viewer payload:", e);
         showGlobalErrors([{ message: "Không thể tạo dữ liệu cho bảng minh họa. Lỗi: " + e.message, isGlobal: true }]);
     }
+}
+
+
+// ===================================================================================
+// ===== CALCULATION ENGINE (FULLY IMPLEMENTED)
+// ===================================================================================
+
+function performCalculations() {
+    const fees = {
+        baseMain: 0,
+        extra: 0,
+        totalSupp: 0,
+        totalWaiver: 0,
+        total: 0,
+        byPerson: {},
+    };
+
+    const mainPerson = appState.mainPerson;
+    const mainProduct = appState.mainProduct;
+    const allPersons = [mainPerson, ...appState.supplementaryPersons];
+
+    allPersons.forEach(p => {
+        if(p) fees.byPerson[p.id] = { main: 0, supp: 0, total: 0, suppDetails: {} };
+    });
+
+    fees.baseMain = calculateMainPremiumFee(mainPerson, mainProduct);
+    fees.extra = mainProduct.values.extraPremium || 0;
+    if (fees.byPerson[mainPerson.id]) {
+        fees.byPerson[mainPerson.id].main = fees.baseMain + fees.extra;
+    }
+
+    let aggregateStbh = {};
+    
+    allPersons.forEach(p => {
+        if(!p) return;
+        let personSuppFee = 0;
+        Object.entries(p.supplements).forEach(([riderKey, riderData]) => {
+            const riderConfig = PRODUCT_CATALOG[riderKey];
+            if (!riderConfig || !riderData.selected) return;
+
+            const stbh = riderData.values.stbh || 0;
+            if (!aggregateStbh[riderKey]) aggregateStbh[riderKey] = 0;
+            
+            const fee = calculateRiderPremiumFee(riderKey, p, fees.baseMain, aggregateStbh[riderKey]);
+            personSuppFee += fee;
+            fees.byPerson[p.id].suppDetails[riderKey] = fee;
+            
+            if (riderKey === 'HEALTH_SCL_MAIN') {
+                fees.byPerson[p.id].suppDetails.HEALTH_SCL_COMPONENTS = getHealthSclFeeComponents(p);
+            }
+
+            aggregateStbh[riderKey] += stbh;
+        });
+        fees.byPerson[p.id].supp = personSuppFee;
+        fees.totalSupp += personSuppFee;
+    });
+    
+    const mdp3Fee = calculateWaiverPremiumFee('MDP3');
+    appState.waivers.MDP3.fee = mdp3Fee;
+    if (mdp3Fee > 0) {
+        fees.totalWaiver = mdp3Fee;
+        const buyerId = appState.waivers.MDP3.buyerId;
+        if (buyerId && buyerId !== 'other' && fees.byPerson[buyerId]) {
+            fees.byPerson[buyerId].supp += mdp3Fee;
+            fees.byPerson[buyerId].suppDetails.MDP3 = mdp3Fee;
+        } else if (buyerId === 'other') {
+            const otherId = 'mdp3_other_buyer';
+            if (!fees.byPerson[otherId]) fees.byPerson[otherId] = { name: 'Bên mua BH', supp: 0, suppDetails: {} };
+            fees.byPerson[otherId].supp += mdp3Fee;
+            fees.byPerson[otherId].suppDetails.MDP3 = mdp3Fee;
+        }
+    }
+    
+    fees.total = fees.baseMain + fees.extra + fees.totalSupp + fees.totalWaiver;
+    return fees;
+}
+
+function calculateMainPremiumFee(person, productState) {
+    const config = PRODUCT_CATALOG[productState.key];
+    if (!config || !person) return 0;
+
+    const { stbh, premium, paymentTerm } = productState.values;
+    const { calculation, packageConfig } = config;
+
+    if (packageConfig) {
+        const packageProductState = {
+            key: packageConfig.underlyingMainProduct,
+            program: packageConfig.fixedProgramKey,
+            values: { ...productState.values, ...packageConfig.fixedValues },
+        };
+        return calculateMainPremiumFee(person, packageProductState);
+    }
+    
+    let result = 0;
+    switch (calculation.method) {
+        case 'fromInput':
+            result = premium;
+            break;
+        case 'ratePer1000StbhWithProgram':
+            if (stbh <= 0) return 0;
+            const genderKey = person.gender === 'Nữ' ? 'nu' : 'nam';
+            let rateTable = product_data[calculation.rateTableRef];
+            const programKey = productState.program || productState.values.paymentTerm || '';
+            if (!programKey || !rateTable[programKey]) return 0;
+            rateTable = rateTable[programKey];
+            
+            const rateRow = rateTable.find(r => r.age === person.age);
+            const rate = rateRow ? (rateRow[genderKey] ?? 0) : 0;
+            result = (stbh / 1000) * rate;
+            break;
+        case 'none':
+            result = 0;
+            break;
+    }
+    return Math.round(result);
+}
+
+function calculateRiderPremiumFee(riderKey, person, mainPremium, currentAggregateStbh) {
+    const config = PRODUCT_CATALOG[riderKey];
+    if (!config) return 0;
+    
+    const { calculation } = config;
+    const func = window[calculation.functionName];
+    if (typeof func === 'function') {
+        return func(person, mainPremium, currentAggregateStbh);
+    }
+    return 0;
+}
+
+function calculateWaiverPremiumFee(waiverKey) {
+    const waiverState = appState.waivers[waiverKey];
+    if (!waiverState.selected || !waiverState.buyerId) return 0;
+    
+    const config = PRODUCT_CATALOG[waiverKey];
+    let buyer = waiverState.buyerId === 'other' 
+        ? waiverState.buyerInfo 
+        : [appState.mainPerson, ...appState.supplementaryPersons].find(p => p.id === waiverState.buyerId);
+
+    if (!buyer || !checkEligibility(buyer, config.rules.eligibility)) return 0;
+
+    let stbhMdp = appState.fees.baseMain;
+    [appState.mainPerson, ...appState.supplementaryPersons].forEach(p => {
+        if (config.waiverConfig.stbhCalculation.excludeBuyerRiders && p.id === buyer.id) {
+            return;
+        }
+        stbhMdp += Object.keys(p.supplements)
+            .reduce((sum, key) => sum + (appState.fees.byPerson[p.id]?.suppDetails[key] || 0), 0);
+    });
+    
+    const genderKey = buyer.gender === 'Nữ' ? 'nu' : 'nam';
+    const rateRow = product_data.mdp3_rates.find(r => buyer.age >= r.ageMin && buyer.age <= r.ageMax);
+    const rate = rateRow ? rateRow[genderKey] : 0;
+    return Math.round((stbhMdp / 1000) * rate);
+}
+
+// Custom calculation functions exposed to window
+window.calculateBhnPremium = function(person) {
+    const { stbh } = person.supplements.BHN.values;
+    if (!stbh) return 0;
+    const genderKey = person.gender === 'Nữ' ? 'nu' : 'nam';
+    const rateRow = product_data.bhn_rates.find(r => person.age >= r.ageMin && person.age <= r.ageMax);
+    const rate = rateRow ? rateRow[genderKey] : 0;
+    return Math.round((stbh / 1000) * rate);
+}
+
+window.calculateAccidentPremium = function(person) {
+    const { stbh } = person.supplements.ACCIDENT.values;
+    if (!stbh || !person.riskGroup) return 0;
+    const rate = product_data.accident_rates[person.riskGroup] || 0;
+    return Math.round((stbh / 1000) * rate);
+}
+
+window.calculateHospitalSupportPremium = function(person) {
+    const { stbh } = person.supplements.HOSPITAL_SUPPORT.values;
+    if (!stbh) return 0;
+    const rateRow = product_data.hospital_fee_support_rates.find(r => person.age >= r.ageMin && person.age <= r.ageMax);
+    const rate = rateRow ? rateRow.rate : 0;
+    return Math.round((stbh / 100) * rate);
+}
+
+function getHealthSclFeeComponents(person) {
+    const sclData = person.supplements.HEALTH_SCL_MAIN;
+    if (!sclData) return { outpatient: 0, dental: 0 };
+    
+    const { program, scope } = sclData.values;
+    const { selected: outpatient } = person.supplements.HEALTH_SCL_OUTPATIENT || {};
+    const { selected: dental } = person.supplements.HEALTH_SCL_DENTAL || {};
+
+    const ageBandIndex = product_data.health_scl_rates.age_bands.findIndex(b => person.age >= b.min && person.age <= b.max);
+    if (ageBandIndex === -1) return { outpatient: 0, dental: 0 };
+
+    const outpatientFee = outpatient ? (product_data.health_scl_rates.outpatient?.[ageBandIndex]?.[program] || 0) : 0;
+    const dentalFee = dental ? (product_data.health_scl_rates.dental?.[ageBandIndex]?.[program] || 0) : 0;
+
+    return {
+      outpatient: Math.round(outpatientFee),
+      dental: Math.round(dentalFee),
+    };
+}
+// ===================================================================================
+// ===== VALIDATION ENGINE (FULLY IMPLEMENTED)
+// ===================================================================================
+
+function runAllValidations() {
+    const errors = [];
+    const getMessage = (key, ...args) => {
+        const messageOrFn = APP_CONFIG.strings.validation[key];
+        return typeof messageOrFn === 'function' ? messageOrFn(...args) : messageOrFn;
+    };
+    
+    if (!appState.mainProduct.key) {
+        errors.push({ path: 'mainProduct.key', message: getMessage('requiredSelect', 'sản phẩm chính'), isGlobal: true });
+        return { errors };
+    }
+    const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+    const mainPerson = appState.mainPerson;
+
+    [mainPerson, ...appState.supplementaryPersons].forEach(p => {
+        if(!p) return;
+        const path = `person.${p.id}`;
+        if (!p.name) errors.push({ path, key: 'name', message: getMessage('required', 'Họ và tên') });
+        if (!validateDobField(p.container.querySelector('.dob-input'))) {
+            // Error is already set by validateDobField, just add to list for global check
+            errors.push({ path, key: 'dob', message: getMessage('invalidDob')});
+        }
+        if (p.riskGroup === 0 && !p.isWaiverBuyer) errors.push({ path, key: 'occupation', message: getMessage('requiredOccupation') });
+    });
+    
+    const mainValues = appState.mainProduct.values;
+    (mainProductConfig.rules.validationRules || []).forEach(rule => {
+        const targetValue = rule.target === 'stbh' ? mainValues.stbh : 
+                            rule.target === 'premium' ? appState.fees.baseMain : 
+                            mainValues[rule.target];
+        const path = `mainProduct.values.${rule.target}`;
+        
+        switch (rule.type) {
+            case 'min':
+                if (targetValue < rule.value) errors.push({ path, key: rule.target, message: getMessage(rule.messageKey, rule.value) });
+                break;
+            case 'anyOf':
+                if (!rule.rules.some(sub => (sub.target === 'stbh' ? mainValues.stbh : appState.fees.baseMain) >= sub.min)) {
+                    errors.push({ path: `mainProduct.values.stbh`, key: 'stbh', message: getMessage(rule.messageKey, ...(rule.messageArgs || [])), isGlobal: true });
+                }
+                break;
+            case 'stbhFactor':
+                const factorRow = product_data[rule.factorTableRef].find(f => mainPerson.age >= f.ageMin && mainPerson.age <= f.ageMax);
+                if (factorRow && mainValues.stbh > 0) {
+                    const minFee = Math.floor(mainValues.stbh / factorRow.maxFactor);
+                    const maxFee = Math.floor(mainValues.stbh / factorRow.minFactor);
+                    if (targetValue < minFee || targetValue > maxFee) {
+                        errors.push({ path, key: rule.target, message: getMessage(rule.messageKey) });
+                    }
+                }
+                break;
+        }
+    });
+
+    let totalRiderStbhByProduct = {};
+    [mainPerson, ...appState.supplementaryPersons].forEach(p => {
+        if (!p) return;
+        Object.keys(p.supplements).forEach(key => {
+            if (!totalRiderStbhByProduct[key]) totalRiderStbhByProduct[key] = 0;
+            const stbh = p.supplements[key]?.values?.stbh || 0;
+            if(stbh) totalRiderStbhByProduct[key] += stbh;
+        });
+    });
+
+    [mainPerson, ...appState.supplementaryPersons].forEach(p => {
+        if(!p) return;
+        Object.entries(p.supplements).forEach(([riderKey, riderData]) => {
+            if (!riderData.selected) return;
+            const riderConfig = PRODUCT_CATALOG[riderKey];
+            const riderValues = riderData.values;
+            (riderConfig.rules.validationRules || []).forEach(rule => {
+                const targetValue = riderValues[rule.target];
+                const path = `supplements.${riderKey}.values.${rule.target}`;
+                
+                switch (rule.type) {
+                    case 'min': if (targetValue < rule.value) errors.push({ path, key: rule.target, personId: p.id, message: getMessage(rule.messageKey, rule.value) }); break;
+                    case 'max': if (targetValue > rule.value) errors.push({ path, key: rule.target, personId: p.id, message: getMessage(rule.messageKey, rule.value) }); break;
+                    case 'multipleOf': if (targetValue % rule.value !== 0) errors.push({ path, key: rule.target, personId: p.id, message: getMessage(rule.messageKey, ...(rule.messageArgs || [])) }); break;
+                    case 'ageBasedMax':
+                        const maxByAgeVal = p.age < 18 ? rule.maxByAge.under18 : rule.maxByAge.from18;
+                        if (targetValue > maxByAgeVal) errors.push({ path, key: rule.target, personId: p.id, message: getMessage(rule.messageKey, maxByAgeVal) });
+                        break;
+                    case 'aggregateMax':
+                        let maxVal = rule.max.type === 'mainPremiumFactor' ? Math.floor(appState.fees.baseMain / rule.max.factor) * rule.max.multiple : rule.max.value;
+                        if (totalRiderStbhByProduct[riderKey] > maxVal) {
+                             errors.push({ path, key: rule.target, personId: p.id, message: getMessage(rule.messageKey, maxVal) });
+                        }
+                        break;
+                }
+            });
+        });
+    });
+
+    return { errors };
+}
+
+
+function validateDobField(input) {
+    if (!input) return false;
+    const v = (input.value || '').trim();
+    if (!v) {
+        setFieldError(input.parentElement, APP_CONFIG.strings.validation.requiredDob());
+        return false;
+    }
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
+        setFieldError(input.parentElement, APP_CONFIG.strings.validation.requiredDob());
+        return false;
+    }
+    const [dd, mm, yyyy] = v.split('/').map(n => parseInt(n, 10));
+    const d = new Date(yyyy, mm - 1, dd);
+    const valid = d.getFullYear() === yyyy && d.getMonth() === (mm - 1) && d.getDate() === dd && d <= GLOBAL_CONFIG.REFERENCE_DATE;
+    if (!valid) {
+        setFieldError(input.parentElement, APP_CONFIG.strings.validation.invalidDob());
+        return false;
+    }
+    clearFieldError(input.parentElement);
+    return true;
+}
+
+function checkEligibility(person, rules) {
+    if (!rules || !person) return true;
+    for (const rule of rules) {
+        if (rule.condition && !rule.condition(person)) continue;
+
+        switch (rule.type) {
+            case 'daysFromBirth': if (person.daysFromBirth < rule.min) return false; break;
+            case 'age':
+                if ((rule.min != null && person.age < rule.min) || (rule.max != null && person.age > rule.max)) return false;
+                break;
+            case 'riskGroup':
+                if (rule.exclude && person.riskGroup > 0 && rule.exclude.includes(person.riskGroup)) return false;
+                if (rule.required && person.riskGroup === 0) return false;
+                break;
+        }
+    }
+    return true;
 }
