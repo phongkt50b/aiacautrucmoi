@@ -13,7 +13,7 @@
  *    based on the updated `appState` and validation results.
  */
 
-import { GLOBAL_CONFIG, APP_CONFIG, PRODUCT_CATALOG, product_data } from './data.js';
+import { GLOBAL_CONFIG, APP_CONFIG, PRODUCT_CATALOG, product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
 // ===================================================================================
 // ===== STATE MANAGEMENT & UTILITIES
@@ -26,6 +26,7 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 const debounce = (fn, wait = 150) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(()=>fn(...a), wait); }; };
 const parseFormattedNumber = (s) => parseInt(String(s||'').replace(/[^\d-]/g, ''), 10) || 0;
 const formatCurrency = (v) => Number(v||0).toLocaleString('vi-VN');
+const formatDisplayCurrency = (v) => Number.isFinite(Number(v)) ? Number(v).toLocaleString('vi-VN') : '0';
 const roundDownTo1000 = (n) => Math.floor(parseFormattedNumber(n) / 1000) * 1000;
 const sanitizeHtml = (s) => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 
@@ -74,12 +75,10 @@ function initState() {
 // ===================================================================================
 
 function runWorkflow() {
-    clearAllErrors();
     updateStateFromUI();
     appState.fees = performCalculations(); // Calculate fees first
-    const validationResult = runAllValidations(); // Then validate using the calculated fees
-    appState.validationErrors = validationResult.errors;
-    renderUI(validationResult);
+    appState.validationErrors = runAllValidations(); // Then validate using the calculated fees
+    renderUI();
 }
 const runWorkflowDebounced = debounce(runWorkflow, 200);
 
@@ -97,7 +96,6 @@ function initEventListeners() {
         const target = e.target;
         if (target.matches('select, input[type="checkbox"]')) {
              if (target.id === APP_CONFIG.selectors.mainProduct.slice(1)) {
-                // When main product changes, reset its values and dependent states
                 appState.mainProduct.values = {};
                 appState.mainProduct.program = '';
              }
@@ -201,8 +199,7 @@ function initPerson(container, isMain = false, isWaiverBuyer = false) {
 // ===== UI RENDERING ENGINE
 // ===================================================================================
 
-/** Main UI render function, orchestrates all sub-renderers */
-function renderUI(validationResult) {
+function renderUI() {
     const mainProductKey = appState.mainProduct.key;
     const mainProductConfig = PRODUCT_CATALOG[mainProductKey];
 
@@ -212,8 +209,10 @@ function renderUI(validationResult) {
     
     [appState.mainPerson, ...appState.supplementaryPersons].forEach(p => {
         if (p?.container) {
-            p.container.querySelector(APP_CONFIG.selectors.ageSpan).textContent = p.age || 0;
-            p.container.querySelector(APP_CONFIG.selectors.riskGroupSpan).textContent = p.riskGroup > 0 ? p.riskGroup : '...';
+            const ageSpan = p.container.querySelector(APP_CONFIG.selectors.ageSpan);
+            if (ageSpan) ageSpan.textContent = p.age || 0;
+            const riskGroupSpan = p.container.querySelector(APP_CONFIG.selectors.riskGroupSpan);
+            if(riskGroupSpan) riskGroupSpan.textContent = p.riskGroup > 0 ? p.riskGroup : '...';
         }
     });
 
@@ -225,15 +224,18 @@ function renderUI(validationResult) {
     renderSummaryPanel(appState);
     
     const canHaveSupp = !mainProductConfig?.rules?.noSupplementaryInsured;
-    $('#supplementary-insured-section').classList.toggle('hidden', !canHaveSupp || !mainProductKey);
+    const suppSection = $('#supplementary-insured-section');
+    if (suppSection) {
+        suppSection.classList.toggle('hidden', !canHaveSupp || !mainProductKey);
+    }
     const addBtn = $(APP_CONFIG.selectors.addSuppBtn);
     if (addBtn) {
         const isAddBtnDisabled = !canHaveSupp || !mainProductKey || appState.supplementaryPersons.length >= GLOBAL_CONFIG.MAX_SUPPLEMENTARY_INSURED;
         addBtn.disabled = isAddBtnDisabled;
         addBtn.classList.toggle('opacity-50', isAddBtnDisabled);
+        addBtn.classList.toggle('cursor-not-allowed', isAddBtnDisabled);
     }
 
-    // Display all collected validation errors
     appState.validationErrors.forEach(err => {
         let el;
         if (err.path === `person.${appState.mainPerson.id}`) {
@@ -261,7 +263,9 @@ function renderUI(validationResult) {
 }
 
 function updateMainProductEligibility(person) {
-    $$(`${APP_CONFIG.selectors.mainProduct} option`).forEach(opt => {
+    const select = $(APP_CONFIG.selectors.mainProduct);
+    if (!select) return;
+    select.querySelectorAll('option').forEach(opt => {
         const productKey = opt.value;
         if (!productKey) return;
         const config = PRODUCT_CATALOG[productKey];
@@ -271,7 +275,6 @@ function updateMainProductEligibility(person) {
             opt.style.display = isEligible ? '' : 'none';
         }
     });
-    const select = $(APP_CONFIG.selectors.mainProduct);
     if (select.options[select.selectedIndex]?.disabled) {
         select.value = '';
     }
@@ -380,7 +383,7 @@ function renderPersonRiders(person) {
         }
 
         const optionsDiv = section.querySelector('.product-options');
-        optionsDiv.classList.toggle('hidden', !checkbox.checked);
+        if (optionsDiv) optionsDiv.classList.toggle('hidden', !checkbox.checked);
         
         const feeDisplayEl = section.querySelector('.fee-display');
         if (feeDisplayEl) {
@@ -438,7 +441,6 @@ function renderPersonRiders(person) {
     });
 }
 
-/** Creates a single form control element based on config */
 function createControlElement(config, path, rules) {
     const elWrapper = document.createElement('div');
     const key = config.dataKey;
@@ -594,6 +596,7 @@ function updateStateFromUI() {
 }
 
 function collectPersonData(container, isMain, isWaiverBuyer = false) {
+    if (!container) return {};
     const id = container.id;
     let personState = {};
     if (!isWaiverBuyer) {
@@ -830,6 +833,7 @@ function renderSuppListSummary(state) {
      let html = '';
      const allPersons = [state.mainPerson, ...state.supplementaryPersons];
      allPersons.forEach(p => {
+        if (!p) return;
         const personFee = state.fees.byPerson[p.id]?.supp || 0;
         if(personFee > 0) {
             html += `<div class="flex justify-between text-sm"><span>${sanitizeHtml(p.name)}</span><span>${formatCurrency(personFee)}</span></div>`;
@@ -1005,30 +1009,42 @@ function buildViewerPayload() {
     const mainPerson = appState.mainPerson;
 
     let productSlug = mainProduct.key.toLowerCase();
-    if(mainProduct.key.startsWith('PUL')) productSlug = 'khoe-tron-ven';
+    if (mainProduct.key.startsWith('PUL')) productSlug = 'khoe-tron-ven';
     
     const riderList = [];
     const allPersons = [mainPerson, ...appState.supplementaryPersons];
     allPersons.forEach(p => {
+        if (!p) return;
         Object.entries(p.supplements).forEach(([key, data]) => {
             if (data.selected && !riderList.some(r => r.slug === key)) {
-                riderList.push({ 
+                const riderConfig = PRODUCT_CATALOG[key];
+                const riderPremium = appState.fees.byPerson[p.id]?.suppDetails[key] || 0;
+                let stbh = data.values.stbh;
+                if (key === 'HEALTH_SCL_MAIN') {
+                    stbh = riderConfig.rules.stbhByProgram[data.values.program];
+                }
+                 riderList.push({ 
                     slug: key,
                     selected: true,
+                    premium: riderPremium,
+                    stbh: stbh,
                     ...data.values
                 });
             }
         });
     });
 
+    const summaryHtml = __exportExactSummaryHtml();
+
     return {
         v: 4, // Version
         productKey: mainProduct.key,
+        productProgram: mainProduct.program,
         productSlug,
         mainPersonName: mainPerson.name,
         mainPersonDob: mainPerson.dob,
         mainPersonAge: mainPerson.age,
-        mainPersonGender: mainPerson.gender,
+        mainPersonGender: mainPerson.gender === 'Nữ' ? 'F' : 'M',
         mainPersonRiskGroup: mainPerson.riskGroup,
         
         ...mainProduct.values,
@@ -1044,7 +1060,7 @@ function buildViewerPayload() {
             totalSupp: appState.fees.totalSupp,
             riders: riderList
         },
-        summaryHtml: "Not implemented yet" // This would require a separate, large function
+        summaryHtml
     };
 }
 
@@ -1059,14 +1075,16 @@ function openFullViewer() {
         const payload = buildViewerPayload();
         const json = JSON.stringify(payload);
         const b64 = btoa(unescape(encodeURIComponent(json)));
-        const viewerUrlWithHash = `viewer.html#v=${b64}`;
         
+        const viewerUrl = new URL('viewer.html', window.location.href);
+        viewerUrl.hash = `v=${b64}`;
+
         const modal = $('#viewer-modal');
         const iframe = $('#viewer-iframe');
         
         modal.classList.add('visible', 'loading');
         iframe.onload = () => modal.classList.remove('loading');
-        iframe.src = viewerUrlWithHash;
+        iframe.src = viewerUrl.href;
     } catch (e) {
         console.error("Error building viewer payload:", e);
         showGlobalErrors([{ message: "Không thể tạo dữ liệu cho bảng minh họa. Lỗi: " + e.message, isGlobal: true }]);
@@ -1075,7 +1093,7 @@ function openFullViewer() {
 
 
 // ===================================================================================
-// ===== CALCULATION ENGINE (FULLY IMPLEMENTED)
+// ===== CALCULATION ENGINE
 // ===================================================================================
 
 function performCalculations() {
@@ -1152,7 +1170,7 @@ function calculateMainPremiumFee(person, productState) {
     const config = PRODUCT_CATALOG[productState.key];
     if (!config || !person) return 0;
 
-    const { stbh, premium, paymentTerm } = productState.values;
+    const { stbh, premium } = productState.values;
     const { calculation, packageConfig } = config;
 
     if (packageConfig) {
@@ -1170,13 +1188,19 @@ function calculateMainPremiumFee(person, productState) {
             result = premium;
             break;
         case 'ratePer1000StbhWithProgram':
+        case 'ratePer1000Stbh':
             if (stbh <= 0) return 0;
             const genderKey = person.gender === 'Nữ' ? 'nu' : 'nam';
             let rateTable = product_data[calculation.rateTableRef];
-            const programKey = productState.program || productState.values.paymentTerm || '';
-            if (!programKey || !rateTable[programKey]) return 0;
-            rateTable = rateTable[programKey];
+            const programKey = productState.program || productState.values.paymentTerm || (config.programs?.options[0]?.key || '');
             
+            if (calculation.method === 'ratePer1000StbhWithProgram') {
+                if (!programKey || !rateTable[programKey]) return 0;
+                rateTable = rateTable[programKey];
+            }
+            
+            if (!rateTable) return 0;
+
             const rateRow = rateTable.find(r => r.age === person.age);
             const rate = rateRow ? (rateRow[genderKey] ?? 0) : 0;
             result = (stbh / 1000) * rate;
@@ -1192,7 +1216,6 @@ function calculateRiderPremiumFee(riderKey, person, mainPremium, currentAggregat
     const config = PRODUCT_CATALOG[riderKey];
     if (!config || !person.supplements[riderKey]?.selected) return 0;
 
-    // Child riders' premiums are calculated as part of the parent (e.g., SCL)
     if (config.parent) {
         return 0;
     }
@@ -1214,9 +1237,19 @@ function calculateRiderPremiumFee(riderKey, person, mainPremium, currentAggregat
             const ageBandIndex = product_data.health_scl_rates.age_bands.findIndex(b => person.age >= b.min && person.age <= b.max);
             if (ageBandIndex === -1) return 0;
 
-            const basePremium = product_data.health_scl_rates[sclData.values.scope]?.[ageBandIndex]?.[sclData.values.program] || 0;
+            const basePremium = product_data.health_scl_rates[calculation.rateTableGroup + '_' + sclData.values.scope]?.[ageBandIndex]?.[sclData.values.program] || 0;
             
             return Math.round(basePremium + components.outpatient + components.dental);
+        }
+        case 'ratePer1000Stbh': {
+            const riderData = person.supplements[riderKey];
+            if (!riderData?.values?.stbh) return 0;
+            const stbh = riderData.values.stbh;
+            const genderKey = person.gender === 'Nữ' ? 'nu' : 'nam';
+            const rateTable = product_data[calculation.rateTableRef];
+            const rateRow = rateTable.find(r => person.age >= r.ageMin && person.age <= r.ageMax);
+            const rate = rateRow ? (rateRow[genderKey] ?? 0) : 0;
+            return Math.round((stbh / 1000) * rate);
         }
         default:
             return 0;
@@ -1231,12 +1264,13 @@ function calculateWaiverPremiumFee(waiverKey) {
     const config = PRODUCT_CATALOG[waiverKey];
     let buyer = waiverState.buyerId === 'other' 
         ? waiverState.buyerInfo 
-        : [appState.mainPerson, ...appState.supplementaryPersons].find(p => p.id === waiverState.buyerId);
+        : [appState.mainPerson, ...appState.supplementaryPersons].find(p => p && p.id === waiverState.buyerId);
 
     if (!buyer || !checkEligibility(buyer, config.rules.eligibility)) return 0;
 
     let stbhMdp = appState.fees.baseMain;
     [appState.mainPerson, ...appState.supplementaryPersons].forEach(p => {
+        if (!p) return;
         if (config.waiverConfig.stbhCalculation.excludeBuyerRiders && p.id === buyer.id) {
             return;
         }
@@ -1244,10 +1278,7 @@ function calculateWaiverPremiumFee(waiverKey) {
             .reduce((sum, key) => sum + (appState.fees.byPerson[p.id]?.suppDetails[key] || 0), 0);
     });
     
-    const genderKey = buyer.gender === 'Nữ' ? 'nu' : 'nam';
-    const rateRow = product_data.mdp3_rates.find(r => buyer.age >= r.ageMin && buyer.age <= r.ageMax);
-    const rate = rateRow ? rateRow[genderKey] : 0;
-    return Math.round((stbhMdp / 1000) * rate);
+    return calculateRiderPremiumFee(waiverKey, buyer, stbhMdp, 0);
 }
 
 // Custom calculation functions exposed to window
@@ -1285,7 +1316,7 @@ function getHealthSclFeeComponents(person) {
     const sclData = person.supplements.HEALTH_SCL_MAIN;
     if (!sclData) return { outpatient: 0, dental: 0 };
     
-    const { program, scope } = sclData.values;
+    const { program } = sclData.values;
     const { selected: outpatient } = person.supplements.HEALTH_SCL_OUTPATIENT || {};
     const { selected: dental } = person.supplements.HEALTH_SCL_DENTAL || {};
 
@@ -1301,7 +1332,7 @@ function getHealthSclFeeComponents(person) {
     };
 }
 // ===================================================================================
-// ===== VALIDATION ENGINE (FULLY IMPLEMENTED)
+// ===== VALIDATION ENGINE
 // ===================================================================================
 
 function runAllValidations() {
@@ -1313,7 +1344,7 @@ function runAllValidations() {
     
     if (!appState.mainProduct.key) {
         errors.push({ path: 'mainProduct.key', message: getMessage('requiredSelect', 'sản phẩm chính'), isGlobal: true });
-        return { errors };
+        return errors;
     }
     const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
     const mainPerson = appState.mainPerson;
@@ -1323,10 +1354,20 @@ function runAllValidations() {
         const path = `person.${p.id}`;
         if (!p.name) errors.push({ path, key: 'name', message: getMessage('required', 'Họ và tên') });
         if (!validateDobField(p.container.querySelector('.dob-input'))) {
-            // Error is already set by validateDobField, just add to list for global check
             errors.push({ path, key: 'dob', message: getMessage('invalidDob')});
         }
-        if (p.riskGroup === 0 && !p.isWaiverBuyer) errors.push({ path, key: 'occupation', message: getMessage('requiredOccupation') });
+        if (p.riskGroup === 0) {
+            const mainConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+            const riskGroupRequiredForRiders = Object.values(p.supplements).some(supp => {
+                const riderConfig = PRODUCT_CATALOG[supp.id];
+                return riderConfig?.rules.eligibility.some(rule => rule.type === 'riskGroup' && rule.required);
+            });
+            const riskGroupRequiredForMain = mainConfig?.rules.eligibility.some(rule => rule.type === 'riskGroup' && rule.required);
+
+            if (riskGroupRequiredForMain || riskGroupRequiredForRiders) {
+                 errors.push({ path, key: 'occupation', message: getMessage('requiredOccupation') });
+            }
+        }
     });
     
     const mainValues = appState.mainProduct.values;
@@ -1351,7 +1392,8 @@ function runAllValidations() {
                     const minFee = Math.floor(mainValues.stbh / factorRow.maxFactor);
                     const maxFee = Math.floor(mainValues.stbh / factorRow.minFactor);
                     if (targetValue < minFee || targetValue > maxFee) {
-                        errors.push({ path, key: rule.target, message: getMessage(rule.messageKey) });
+                        const hint = APP_CONFIG.strings.hints[rule.hintKey];
+                        errors.push({ path, key: rule.target, message: getMessage(rule.messageKey), hint: hint ? hint(minFee, maxFee) : '' });
                     }
                 }
                 break;
@@ -1391,32 +1433,45 @@ function runAllValidations() {
                         if (totalRiderStbhByProduct[riderKey] > maxVal) {
                              errors.push({ path, key: rule.target, personId: p.id, message: getMessage(rule.messageKey, maxVal) });
                         }
+                        const hintFn = APP_CONFIG.strings.hints[rule.hintKey];
+                        if (hintFn) {
+                             const remaining = maxVal - (totalRiderStbhByProduct[riderKey] - targetValue);
+                             const maxByAge = p.age < 18 ? riderConfig.rules.validationRules.find(r=>r.type==='ageBasedMax').maxByAge.under18 : riderConfig.rules.validationRules.find(r=>r.type==='ageBasedMax').maxByAge.from18;
+                             const hint = hintFn({ remaining, maxByAge });
+                             const existingError = errors.find(e => e.path === path && e.personId === p.id);
+                             if (existingError) existingError.hint = hint;
+                             else {
+                                const hintError = { path, key: rule.target, personId: p.id, message: '', hint };
+                                errors.push(hintError);
+                             }
+                        }
                         break;
                 }
             });
         });
     });
 
-    return { errors };
+    return errors;
 }
 
 
 function validateDobField(input) {
     if (!input) return false;
     const v = (input.value || '').trim();
+    const messageKey = APP_CONFIG.strings.validation;
     if (!v) {
-        setFieldError(input.parentElement, APP_CONFIG.strings.validation.requiredDob());
+        setFieldError(input.parentElement, messageKey.requiredDob());
         return false;
     }
     if (!/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
-        setFieldError(input.parentElement, APP_CONFIG.strings.validation.requiredDob());
+        setFieldError(input.parentElement, messageKey.invalidDob());
         return false;
     }
     const [dd, mm, yyyy] = v.split('/').map(n => parseInt(n, 10));
     const d = new Date(yyyy, mm - 1, dd);
     const valid = d.getFullYear() === yyyy && d.getMonth() === (mm - 1) && d.getDate() === dd && d <= GLOBAL_CONFIG.REFERENCE_DATE;
     if (!valid) {
-        setFieldError(input.parentElement, APP_CONFIG.strings.validation.invalidDob());
+        setFieldError(input.parentElement, messageKey.invalidDob());
         return false;
     }
     clearFieldError(input.parentElement);
@@ -1440,4 +1495,543 @@ function checkEligibility(person, rules) {
         }
     }
     return true;
+}
+
+// ===================================================================================
+// ===== LOGIC TẠO BẢNG MINH HỌA (PORTED & ADAPTED)
+// ===================================================================================
+function __exportExactSummaryHtml() {
+    try {
+        const data = buildSummaryData();
+        const part1Html = buildPart1Html(data);
+        const part2Html = buildPart2Html(data);
+        const part3Html = buildPart3Html(data);
+        const footer = `<div class="mt-6 text-xs text-gray-600 italic">(*) Công cụ này chỉ mang tính chất tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA. Quyền lợi và mức phí cụ thể sẽ được xác nhận trong hợp đồng do AIA phát hành.</div>`;
+        return part1Html + part2Html + part3Html + footer;
+    } catch (e) {
+        console.error("Error generating summary HTML:", e);
+        return `<div style="color:red; padding: 1rem;">Lỗi nghiêm trọng khi tạo bảng minh họa: ${e.message}</div>`;
+    }
+}
+
+function buildSummaryData() {
+    const mainPerson = appState.mainPerson;
+    const allPersons = [mainPerson, ...appState.supplementaryPersons].filter(p => p);
+    
+    // Create a deep copy to avoid modifying the main state
+    const summaryPersons = JSON.parse(JSON.stringify(allPersons));
+
+    const mdpEnabled = appState.waivers.MDP3.selected;
+    if (mdpEnabled && appState.waivers.MDP3.buyerId === 'other' && appState.waivers.MDP3.buyerInfo) {
+        summaryPersons.push({
+            ...JSON.parse(JSON.stringify(appState.waivers.MDP3.buyerInfo)),
+            id: 'mdp3_other_buyer',
+            isMdpBuyer: true
+        });
+    }
+
+    return {
+        mainPerson,
+        allPersons: summaryPersons,
+        mainProduct: appState.mainProduct,
+        fees: appState.fees,
+        paymentFrequency: appState.paymentFrequency,
+        viewerOptions: appState.viewerOptions,
+        mdpState: appState.waivers.MDP3
+    };
+}
+
+function buildPart1Html(data) {
+    const { mainProduct, fees, paymentFrequency, allPersons, mdpState } = data;
+    const { key: productKey, values: productValues } = mainProduct;
+    const productConfig = PRODUCT_CATALOG[productKey];
+
+    let rows = [];
+    const totals = { base: 0, extra: 0, supp: 0, total: 0 };
+
+    const mainRow = {
+        name: data.mainPerson.name,
+        product: productConfig.name,
+        stbh: productValues.stbh,
+        term: productConfig.packageConfig ? productConfig.packageConfig.fixedValues.paymentTerm : (productConfig.programs.enabled ? PRODUCT_CATALOG[productKey].programs.options.find(o => o.key === mainProduct.program)?.defaultPaymentTerm : productValues.paymentTerm) || '—',
+        base: fees.baseMain,
+        extra: fees.extra
+    };
+    rows.push(mainRow);
+    totals.base += mainRow.base;
+    totals.extra += mainRow.extra;
+
+    allPersons.forEach(p => {
+        Object.entries(p.supplements).forEach(([riderKey, riderData]) => {
+            if (!riderData.selected) return;
+            const riderConfig = PRODUCT_CATALOG[riderKey];
+            const riderFee = fees.byPerson[p.id]?.suppDetails[riderKey] || 0;
+            if (riderFee <= 0) return;
+
+            let stbh = riderData.values.stbh;
+            if (riderKey === 'HEALTH_SCL_MAIN') {
+                stbh = riderConfig.rules.stbhByProgram[riderData.values.program];
+            }
+
+            rows.push({
+                name: p.name,
+                product: riderConfig.name,
+                stbh: stbh,
+                term: Math.max(0, (riderConfig.rules.eligibility.find(r=>r.renewalMax)?.renewalMax || p.age) - p.age) + 1,
+                base: riderFee,
+                extra: 0
+            });
+            totals.supp += riderFee;
+        });
+    });
+
+    if (mdpState.selected && mdpState.fee > 0) {
+        let buyerName = 'Bên mua BH';
+        if (mdpState.buyerInfo) buyerName = mdpState.buyerInfo.name;
+        else {
+            const buyer = allPersons.find(p => p.id === mdpState.buyerId);
+            if(buyer) buyerName = buyer.name;
+        }
+        
+        const mdpConfig = PRODUCT_CATALOG.MDP3;
+        const buyer = mdpState.buyerInfo || allPersons.find(p => p.id === mdpState.buyerId);
+        const term = Math.max(0, (mdpConfig.rules.eligibility.find(r=>r.max)?.max || buyer.age) - buyer.age) + 1;
+
+        rows.push({
+            name: buyerName,
+            product: 'Miễn Đóng Phí 3.0',
+            stbh: fees.baseMain + fees.totalSupp, // Approximate STBH
+            term: term,
+            base: mdpState.fee,
+            extra: 0
+        });
+        totals.supp += mdpState.fee;
+    }
+
+    totals.total = totals.base + totals.extra + totals.supp;
+
+    let bodyHtml = rows.map(r => `
+        <tr>
+            <td>${sanitizeHtml(r.name)}</td>
+            <td>${sanitizeHtml(r.product)}</td>
+            <td>${formatCurrency(r.stbh)}</td>
+            <td class="text-center">${r.term}</td>
+            <td>${formatCurrency(r.base)}</td>
+            <td>${formatCurrency(r.extra)}</td>
+        </tr>`).join('');
+    
+    const footerHtml = `
+        <tr class="font-bold">
+            <td colspan="4">Tổng cộng</td>
+            <td>${formatCurrency(totals.base)}</td>
+            <td>${formatCurrency(totals.extra)}</td>
+        </tr>
+        <tr class="font-bold text-aia-red">
+            <td colspan="4">Tổng phí theo năm</td>
+            <td colspan="2" class="text-center">${formatCurrency(totals.total)}</td>
+        </tr>
+    `;
+
+    return `
+        <h3>Phần 1: Tóm tắt sản phẩm và phí bảo hiểm</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Người được bảo hiểm</th>
+                    <th>Sản phẩm</th>
+                    <th>Số tiền bảo hiểm (STBH)</th>
+                    <th>Thời hạn đóng phí (năm)</th>
+                    <th>Phí cơ bản</th>
+                    <th>Phí đóng thêm</th>
+                </tr>
+            </thead>
+            <tbody>${bodyHtml}${footerHtml}</tbody>
+        </table>`;
+}
+
+function buildPart2Html(data) {
+     const { allPersons, mainProduct } = data;
+    const colsBySchema = {};
+
+    const addColumn = (schemaKey, colData) => {
+        if (!colsBySchema[schemaKey]) colsBySchema[schemaKey] = [];
+        const existing = colsBySchema[schemaKey].find(c => c.signature === colData.signature);
+        if (existing) {
+            existing.persons.push(...colData.persons);
+        } else {
+            colsBySchema[schemaKey].push(colData);
+        }
+    };
+    
+    // Main product
+    const mainConfig = PRODUCT_CATALOG[mainProduct.key];
+    if (mainConfig.viewer.benefitSchemaKey) {
+        addColumn(mainConfig.viewer.benefitSchemaKey, {
+            productKey: mainProduct.key,
+            sumAssured: mainProduct.values.stbh,
+            persons: [data.mainPerson],
+            options: { program: mainProduct.program },
+            signature: `${mainProduct.key}|${mainProduct.values.stbh}|${mainProduct.program}`
+        });
+    }
+     if (mainProduct.key === 'TRON_TAM_AN') {
+         addColumn('AN_BINH_UU_VIET', { productKey: 'AN_BINH_UU_VIET', sumAssured: 100000000, persons: [data.mainPerson], signature: 'AN_BINH_UU_VIET|100000000'});
+    }
+
+    // Riders
+    allPersons.forEach(p => {
+        Object.entries(p.supplements).forEach(([key, riderData]) => {
+            if (!riderData.selected) return;
+            const riderConfig = PRODUCT_CATALOG[key];
+            if (!riderConfig.viewer?.benefitSchemaKey) return;
+            
+            const schemaKey = riderConfig.viewer.benefitSchemaKey;
+            const isFemale = p.gender === 'Nữ';
+            let colData = {
+                productKey: key,
+                persons: [p],
+                sumAssured: riderData.values.stbh || 0,
+                program: riderData.values.program,
+                scope: riderData.values.scope,
+                flags: {
+                    outpatient: p.supplements.HEALTH_SCL_OUTPATIENT?.selected,
+                    dental: p.supplements.HEALTH_SCL_DENTAL?.selected,
+                    child: p.age < 21,
+                    elder: p.age >= 55,
+                    maternity: (key === 'HEALTH_SCL_MAIN' && BM_SCL_PROGRAMS[riderData.values.program]?.maternity && isFemale)
+                },
+                signature: riderConfig.viewer.benefitSchemaKey + '|' + (riderData.values.stbh || riderData.values.program || '')
+            };
+            addColumn(schemaKey, colData);
+        });
+    });
+
+    const orderedSchemas = APP_CONFIG.viewer.benefitSchemaOrder.filter(key => colsBySchema[key]);
+    const tablesHtml = orderedSchemas.map(schemaKey => buildBenefitTable(schemaKey, colsBySchema[schemaKey])).join('');
+    
+    return `<h3>Phần 2: Tóm tắt quyền lợi</h3>${tablesHtml}`;
+}
+
+function buildBenefitTable(schemaKey, columns) {
+    const schema = BENEFIT_MATRIX_SCHEMAS.find(s => s.key === schemaKey);
+    if (!schema) return '';
+
+    const getColumnLabel = (col) => {
+        if (schema.getColumnLabel) return schema.getColumnLabel(col);
+        const names = col.persons.map(p => p.name).join(', ');
+        const stbhStr = col.sumAssured ? ` - STBH: ${formatCurrency(col.sumAssured)}` : '';
+        return `${names}${stbhStr}`;
+    };
+
+    let headerHtml = `<tr><th>Quyền lợi</th>${columns.map(c => `<th>${sanitizeHtml(getColumnLabel(c))}</th>`).join('')}</tr>`;
+    let bodyHtml = '';
+
+    schema.benefits.forEach(benefit => {
+        let isRowVisible = false;
+        const cellValues = columns.map(col => {
+            let value = '';
+            // Condition checks
+            if ((benefit.productCond && benefit.productCond !== col.productKey) ||
+                (benefit.minAge && !col.persons.some(p => p.age >= benefit.minAge)) ||
+                (benefit.maternityOnly && !col.flags.maternity) ||
+                (benefit.outpatientOnly && !col.flags.outpatient) ||
+                (benefit.dentalOnly && !col.flags.dental) ||
+                (benefit.childOnly && !col.flags.child) ||
+                (benefit.elderOnly && !col.flags.elder)) {
+                return '';
+            }
+
+            if(benefit.compute) value = benefit.compute(col.sumAssured);
+            else if(benefit.computeDaily) value = benefit.computeDaily(col.sumAssured);
+            else if(benefit.computeProg) value = benefit.computeProg(BM_SCL_PROGRAMS[col.program]);
+            else if(benefit.text) value = benefit.text;
+            else if(benefit.computeRange) value = benefit.computeRange(col.sumAssured);
+            
+            if (benefit.cap && typeof value === 'number' && value > benefit.cap) value = benefit.cap;
+            if (benefit.valueType === 'number' && typeof value === 'number') {
+                value = formatCurrency(value * (benefit.multiClaim || 1));
+            }
+            if(value) isRowVisible = true;
+            return value || '—';
+        });
+
+        if (isRowVisible || benefit.headerCategory) {
+            if (benefit.headerCategory) {
+                 bodyHtml += `<tr><td colspan="${columns.length + 1}" class="font-bold bg-gray-100">${sanitizeHtml(benefit.labelBase)}</td></tr>`;
+            } else {
+                 bodyHtml += `<tr><td>${sanitizeHtml(benefit.labelBase)}</td>${cellValues.map(v => `<td class="text-right">${v}</td>`).join('')}</tr>`;
+            }
+        }
+    });
+
+    return `
+        <div class="mb-4">
+            <h4 class="font-semibold">${PRODUCT_CATALOG[columns[0].productKey]?.viewer.title}</h4>
+            <table><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table>
+        </div>`;
+}
+
+function buildPart3Html(data) {
+    const productConfig = PRODUCT_CATALOG[data.mainProduct.key];
+    if (!productConfig) return '';
+    
+    if (productConfig.investment?.hasAccountValue) {
+        return buildPart3ProjectionHtml(data);
+    } else {
+        return buildPart3SimpleScheduleHtml(data);
+    }
+}
+
+function buildPart3SimpleScheduleHtml(data) {
+    const { fees, allPersons, mainProduct, viewerOptions } = data;
+    const { targetAge } = viewerOptions;
+    const mainPerson = data.mainPerson;
+    
+    let rowsHtml = '';
+    const totals = { main: 0, extra: 0, supp: 0, total: 0 };
+    
+    for (let year = 1; mainPerson.age + year - 1 <= targetAge; year++) {
+        const currentAge = mainPerson.age + year - 1;
+        let yearSuppFee = 0;
+        allPersons.forEach(p => {
+             Object.entries(p.supplements).forEach(([key, supp]) => {
+                if (supp.selected) {
+                    const riderFee = calculateRiderPremiumFee(key, { ...p, age: p.age + year - 1 }, fees.baseMain, 0);
+                    yearSuppFee += riderFee;
+                }
+             });
+        });
+
+        const mainFee = year <= mainProduct.values.paymentTerm ? fees.baseMain : 0;
+        const extraFee = year <= mainProduct.values.paymentTerm ? fees.extra : 0;
+        const totalYearFee = mainFee + extraFee + yearSuppFee;
+
+        totals.main += mainFee;
+        totals.extra += extraFee;
+        totals.supp += yearSuppFee;
+        totals.total += totalYearFee;
+
+        rowsHtml += `<tr>
+            <td class="text-center">${year}</td>
+            <td class="text-center">${currentAge}</td>
+            <td>${formatCurrency(mainFee)}</td>
+            <td>${formatCurrency(extraFee)}</td>
+            <td>${formatCurrency(yearSuppFee)}</td>
+            <td>${formatCurrency(totalYearFee)}</td>
+        </tr>`;
+    }
+
+    const footerHtml = `<tr class="font-bold">
+        <td colspan="2">Tổng cộng</td>
+        <td>${formatCurrency(totals.main)}</td>
+        <td>${formatCurrency(totals.extra)}</td>
+        <td>${formatCurrency(totals.supp)}</td>
+        <td>${formatCurrency(totals.total)}</td>
+    </tr>`;
+
+    return `<h3>Phần 3: Bảng phí</h3>
+        <table>
+            <thead><tr><th>Năm HĐ</th><th>Tuổi</th><th>Phí chính</th><th>Phí đóng thêm</th><th>Phí bổ sung</th><th>Tổng phí năm</th></tr></thead>
+            <tbody>${rowsHtml}${footerHtml}</tbody>
+        </table>`;
+}
+
+function buildPart3ProjectionHtml(data) {
+     const { mainPerson, mainProduct, fees, viewerOptions, paymentFrequency } = data;
+    const { targetAge, customInterestRate } = viewerOptions;
+    
+    const projection = calculateAccountValueProjection(
+        mainPerson, mainProduct, fees.baseMain, fees.extra,
+        targetAge, customInterestRate, paymentFrequency
+    );
+
+    let rowsHtml = '';
+    const totals = { main: 0, extra: 0, supp: 0, total: 0 };
+
+    for (let i = 0; i < projection.guaranteed.length; i++) {
+        const year = i + 1;
+        const currentAge = mainPerson.age + i;
+
+        let yearSuppFee = 0;
+        data.allPersons.forEach(p => {
+             Object.entries(p.supplements).forEach(([key, supp]) => {
+                if (supp.selected) {
+                    const riderAge = p.age + i;
+                    const riderFee = calculateRiderPremiumFee(key, { ...p, age: riderAge }, fees.baseMain, 0);
+                    yearSuppFee += riderFee;
+                }
+             });
+        });
+
+        const mainFee = year <= mainProduct.values.paymentTerm ? fees.baseMain : 0;
+        const extraFee = year <= mainProduct.values.paymentTerm ? fees.extra : 0;
+        const totalYearFee = mainFee + extraFee + yearSuppFee;
+
+        totals.main += mainFee;
+        totals.extra += extraFee;
+        totals.supp += yearSuppFee;
+        totals.total += totalYearFee;
+
+        rowsHtml += `<tr>
+            <td class="text-center">${year}</td>
+            <td class="text-center">${currentAge}</td>
+            <td>${formatCurrency(mainFee)}</td>
+            <td>${formatCurrency(extraFee)}</td>
+            <td>${formatCurrency(yearSuppFee)}</td>
+            <td>${formatCurrency(totalYearFee)}</td>
+            <td>${formatCurrency(projection.guaranteed[i])}</td>
+            <td>${formatCurrency(projection.customCapped[i])}</td>
+            <td>${formatCurrency(projection.customFull[i])}</td>
+        </tr>`;
+    }
+
+     const footerHtml = `<tr class="font-bold">
+        <td colspan="2">Tổng cộng</td>
+        <td>${formatCurrency(totals.main)}</td>
+        <td>${formatCurrency(totals.extra)}</td>
+        <td>${formatCurrency(totals.supp)}</td>
+        <td>${formatCurrency(totals.total)}</td>
+        <td colspan="3"></td>
+    </tr>`;
+
+    return `<h3>Phần 3: Bảng phí & Minh họa Giá trị tài khoản</h3>
+        <table>
+            <thead><tr>
+                <th>Năm HĐ</th><th>Tuổi</th><th>Phí chính</th><th>Phí đóng thêm</th><th>Phí bổ sung</th><th>Tổng phí năm</th>
+                <th>GT Tài khoản (Lãi suất cam kết)</th>
+                <th>GT Tài khoản (Lãi suất ${customInterestRate}% / 20 năm)</th>
+                <th>GT Tài khoản (Lãi suất ${customInterestRate}% xuyên suốt)</th>
+            </tr></thead>
+            <tbody>${rowsHtml}${footerHtml}</tbody>
+        </table>`;
+}
+
+function calculateAccountValueProjection(mainPerson, mainProduct, basePremium, extraPremium, targetAge, customInterestRate, paymentFrequency) {
+    const { gender, age: initialAge } = mainPerson;
+    const { key: productKey, program: programKey } = mainProduct;
+    const { stbh: stbhInitial = 0, paymentTerm } = mainProduct.values;
+    const productConfig = PRODUCT_CATALOG[productKey];
+    const isPUL = productConfig.group === 'PUL';
+    const finalProductKey = isPUL ? programKey : productKey;
+    
+    const { pul_cost_of_insurance_rates, mul_cost_of_insurance_rates, initial_fees, guaranteed_interest_rates, admin_fees, persistency_bonus } = investment_data;
+
+    const totalYears = targetAge - initialAge;
+    const totalMonths = totalYears * 12;
+    const parsedCustom = parseFloat(customInterestRate) || 0;
+    const customRate = (parsedCustom > 1) ? (parsedCustom / 100) : parsedCustom;
+    const roundVND = (v) => Math.round(v || 0);
+
+    let scenarios = {
+        guaranteed: { accountValue: 0, yearEndValues: [] },
+        customCapped: { accountValue: 0, yearEndValues: [] },
+        customFull: { accountValue: 0, yearEndValues: [] },
+    };
+
+    let periods = 1;
+    if (paymentFrequency === 'half') periods = 2;
+    if (paymentFrequency === 'quarter') periods = 4;
+    
+    const annualBasePremium = Number(basePremium || 0);
+    const annualExtraPremium = Number(extraPremium || 0);
+    const basePremiumPerPeriod = periods > 1 ? roundDownTo1000(annualBasePremium / periods) : annualBasePremium;
+    const extraPremiumPerPeriod = periods > 1 ? roundDownTo1000(annualExtraPremium / periods) : annualExtraPremium;
+
+    const startDate = GLOBAL_CONFIG.REFERENCE_DATE;
+    const startYear = startDate.getFullYear();
+    const startMonth = startDate.getMonth() + 1;
+
+    const getCalendarYearFromStart = (month) => startYear + Math.floor((startMonth - 2 + month) / 12);
+    const getStbhForPolicyYear = (policyYear) => {
+        if (productConfig.investment.stbhLogic?.type === 'stepIncrease') {
+            const { startYear, endYear, rate, maxRate } = productConfig.investment.stbhLogic;
+            if (policyYear >= startYear) {
+                const increaseYears = Math.min(policyYear, endYear) - startYear + 1;
+                const totalIncreaseRate = Math.min(increaseYears * rate, maxRate);
+                return stbhInitial * (1 + totalIncreaseRate);
+            }
+        }
+        return stbhInitial;
+    };
+
+    for (let month = 1; month <= totalMonths; month++) {
+        const policyYear = Math.floor((month - 1) / 12) + 1;
+        const attainedAge = initialAge + policyYear - 1;
+        const genderKey = gender === 'Nữ' ? 'nu' : 'nam';
+        const calendarYear = getCalendarYearFromStart(month);
+        
+        let isPaymentMonth = false;
+        const monthInYear = ((month - 1) % 12) + 1; 
+        if (periods === 1 && monthInYear === 1) isPaymentMonth = true;
+        if (periods === 2 && (monthInYear === 1 || monthInYear === 7)) isPaymentMonth = true;
+        if (periods === 4 && (monthInYear === 1 || monthInYear === 4 || monthInYear === 7 || monthInYear === 10)) isPaymentMonth = true;
+
+        for (const key in scenarios) {
+            let currentAccountValue = scenarios[key].accountValue || 0;
+            let premiumIn = 0;
+            let initialFee = 0;
+            
+            if (isPaymentMonth && policyYear <= paymentTerm) {
+                const baseIn = basePremiumPerPeriod;
+                const extraIn = extraPremiumPerPeriod;
+                premiumIn = baseIn + extraIn;
+                const initialFeeRateBase = (initial_fees[finalProductKey] || {})[policyYear] || 0;
+                const extraInitRate = initial_fees.EXTRA || 0;
+                initialFee = roundVND((baseIn * initialFeeRateBase) + (extraIn * extraInitRate));
+            }
+
+            const investmentAmount = currentAccountValue + premiumIn - initialFee;
+            const adminFee = (admin_fees[calendarYear] ?? admin_fees.default) / 12;
+            const stbhCurrent = getStbhForPolicyYear(policyYear);
+            const riskRates = productConfig.group === 'PUL' ? pul_cost_of_insurance_rates : mul_cost_of_insurance_rates;
+            const riskRateRecord = riskRates.find(r => r.age === attainedAge);
+            const riskRate = riskRateRecord ? (riskRateRecord[genderKey] || 0) : 0;
+            
+            let sumAtRisk;
+            if (productConfig.investment.sumAtRiskIncludesExtraPremium) {
+                 // PUL logic: includes extra premium in account value for SAR calculation
+                 const accountValueForSAR = currentAccountValue + premiumIn - initialFee;
+                 sumAtRisk = Math.max(0, stbhCurrent - accountValueForSAR);
+            } else {
+                 // MUL logic: does not include extra premium
+                 const premiumBaseIn = (isPaymentMonth && policyYear <= paymentTerm) ? basePremiumPerPeriod : 0;
+                 const initialFeeBase = roundVND(premiumBaseIn * ((initial_fees[finalProductKey] || {})[policyYear] || 0));
+                 const accountValueForSAR = currentAccountValue + premiumBaseIn - initialFeeBase;
+                 sumAtRisk = Math.max(0, stbhCurrent - accountValueForSAR);
+            }
+
+            let costOfInsurance = (sumAtRisk * riskRate) / 1000 / 12;
+            const netInvestmentAmount = investmentAmount - adminFee - costOfInsurance;
+
+            let guaranteedRate = guaranteed_interest_rates[policyYear] ?? guaranteed_interest_rates.default;
+            let interestRateYearly = 0;
+            if (key === 'guaranteed') interestRateYearly = guaranteedRate;
+            else if (key === 'customCapped') interestRateYearly = (policyYear <= 20) ? Math.max(customRate, guaranteedRate) : guaranteedRate;
+            else interestRateYearly = Math.max(customRate, guaranteedRate);
+
+            const monthlyInterestRate = Math.pow(1 + interestRateYearly, 1 / 12) - 1;
+            let interest = netInvestmentAmount * monthlyInterestRate;
+            
+            let bonus = 0;
+            const isLastMonthOfPolicyYear = (month % 12 === 0);
+            if(isLastMonthOfPolicyYear) {
+                if(productConfig.investment.persistencyBonusLogic?.type === 'mulBonus') {
+                    const bonusLogic = productConfig.investment.persistencyBonusLogic;
+                    const endYear = productConfig.values.paymentTerm;
+                    if (policyYear >= bonusLogic.startYear && policyYear <= endYear) {
+                        bonus = annualBasePremium * bonusLogic.rate;
+                    }
+                } else { // PUL bonus logic
+                    const bonusInfo = persistency_bonus.find(b => b.year === policyYear);
+                    if (bonusInfo) bonus = annualBasePremium * bonusInfo.rate;
+                }
+            }
+
+            scenarios[key].accountValue = Math.max(0, roundVND(netInvestmentAmount + interest + bonus));
+            if (month % 12 === 0) {
+                scenarios[key].yearEndValues.push(scenarios[key].accountValue);
+            }
+        }
+    }
+    return scenarios;
 }
