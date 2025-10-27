@@ -77,6 +77,11 @@ input[type="number"] { -moz-appearance: textfield; }
 .product-section.hidden,
 .hidden { display: none; }
 
+/* Product Program Selector Container */
+#main-product-program-container:not(:empty) {
+    margin-bottom: 1rem;
+}
+
 /* Nhánh option của SP bổ sung */
 .product-options {
   border-left: 2px solid var(--gray-200);
