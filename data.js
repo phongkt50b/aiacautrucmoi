@@ -1,7 +1,10 @@
 /**
- * @file data.js (phiên bản data-driven hoàn chỉnh)
- * Giữ nguyên hoàn toàn dữ liệu gốc. Bổ sung các khối UI_TEXTS, VALIDATION_MESSAGES, DYNAMIC_HINTS, RULE_FLAGS
- * để logic.js có thể đọc text/hint/error từ data.
+ * @file data.js
+ * @description
+ * Tệp này chứa tất cả dữ liệu cấu hình cho các sản phẩm bảo hiểm, được thiết kế theo kiến trúc "hướng dữ liệu".
+ * - GLOBAL_CONFIG: Chứa tất cả các hằng số và quy tắc nghiệp vụ toàn cục.
+ * - PRODUCT_CATALOG: "Bộ não" của ứng dụng, định nghĩa tất cả sản phẩm (chính, bổ sung, gói).
+ *   Mỗi sản phẩm là một "bản thiết kế" chi tiết mà logic.js sẽ đọc để tự động render UI, áp dụng quy tắc và tính phí.
  */
 
 // ===================================================================================
@@ -23,227 +26,7 @@ export const GLOBAL_CONFIG = {
 };
 
 // ===================================================================================
-// ===== CẤU HÌNH TEXT UI, HINT, PLACEHOLDER, ERROR (DATA-DRIVEN)
-// ===================================================================================
-
-export const UI_TEXTS = {
-  global: {
-    mainProductSelect: {
-      label: 'Sản phẩm chính',
-      placeholder: '-- Chọn sản phẩm --',
-      error: {
-        required: 'Vui lòng chọn sản phẩm chính',
-        ineligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.'
-      }
-    },
-    name: { label: 'Họ và Tên', placeholder: 'Nguyễn Văn A', error: 'Vui lòng nhập họ và tên' },
-    dob:  { label: 'Ngày sinh', placeholder: 'DD/MM/YYYY', errorFormat: 'Nhập DD/MM/YYYY', errorInvalid: 'Ngày sinh không hợp lệ' },
-    gender: { label: 'Giới tính', options: [{value:'Nam', label:'Nam'},{value:'Nữ', label:'Nữ'}] },
-    occupation: { label: 'Nghề nghiệp', placeholder: 'Gõ để tìm nghề nghiệp...', error: 'Chọn nghề nghiệp từ danh sách' },
-    ageDisplayLabel: 'Tuổi',
-    riskGroupDisplayLabel: 'Nhóm nghề',
-    addSuppBtn: 'Thêm NĐBH bổ sung',
-    removeSuppBtn: 'Xóa NĐBH này',
-    suppTitlePrefix: 'NĐBH Bổ Sung',
-    suppSectionTitle: 'Sản phẩm bổ sung cho người này',
-    suppListToggle: 'Xem chi tiết phí BS',
-    paymentFrequency: {
-      label: 'Kỳ đóng phí',
-      options: [
-        { value: 'year', label: 'Năm' },
-        { value: 'half', label: 'Nửa năm' },
-        { value: 'quarter', label: 'Theo quý' }
-      ]
-    },
-    summary: {
-      total: 'Tổng phí',
-      baseMain: 'Phí SP chính',
-      extra: 'Phí đóng thêm',
-      supp: 'Phí BS'
-    },
-    mdp3: {
-      enableLabel: 'Bật Miễn đóng phí 3.0',
-      selectPlaceholder: '-- Chọn người --',
-      otherLabel: 'Người khác',
-      otherTitle: 'Người được miễn đóng phí',
-      feeDisplayPrefix: 'STBH',
-      ageOutOfRange: 'Tuổi phải từ 18-60'
-    },
-    viewer: {
-      openBtn: 'Mở bảng minh họa',
-      errorBeforeOpenTitle: 'Vui lòng sửa các lỗi sau:'
-    }
-  },
-
-  mainProductFields: {
-    stbh: {
-      label: 'Số tiền bảo hiểm (STBH) <span class="text-red-600">*</span>',
-      placeholder: 'VD: 1.000.000.000'
-    },
-    premium: {
-      label: 'Phí sản phẩm chính',
-      placeholder: 'Nhập phí',
-      mulRangeHintContainerId: 'mul-fee-range' // nơi hiển thị: "Phí hợp lệ từ ... đến ..."
-    },
-    paymentTerm: {
-      label: 'Thời gian đóng phí (năm) <span class="text-red-600">*</span>',
-      placeholder: 'VD: 20',
-      hintTemplate: 'Nhập từ {min} đến {max} năm'
-    },
-    extraPremium: {
-      label: 'Phí đóng thêm',
-      placeholder: 'VD: 10.000.000',
-      hintTemplate: 'Tối đa {maxFactor} lần phí chính.'
-    }
-  },
-
-  // ABUV select option (term)
-  abuv: {
-    paymentTerm: {
-      id: 'abuv-term',
-      label: 'Thời hạn đóng phí',
-      postHint: 'Thời hạn đóng phí bằng thời hạn hợp đồng.'
-    }
-  },
-
-  // Riders UI
-  riders: {
-    general: {
-      notReadyMsg: 'Vui lòng hoàn tất thông tin sản phẩm chính.'
-    },
-    scl: {
-      name: 'Sức khỏe Bùng Gia Lực',
-      programLabel: 'Quyền lợi chính',
-      scopeLabel: 'Phạm vi địa lý',
-      programOptions: [
-        { value: 'co_ban', label: 'Cơ bản' },
-        { value: 'nang_cao', label: 'Nâng cao', selected: true },
-        { value: 'toan_dien', label: 'Toàn diện' },
-        { value: 'hoan_hao', label: 'Hoàn hảo' }
-      ],
-      scopeOptions: [
-        { value: 'main_vn', label: 'Việt Nam' },
-        { value: 'main_global', label: 'Nước ngoài' }
-      ],
-      optionalTitle: 'Quyền lợi tùy chọn:',
-      outpatient: { label: 'Điều trị ngoại trú' },
-      dental: { label: 'Chăm sóc nha khoa' },
-      thresholdMsgTemplate: 'Phí chính không đủ điều kiện cho chương trình {programText}, vui lòng chọn lại.'
-    },
-    bhn: {
-      name: 'Bệnh Hiểm Nghèo 2.0',
-      stbh: {
-        label: 'Số tiền bảo hiểm (STBH)',
-        placeholder: 'VD: 200.000.000',
-        hint: 'STBH từ 200 triệu đến 5 tỷ.'
-      }
-    },
-    accident: {
-      name: 'Bảo hiểm Tai nạn',
-      stbh: {
-        label: 'Số tiền bảo hiểm (STBH)',
-        placeholder: 'VD: 500.000.000',
-        hint: 'STBH từ 10 triệu đến 8 tỷ.'
-      }
-    },
-    hospital_support: {
-      name: 'Hỗ trợ chi phí nằm viện',
-      stbh: {
-        label: 'Số tiền bảo hiểm (STBH)',
-        placeholder: 'Bội số 100.000 (đ/ngày)',
-        validationHintContainerClass: 'hospital-support-validation' // nơi hiển thị giới hạn tối đa và bội số
-      }
-    }
-  },
-
-  illustration: {
-    targetAge: {
-      label: 'Tuổi minh họa',
-      hintTemplate: 'Khoảng hợp lệ: <strong>{min}</strong> – <strong>{max}</strong>.',
-      needTermHint: 'Nhập thời gian đóng phí để xác định tuổi minh họa.',
-      errorRangeTemplate: 'Tuổi minh họa phải từ {min} đến {max}'
-    },
-    customInterestRate: {
-      label: 'Lãi suất minh họa (%)'
-    },
-    footerNote: '(*) Công cụ này chỉ mang tính chất tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA. Quyền lợi và mức phí cụ thể sẽ được xác nhận trong hợp đồng do AIA phát hành. Vui lòng liên hệ tư vấn viên AIA để được tư vấn chi tiết và nhận bảng minh họa chính thức.'
-  }
-};
-
-export const VALIDATION_MESSAGES = {
-  main: {
-    productRequired: 'Vui lòng chọn sản phẩm chính',
-    productIneligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.',
-    stbhMinTemplate: 'STBH tối thiểu {min}',
-    premiumMinTemplate: 'Phí chính tối thiểu {min}',
-    pul: {
-      stbhOrPremiumTemplate: 'Phí tối thiểu: {pulMinPremiumOr} hoặc STBH từ {pulMinStbhOr} trở lên ',
-      ridersDisabledByStbhTemplate: 'Cần STBH ≥ {minStbh} đ (hiện tại: {currentStbh} đ)',
-      ridersDisabledByPremiumTemplate_lowPul: 'Cần phí chính ≥ {pulMinPremiumOr} đ (STBH < {pulMinStbhOr} đ)',
-      ridersDisabledByPremiumTemplate_lowMain: 'Cần phí chính ≥ {mainMinPremium} đ'
-    },
-    mul: {
-      premiumRequired: 'Vui lòng nhập phí sản phẩm chính',
-      factorInvalid: 'Phí không hợp lệ so với STBH',
-      rangeHintTemplate: 'Phí hợp lệ từ {minFee} đến {maxFee}.'
-    },
-    paymentTerm: {
-      required: 'Vui lòng nhập thời gian đóng phí',
-      rangeTemplate: 'Nhập từ {min} đến {max} năm'
-    },
-    extraPremium: {
-      maxFactorTemplate: 'Tối đa {maxFactor} lần phí chính'
-    }
-  },
-  person: {
-    nameRequired: 'Vui lòng nhập họ và tên',
-    occupationRequired: 'Chọn nghề nghiệp từ danh sách',
-    dobFormat: 'Nhập DD/MM/YYYY',
-    dobInvalid: 'Ngày sinh không hợp lệ'
-  },
-  riders: {
-    hospitalSupport: {
-      multipleOfTemplate: 'Là bội số của {multiple}',
-      exceedLimit: 'Vượt quá giới hạn cho phép',
-      liveHintTemplate: 'Tối đa: {maxDisplay}. Phải là bội số của 100.000.'
-    }
-  }
-};
-
-export const DYNAMIC_HINTS = {
-  paymentTermHint: ({ min, max }) =>
-    UI_TEXTS.mainProductFields.paymentTerm.hintTemplate
-      .replace('{min}', String(min))
-      .replace('{max}', String(max)),
-
-  extraPremiumHint: ({ maxFactor }) =>
-    UI_TEXTS.mainProductFields.extraPremium.hintTemplate
-      .replace('{maxFactor}', String(maxFactor)),
-
-  mulFeeRangeHint: ({ minFee, maxFee }) =>
-    VALIDATION_MESSAGES.main.mul.rangeHintTemplate
-      .replace('{minFee}', (minFee || 0).toLocaleString('vi-VN'))
-      .replace('{maxFee}', (maxFee || 0).toLocaleString('vi-VN')),
-
-  hospitalSupportLiveHint: ({ maxDisplay }) =>
-    VALIDATION_MESSAGES.riders.hospitalSupport.liveHintTemplate.replace('{maxDisplay}', maxDisplay),
-
-  targetAgeHint: ({ min, max }) =>
-    UI_TEXTS.illustration.targetAge.hintTemplate
-      .replace('{min}', String(min))
-      .replace('{max}', String(max))
-};
-
-// Các "special flags" để logic dùng như cũ
-export const RULE_FLAGS = {
-  PUL_ELIGIBILITY: 'PUL_ELIGIBILITY',
-  MUL_FACTOR_CHECK: 'MUL_FACTOR_CHECK',
-  HOSPITAL_SUPPORT_MAX_BY_MAIN_PREMIUM: 'HOSPITAL_SUPPORT_MAX_BY_MAIN_PREMIUM'
-};
-
-// ===================================================================================
 // ===== BỘ NÃO CỦA ỨNG DỤNG: CATALOG SẢN PHẨM (PRODUCT_CATALOG)
-// ===== GIỮ NGUYÊN NỘI DUNG GỐC
 // ===================================================================================
 export const PRODUCT_CATALOG = {
     // =======================================================================
@@ -526,6 +309,9 @@ export const PRODUCT_CATALOG = {
 // =======================================================================
 // ===== CÁC BẢNG DỮ LIỆU THÔ (RAW DATA TABLES)
 // =======================================================================
+// Các bảng này sẽ được giữ nguyên và được tham chiếu bởi PRODUCT_CATALOG
+// =======================================================================
+
 export const product_data = {
     occupations: [
         { name: "-- Chọn nghề nghiệp --", group: 0 },
