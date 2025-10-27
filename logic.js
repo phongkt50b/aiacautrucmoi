@@ -382,6 +382,12 @@ function renderPersonRiders(person) {
         const optionsDiv = section.querySelector('.product-options');
         optionsDiv.classList.toggle('hidden', !checkbox.checked);
         
+        const feeDisplayEl = section.querySelector('.fee-display');
+        if (feeDisplayEl) {
+            const fee = appState.fees.byPerson[person.id]?.suppDetails[riderKey] || 0;
+            feeDisplayEl.textContent = fee > 0 ? `Phí: ${formatCurrency(fee)}` : '';
+        }
+        
         if (checkbox.checked) {
             if (riderKey === 'HEALTH_SCL_MAIN') {
                 const programSelect = section.querySelector('[data-state-key="program"]');
@@ -420,14 +426,13 @@ function renderPersonRiders(person) {
                     }
                  });
             }
-
-            const fee = appState.fees.byPerson[person.id]?.suppDetails[riderKey] || 0;
-            section.querySelector('.fee-display').textContent = fee > 0 ? `Phí: ${formatCurrency(fee)}` : '';
             
             if (riderKey === 'HEALTH_SCL_MAIN') {
                 const sclFees = appState.fees.byPerson[person.id]?.suppDetails['HEALTH_SCL_COMPONENTS'] || {};
-                section.querySelector('.scl-outpatient-fee').textContent = sclFees.outpatient > 0 ? `(+${formatCurrency(sclFees.outpatient)})` : '';
-                section.querySelector('.scl-dental-fee').textContent = sclFees.dental > 0 ? `(+${formatCurrency(sclFees.dental)})` : '';
+                const outFeeEl = section.querySelector('.scl-outpatient-fee');
+                if (outFeeEl) outFeeEl.textContent = sclFees.outpatient > 0 ? `(+${formatCurrency(sclFees.outpatient)})` : '';
+                const dentalFeeEl = section.querySelector('.scl-dental-fee');
+                if (dentalFeeEl) dentalFeeEl.textContent = sclFees.dental > 0 ? `(+${formatCurrency(sclFees.dental)})` : '';
             }
         }
     });
@@ -1054,15 +1059,14 @@ function openFullViewer() {
         const payload = buildViewerPayload();
         const json = JSON.stringify(payload);
         const b64 = btoa(unescape(encodeURIComponent(json)));
-        const viewerUrl = new URL('aiacautrucmoi-main/viewer.html', window.location.href);
-        viewerUrl.hash = `#v=${b64}`;
+        const viewerUrlWithHash = `viewer.html#v=${b64}`;
         
         const modal = $('#viewer-modal');
         const iframe = $('#viewer-iframe');
         
         modal.classList.add('visible', 'loading');
         iframe.onload = () => modal.classList.remove('loading');
-        iframe.src = viewerUrl.toString();
+        iframe.src = viewerUrlWithHash;
     } catch (e) {
         console.error("Error building viewer payload:", e);
         showGlobalErrors([{ message: "Không thể tạo dữ liệu cho bảng minh họa. Lỗi: " + e.message, isGlobal: true }]);
@@ -1186,15 +1190,39 @@ function calculateMainPremiumFee(person, productState) {
 
 function calculateRiderPremiumFee(riderKey, person, mainPremium, currentAggregateStbh) {
     const config = PRODUCT_CATALOG[riderKey];
-    if (!config) return 0;
-    
-    const { calculation } = config;
-    const func = window[calculation.functionName];
-    if (typeof func === 'function') {
-        return func(person, mainPremium, currentAggregateStbh);
+    if (!config || !person.supplements[riderKey]?.selected) return 0;
+
+    // Child riders' premiums are calculated as part of the parent (e.g., SCL)
+    if (config.parent) {
+        return 0;
     }
-    return 0;
+
+    const { calculation } = config;
+    switch(calculation.method) {
+        case 'custom': {
+            const func = window[calculation.functionName];
+            if (typeof func === 'function') {
+                return func(person, mainPremium, currentAggregateStbh);
+            }
+            return 0;
+        }
+        case 'healthSclLookup': {
+            const sclData = person.supplements.HEALTH_SCL_MAIN;
+            if (!sclData?.values) return 0;
+            const components = getHealthSclFeeComponents(person);
+            
+            const ageBandIndex = product_data.health_scl_rates.age_bands.findIndex(b => person.age >= b.min && person.age <= b.max);
+            if (ageBandIndex === -1) return 0;
+
+            const basePremium = product_data.health_scl_rates[sclData.values.scope]?.[ageBandIndex]?.[sclData.values.program] || 0;
+            
+            return Math.round(basePremium + components.outpatient + components.dental);
+        }
+        default:
+            return 0;
+    }
 }
+
 
 function calculateWaiverPremiumFee(waiverKey) {
     const waiverState = appState.waivers[waiverKey];
@@ -1224,7 +1252,9 @@ function calculateWaiverPremiumFee(waiverKey) {
 
 // Custom calculation functions exposed to window
 window.calculateBhnPremium = function(person) {
-    const { stbh } = person.supplements.BHN.values;
+    const riderData = person.supplements.BHN;
+    if(!riderData) return 0;
+    const { stbh } = riderData.values;
     if (!stbh) return 0;
     const genderKey = person.gender === 'Nữ' ? 'nu' : 'nam';
     const rateRow = product_data.bhn_rates.find(r => person.age >= r.ageMin && person.age <= r.ageMax);
@@ -1233,14 +1263,18 @@ window.calculateBhnPremium = function(person) {
 }
 
 window.calculateAccidentPremium = function(person) {
-    const { stbh } = person.supplements.ACCIDENT.values;
+    const riderData = person.supplements.ACCIDENT;
+    if(!riderData) return 0;
+    const { stbh } = riderData.values;
     if (!stbh || !person.riskGroup) return 0;
     const rate = product_data.accident_rates[person.riskGroup] || 0;
     return Math.round((stbh / 1000) * rate);
 }
 
 window.calculateHospitalSupportPremium = function(person) {
-    const { stbh } = person.supplements.HOSPITAL_SUPPORT.values;
+    const riderData = person.supplements.HOSPITAL_SUPPORT;
+    if(!riderData) return 0;
+    const { stbh } = riderData.values;
     if (!stbh) return 0;
     const rateRow = product_data.hospital_fee_support_rates.find(r => person.age >= r.ageMin && person.age <= r.ageMax);
     const rate = rateRow ? rateRow.rate : 0;
