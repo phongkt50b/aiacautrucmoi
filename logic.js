@@ -1,4 +1,5 @@
 
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 // ===================================================================================
@@ -695,7 +696,7 @@ function renderSupplementaryProductsForPerson(customer, mainProductKey, mainPrem
     let anyUncheckedByRule = false;
 
     Object.entries(PRODUCT_CATALOG).forEach(([prodId, prodConfig]) => {
-        if (prodConfig.type !== 'rider') return;
+        if (prodConfig.type !== 'rider' || prodConfig.isStandalone) return;
 
         const section = container.querySelector(`.${prodId}-section`);
         if (!section) return;
@@ -1073,8 +1074,12 @@ function validateSupplementaryProduct(person, prodId, mainPremium, totalHospital
     const suppContainer = person.isMain ? document.getElementById('main-supp-container') : person.container;
     const section = suppContainer.querySelector(`.${prodId}-section`);
     const input = section.querySelector(`#${prodId}-stbh`);
+
+    // FIX: Handle riders without STBH input (like Sức khỏe Bùng Gia Lực)
+    if (!input) return true;
+
     const controlConfig = prodConfig.ui.controls.find(c => c.id === input.id);
-    if (!input || !controlConfig) return true;
+    if (!controlConfig) return true;
 
     const stbh = supplementData.stbh;
     const rules = prodConfig.rules;
@@ -1362,7 +1367,7 @@ function updateSupplementaryAddButtonState(isMainProductValid) {
 
 function generateSupplementaryProductsHtml() {
     return Object.entries(PRODUCT_CATALOG)
-        .filter(([, config]) => config.type === 'rider')
+        .filter(([, config]) => config.type === 'rider' && !config.isStandalone)
         .map(([prodId, prodConfig]) => {
             const controlsHtml = (prodConfig.ui.controls || []).map(controlConfig => {
                 switch (controlConfig.type) {
