@@ -96,8 +96,11 @@ function initEventListeners() {
         const target = e.target;
         if (target.matches('select, input[type="checkbox"]')) {
              if (target.id === APP_CONFIG.selectors.mainProduct.slice(1)) {
+                // When main product changes, reset everything
                 appState.mainProduct.values = {};
                 appState.mainProduct.program = '';
+                appState.mainPerson.supplements = {};
+                appState.supplementaryPersons.forEach(p => p.supplements = {});
              }
              if(target.id.startsWith('mdp3-')) {
                 handleMdp3Change(target);
@@ -366,22 +369,34 @@ function renderPersonRiders(person) {
         const riderKey = section.dataset.riderKey;
         const config = PRODUCT_CATALOG[riderKey];
         if (!config) return;
-
-        const isAllowed = !allowedRiders?.enabled || allowedRiders.list.includes(riderKey);
-        const isEligible = checkEligibility(person, config.rules.eligibility);
-
-        section.classList.toggle('hidden', !isAllowed || !isEligible);
-        if (!isAllowed || !isEligible) return;
-
+        
         const riderState = person.supplements[riderKey] || { selected: false, values: {} };
         const checkbox = section.querySelector('input[type="checkbox"][data-rider-key]');
         
+        checkbox.checked = riderState.selected;
+
+        let isAllowed = !allowedRiders?.enabled || allowedRiders.list.includes(riderKey);
+        const isEligible = checkEligibility(person, config.rules.eligibility);
+        
+        // Special logic for TRON_TAM_AN: only SCL_MAIN is allowed, others are hidden.
+        if (appState.mainProduct.key === 'TRON_TAM_AN' && riderKey !== 'HEALTH_SCL_MAIN') {
+             isAllowed = false;
+        }
+
+        section.classList.toggle('hidden', !isAllowed || !isEligible);
+        if (!isAllowed || !isEligible) {
+            checkbox.checked = false; // Uncheck if not allowed
+            return;
+        }
+
         const isMandatory = mainProductConfig?.packageConfig?.mandatoryRiders.includes(riderKey);
         if (isMandatory) {
             checkbox.checked = true;
             checkbox.disabled = true;
+        } else {
+            checkbox.disabled = false;
         }
-
+        
         const optionsDiv = section.querySelector('.product-options');
         if (optionsDiv) optionsDiv.classList.toggle('hidden', !checkbox.checked);
         
@@ -619,20 +634,15 @@ function collectPersonData(container, isMain, isWaiverBuyer = false) {
     const newSupplements = {};
     const suppContainer = isMain ? $(APP_CONFIG.selectors.mainSuppContainer) : container.querySelector('.supplementary-products-container');
     if (suppContainer) {
+        // Collect parent riders first to ensure they exist when children are processed
         suppContainer.querySelectorAll('input[type="checkbox"][data-rider-key]').forEach(cb => {
             const riderKey = cb.dataset.riderKey;
             const config = PRODUCT_CATALOG[riderKey];
-            if (!config) return;
+            if (!config || config.parent) return; // Only process parents/standalones
 
-            const section = cb.closest('.product-section');
-            const parentRiderKey = config.parent;
-
-            if (parentRiderKey) { // It's a child rider
-                if (newSupplements[parentRiderKey]?.selected && cb.checked) {
-                    newSupplements[riderKey] = { selected: true };
-                }
-            } else if (cb.checked) { // It's a parent/standalone rider
-                 const newRiderState = { selected: true, values: {} };
+            if (cb.checked) {
+                const section = cb.closest('.product-section');
+                const newRiderState = { selected: true, values: {} };
                 if (config.programs?.enabled) {
                     newRiderState.values.program = section.querySelector('[data-state-key="program"]')?.value;
                 }
@@ -641,6 +651,17 @@ function collectPersonData(container, isMain, isWaiverBuyer = false) {
                     if (el) newRiderState.values[c.dataKey] = el.closest('[data-type="currency"]') ? parseFormattedNumber(el.value) : el.value;
                 });
                 newSupplements[riderKey] = newRiderState;
+            }
+        });
+
+        // Collect child riders
+        suppContainer.querySelectorAll('input[type="checkbox"][data-rider-key]').forEach(cb => {
+            const riderKey = cb.dataset.riderKey;
+            const config = PRODUCT_CATALOG[riderKey];
+            if (!config || !config.parent) return; // Only process children
+
+            if (newSupplements[config.parent]?.selected && cb.checked) {
+                 newSupplements[riderKey] = { selected: true, values: {} };
             }
         });
     }
@@ -1127,7 +1148,7 @@ function performCalculations() {
         let personSuppFee = 0;
         Object.entries(p.supplements).forEach(([riderKey, riderData]) => {
             const riderConfig = PRODUCT_CATALOG[riderKey];
-            if (!riderConfig || !riderData.selected) return;
+            if (!riderConfig || !riderData.selected || riderConfig.type === 'waiver') return;
 
             const stbh = riderData.values.stbh || 0;
             if (!aggregateStbh[riderKey]) aggregateStbh[riderKey] = 0;
@@ -1146,6 +1167,7 @@ function performCalculations() {
         fees.totalSupp += personSuppFee;
     });
     
+    // Calculate waiver separately after all other fees are known
     const mdp3Fee = calculateWaiverPremiumFee('MDP3');
     appState.waivers.MDP3.fee = mdp3Fee;
     if (mdp3Fee > 0) {
@@ -1216,6 +1238,7 @@ function calculateRiderPremiumFee(riderKey, person, mainPremium, currentAggregat
     const config = PRODUCT_CATALOG[riderKey];
     if (!config || !person.supplements[riderKey]?.selected) return 0;
 
+    // Child product fees are included in the parent's calculation
     if (config.parent) {
         return 0;
     }
@@ -1230,16 +1253,8 @@ function calculateRiderPremiumFee(riderKey, person, mainPremium, currentAggregat
             return 0;
         }
         case 'healthSclLookup': {
-            const sclData = person.supplements.HEALTH_SCL_MAIN;
-            if (!sclData?.values) return 0;
             const components = getHealthSclFeeComponents(person);
-            
-            const ageBandIndex = product_data.health_scl_rates.age_bands.findIndex(b => person.age >= b.min && person.age <= b.max);
-            if (ageBandIndex === -1) return 0;
-
-            const basePremium = product_data.health_scl_rates[calculation.rateTableGroup + '_' + sclData.values.scope]?.[ageBandIndex]?.[sclData.values.program] || 0;
-            
-            return Math.round(basePremium + components.outpatient + components.dental);
+            return components.base + components.outpatient + components.dental;
         }
         case 'ratePer1000Stbh': {
             const riderData = person.supplements[riderKey];
@@ -1271,14 +1286,31 @@ function calculateWaiverPremiumFee(waiverKey) {
     let stbhMdp = appState.fees.baseMain;
     [appState.mainPerson, ...appState.supplementaryPersons].forEach(p => {
         if (!p) return;
+        // Don't include the buyer's own rider fees in the STBH for their waiver
         if (config.waiverConfig.stbhCalculation.excludeBuyerRiders && p.id === buyer.id) {
             return;
         }
         stbhMdp += Object.keys(p.supplements)
-            .reduce((sum, key) => sum + (appState.fees.byPerson[p.id]?.suppDetails[key] || 0), 0);
+            .reduce((sum, key) => {
+                 const riderConfig = PRODUCT_CATALOG[key];
+                 // Ensure we only sum non-waiver riders
+                 if (riderConfig && riderConfig.type !== 'waiver') {
+                     return sum + (appState.fees.byPerson[p.id]?.suppDetails[key] || 0);
+                 }
+                 return sum;
+            }, 0);
     });
     
-    return calculateRiderPremiumFee(waiverKey, buyer, stbhMdp, 0);
+    // Use a temporary supplements object for the buyer to pass to calculateRiderPremiumFee
+    const tempBuyer = {
+        ...buyer,
+        supplements: {
+            ...buyer.supplements,
+            [waiverKey]: { selected: true, values: { stbh: stbhMdp } }
+        }
+    };
+    
+    return calculateRiderPremiumFee(waiverKey, tempBuyer, 0, 0);
 }
 
 // Custom calculation functions exposed to window
@@ -1314,19 +1346,21 @@ window.calculateHospitalSupportPremium = function(person) {
 
 function getHealthSclFeeComponents(person) {
     const sclData = person.supplements.HEALTH_SCL_MAIN;
-    if (!sclData) return { outpatient: 0, dental: 0 };
+    if (!sclData?.selected) return { base: 0, outpatient: 0, dental: 0 };
     
-    const { program } = sclData.values;
+    const { program, scope } = sclData.values;
     const { selected: outpatient } = person.supplements.HEALTH_SCL_OUTPATIENT || {};
     const { selected: dental } = person.supplements.HEALTH_SCL_DENTAL || {};
 
     const ageBandIndex = product_data.health_scl_rates.age_bands.findIndex(b => person.age >= b.min && person.age <= b.max);
-    if (ageBandIndex === -1) return { outpatient: 0, dental: 0 };
+    if (ageBandIndex === -1) return { base: 0, outpatient: 0, dental: 0 };
 
+    const baseFee = product_data.health_scl_rates['main_' + scope]?.[ageBandIndex]?.[program] || 0;
     const outpatientFee = outpatient ? (product_data.health_scl_rates.outpatient?.[ageBandIndex]?.[program] || 0) : 0;
     const dentalFee = dental ? (product_data.health_scl_rates.dental?.[ageBandIndex]?.[program] || 0) : 0;
 
     return {
+      base: Math.round(baseFee),
       outpatient: Math.round(outpatientFee),
       dental: Math.round(dentalFee),
     };
@@ -1458,20 +1492,20 @@ function runAllValidations() {
 function validateDobField(input) {
     if (!input) return false;
     const v = (input.value || '').trim();
-    const messageKey = APP_CONFIG.strings.validation;
+    const message = APP_CONFIG.strings.validation;
     if (!v) {
-        setFieldError(input.parentElement, messageKey.requiredDob());
+        setFieldError(input.parentElement, message.requiredDob);
         return false;
     }
     if (!/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
-        setFieldError(input.parentElement, messageKey.invalidDob());
+        setFieldError(input.parentElement, message.invalidDob);
         return false;
     }
     const [dd, mm, yyyy] = v.split('/').map(n => parseInt(n, 10));
     const d = new Date(yyyy, mm - 1, dd);
     const valid = d.getFullYear() === yyyy && d.getMonth() === (mm - 1) && d.getDate() === dd && d <= GLOBAL_CONFIG.REFERENCE_DATE;
     if (!valid) {
-        setFieldError(input.parentElement, messageKey.invalidDob());
+        setFieldError(input.parentElement, message.invalidDob);
         return false;
     }
     clearFieldError(input.parentElement);
