@@ -1,5 +1,3 @@
-
-
 import { GLOBAL_CONFIG, PRODUCT_CATALOG } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
@@ -305,7 +303,11 @@ function renderMainProductSection() {
         const productConfig = PRODUCT_CATALOG[mainProductKey];
         if (productConfig?.ui?.controls) {
             const controlsHtml = productConfig.ui.controls.map(cfg => {
-                const value = appState.mainProduct.values[cfg.id] ?? cfg.defaultValue ?? '';
+                let value = appState.mainProduct.values[cfg.id] ?? cfg.defaultValue ?? '';
+                // For packages, ensure disabled fields show fixed values
+                if (productConfig.group === 'PACKAGE' && cfg.disabled) {
+                    value = cfg.defaultValue;
+                }
                 return renderControl(cfg, value, mainPerson);
             }).join('');
             container.innerHTML = controlsHtml;
@@ -606,7 +608,7 @@ function validateSupplementaryProduct(person, prodId, totalHospitalSupportStbh) 
 
     let ok = true;
     prodConfig.ui.controls.forEach(controlConfig => {
-        const el = document.getElementById(controlConfig.id);
+        const el = section.querySelector(`#${controlConfig.id}`); // FIX: Query within section
         if (!el || !controlConfig.validate) return;
         
         const errorMessage = controlConfig.validate({
@@ -638,12 +640,13 @@ function validateTargetAge() {
   if (!productConfig) return true;
 
   let term = 0;
+  // FIX: Read term directly from DOM for accuracy, like logic-1.js
   if (productConfig.group === 'PACKAGE') {
       term = productConfig.packageConfig.fixedValues.paymentTerm;
-  } else if (appState.mainProduct.values['abuv-term']) {
-      term = parseInt(appState.mainProduct.values['abuv-term'] || '0', 10);
+  } else if (document.getElementById('abuv-term')) {
+      term = parseInt(document.getElementById('abuv-term').value || '0', 10);
   } else {
-      term = parseInt(appState.mainProduct.values['payment-term'] || '0', 10);
+      term = parseInt(document.getElementById('payment-term')?.value || '0', 10);
   }
 
   if (!mainPerson?.age || !term) return true;
@@ -757,6 +760,7 @@ function attachGlobalListeners() {
             if (newProductConfig?.rules?.noSupplementaryInsured) {
                 // Immediately clear UI to prevent stale data reading
                 document.getElementById('supplementary-insured-container').innerHTML = '';
+                document.querySelectorAll('#main-supp-container .supplementary-products-container input[type=checkbox]').forEach(cb => cb.checked = false);
                 if(window.MDP3) window.MDP3.reset();
 
                 const mainPerson = appState.persons.find(p => p.isMain);
@@ -976,17 +980,21 @@ function updateTargetAge() {
         return;
     };
 
+    let term = 0;
+    // FIX: Read term directly from DOM to avoid stale state issues.
     if (productConfig.group === 'TRADITIONAL' || productConfig.group === 'PACKAGE') {
-        let term = (productConfig.group === 'PACKAGE')
+        term = (productConfig.group === 'PACKAGE')
             ? productConfig.packageConfig.fixedValues.paymentTerm
             : parseInt(document.getElementById('abuv-term')?.value || '0', 10);
         targetAgeInput.disabled = true;
         targetAgeInput.value = term ? mainPerson.age + term - 1 : mainPerson.age;
         return;
     }
+    
+    term = parseInt(document.getElementById('payment-term')?.value, 10) || 0;
 
     targetAgeInput.disabled = false;
-    const paymentTerm = parseInt(document.getElementById('payment-term')?.value, 10) || 0;
+    const paymentTerm = term;
     const hintEl = document.getElementById('target-age-hint');
 
     if (!paymentTerm || paymentTerm <= 0) {
@@ -1127,7 +1135,7 @@ function buildViewerPayload() {
     Object.keys(person.supplements).forEach(rid => {
       const riderConfig = PRODUCT_CATALOG[rid];
       const premiumDetail = appState.fees.byPerson[person.id]?.suppDetails?.[rid] || 0;
-      if (premiumDetail > 0) {
+      if (premiumDetail > 0 && !riderList.some(r => r.slug === rid)) { // FIX: Prevent duplicate images
         const data = person.supplements[rid];
         riderList.push({
           slug: rid, 
@@ -1187,8 +1195,8 @@ function __exportExactSummaryHtml() {
         const part1Html = buildPart1Section(data);
         const part2Html = buildPart2BenefitsSection(data);
         let part3Html = buildPart3ScheduleSection(data);
-        const footerHtml = buildFooterSection();
-        return introHtml + part1Html + part2Html + part3Html + footerHtml;
+        // Footer is now generated inside part3Html
+        return introHtml + part1Html + part2Html + part3Html;
     } catch (e) {
         console.error('[__exportExactSummaryHtml] error:', e);
         return '<div style="color:red">Lỗi tạo summaryHtml</div>';
@@ -1402,6 +1410,8 @@ function buildPart3ScheduleSection(summaryData) {
     const isPulMul = ['PUL', 'MUL'].includes(productConfig?.group);
     const { schedule, isAnnual, persons } = summaryData;
     const rows = schedule.rows;
+    let tableHtml = '';
+
     if (!rows.length) return '';
 
     const activePersonIdx = persons.map((p, i) => rows.some(r => (r.perPersonSuppAnnualEq[i] || 0) > 0) ? i : -1).filter(i => i !== -1);
@@ -1465,26 +1475,28 @@ function buildPart3ScheduleSection(summaryData) {
         ];
         const footer = `<tr style="font-weight: bold;">${footerCols.join('')}</tr>`;
 
-        return `<h3>${title}</h3><table><thead><tr>${header.join('')}</tr></thead><tbody>${body}${footer}</tbody></table>`;
+        tableHtml = `<table><thead><tr>${header.join('')}</tr></thead><tbody>${body}${footer}</tbody></table>`;
+    } else {
+        // Fallback for non-PUL/MUL
+        let header = ['<th>Năm HĐ</th>', '<th>Tuổi</th>', '<th>Phí chính</th>'];
+        if(!schedule.extraAllZero) header.push('<th>Phí đóng thêm</th>');
+        header.push(...activePersonIdx.map(i => `<th>Phí BS (${sanitizeHtml(persons[i].name)})</th>`));
+        if(!isAnnual) header.push('<th>Tổng quy năm</th>');
+        header.push('<th>Tổng đóng/năm</th>');
+        if(!isAnnual) header.push('<th>Chênh lệch</th>');
+        
+        let sums = { main: 0, extra: 0, supp: activePersonIdx.map(() => 0), totalEq: 0, totalBase: 0, diff: 0 };
+        const body = rows.map(r => {
+            sums.main += r.mainYearBase; sums.extra += r.extraYearBase; sums.totalEq += r.totalAnnualEq; sums.totalBase += r.totalYearBase; sums.diff += r.diff;
+            activePersonIdx.forEach((pIdx, i) => sums.supp[i] += r.perPersonSuppAnnualEq[pIdx]);
+            return `<tr><td style="text-align: center">${r.year}</td><td style="text-align: center">${r.age}</td><td style="text-align: right">${formatCurrency(r.mainYearBase)}</td>${schedule.extraAllZero ? '' : `<td style="text-align: right">${formatCurrency(r.extraYearBase)}</td>`}${activePersonIdx.map(i => `<td style="text-align: right">${formatCurrency(r.perPersonSuppAnnualEq[i])}</td>`).join('')}${!isAnnual ? `<td style="text-align: right">${formatCurrency(r.totalAnnualEq)}</td>` : ''}<td style="text-align: right">${formatCurrency(r.totalYearBase)}</td>${!isAnnual ? `<td style="text-align: right">${r.diff ? `<span class="text-red-600 font-bold">${formatCurrency(r.diff)}</span>` : '0'}</td>` : ''}</tr>`;
+        }).join('');
+        const footer = `<tr style="font-weight: bold;"><td colspan="2">Tổng</td><td style="text-align: right">${formatCurrency(sums.main)}</td>${schedule.extraAllZero ? '' : `<td style="text-align: right">${formatCurrency(sums.extra)}</td>`}${sums.supp.map(s => `<td style="text-align: right">${formatCurrency(s)}</td>`).join('')}${!isAnnual ? `<td style="text-align: right">${formatCurrency(sums.totalEq)}</td>` : ''}<td style="text-align: right">${formatCurrency(sums.totalBase)}</td>${!isAnnual ? `<td style="text-align: right">${sums.diff?`<span class="text-red-600 font-bold">${formatCurrency(sums.diff)}</span>`:'0'}</td>` : ''}</tr>`;
+        tableHtml = `<table><thead><tr>${header.join('')}</tr></thead><tbody>${body}${footer}</tbody></table>`;
     }
-
-    // Fallback for non-PUL/MUL
-    let header = ['<th>Năm HĐ</th>', '<th>Tuổi</th>', '<th>Phí chính</th>'];
-    if(!schedule.extraAllZero) header.push('<th>Phí đóng thêm</th>');
-    header.push(...activePersonIdx.map(i => `<th>Phí BS (${sanitizeHtml(persons[i].name)})</th>`));
-    if(!isAnnual) header.push('<th>Tổng quy năm</th>');
-    header.push('<th>Tổng đóng/năm</th>');
-    if(!isAnnual) header.push('<th>Chênh lệch</th>');
     
-    let sums = { main: 0, extra: 0, supp: activePersonIdx.map(() => 0), totalEq: 0, totalBase: 0, diff: 0 };
-    const body = rows.map(r => {
-        sums.main += r.mainYearBase; sums.extra += r.extraYearBase; sums.totalEq += r.totalAnnualEq; sums.totalBase += r.totalYearBase; sums.diff += r.diff;
-        activePersonIdx.forEach((pIdx, i) => sums.supp[i] += r.perPersonSuppAnnualEq[pIdx]);
-        return `<tr><td style="text-align: center">${r.year}</td><td style="text-align: center">${r.age}</td><td style="text-align: right">${formatCurrency(r.mainYearBase)}</td>${schedule.extraAllZero ? '' : `<td style="text-align: right">${formatCurrency(r.extraYearBase)}</td>`}${activePersonIdx.map(i => `<td style="text-align: right">${formatCurrency(r.perPersonSuppAnnualEq[i])}</td>`).join('')}${!isAnnual ? `<td style="text-align: right">${formatCurrency(r.totalAnnualEq)}</td>` : ''}<td style="text-align: right">${formatCurrency(r.totalYearBase)}</td>${!isAnnual ? `<td style="text-align: right">${r.diff ? `<span class="text-red-600 font-bold">${formatCurrency(r.diff)}</span>` : '0'}</td>` : ''}</tr>`;
-    }).join('');
-    const footer = `<tr style="font-weight: bold;"><td colspan="2">Tổng</td><td style="text-align: right">${formatCurrency(sums.main)}</td>${schedule.extraAllZero ? '' : `<td style="text-align: right">${formatCurrency(sums.extra)}</td>`}${sums.supp.map(s => `<td style="text-align: right">${formatCurrency(s)}</td>`).join('')}${!isAnnual ? `<td style="text-align: right">${formatCurrency(sums.totalEq)}</td>` : ''}<td style="text-align: right">${formatCurrency(sums.totalBase)}</td>${!isAnnual ? `<td style="text-align: right">${sums.diff?`<span class="text-red-600 font-bold">${formatCurrency(sums.diff)}</span>`:'0'}</td>` : ''}</tr>`;
-    
-    return `<h3>${title}</h3><table><thead><tr>${header.join('')}</tr></thead><tbody>${body}${footer}</tbody></table>`;
+    // Append footer to the table block
+    return `<h3>${title}</h3>${tableHtml}${buildFooterSection()}`;
 }
 
 function buildFooterSection() {
@@ -1659,29 +1671,47 @@ function getProductLabel(key) {
 }
 
 // ===================================================================================
-// ===== MODULE: MIỄN ĐÓNG PHÍ 3.0 (REFACTORED)
+// ===== MODULE: MIỄN ĐÓNG PHÍ 3.0 (RESTORED FROM logic-1.js)
 // ===================================================================================
 window.MDP3 = (function () {
     let selectedId = null;
     let lastSelectedId = null;
 
     function init() {
-        const container = document.getElementById('waiver-of-premium-container');
-        if (!container) return;
-        
-        container.innerHTML = `
-            <label class="flex items-center space-x-3 cursor-pointer">
-                <input type="checkbox" id="mdp3-enable" class="form-checkbox">
-                <span class="font-medium text-gray-800">Bật Miễn đóng phí 3.0</span>
-            </label>
-            <div id="mdp3-options-container" class="hidden mt-4 space-y-4"></div>
-        `;
+        renderSection();
         attachListeners();
     }
-    
+
     function isEnabled() {
         const cb = document.getElementById('mdp3-enable');
         return !!(cb && cb.checked);
+    }
+    
+    function renderSection() {
+        const sec = document.getElementById('waiver-of-premium-section');
+        if (!sec) return;
+        
+        const container = document.getElementById('waiver-of-premium-container');
+        if (container && !document.getElementById('mdp3-enable')) {
+            container.innerHTML = `
+                <label class="flex items-center space-x-3 cursor-pointer">
+                    <input type="checkbox" id="mdp3-enable" class="form-checkbox">
+                    <span class="font-medium text-gray-800">Bật Miễn đóng phí 3.0</span>
+                </label>
+                <div id="mdp3-options-container" class="hidden mt-4 space-y-4"></div>
+            `;
+        }
+    }
+    
+    function render(isMainProductValid) {
+        const waiverSection = document.getElementById('waiver-of-premium-section');
+        const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+        const isDisabled = !isMainProductValid || mainProductConfig?.rules?.noSupplementaryInsured;
+
+        waiverSection.classList.toggle('opacity-50', isDisabled);
+        waiverSection.classList.toggle('pointer-events-none', isDisabled);
+
+        if (isDisabled) reset();
     }
 
     function attachListeners(){
@@ -1721,17 +1751,6 @@ window.MDP3 = (function () {
 
         // Listen for changes in supplementary person info
         document.getElementById('supplementary-insured-container').addEventListener('input', debounce(updateOptions, 300));
-    }
-
-    function render(isMainProductValid) {
-        const waiverSection = document.getElementById('waiver-of-premium-section');
-        const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
-        const isDisabled = !isMainProductValid || mainProductConfig?.rules?.noSupplementaryInsured;
-
-        waiverSection.classList.toggle('opacity-50', isDisabled);
-        waiverSection.classList.toggle('pointer-events-none', isDisabled);
-
-        if (isDisabled) reset();
     }
     
     function renderOptions(){
