@@ -1206,11 +1206,13 @@ function buildViewerPayload() {
 
 function __exportExactSummaryHtml() {
     try {
+        // More robust check for inconsistent state, placed at the very beginning.
         if (window.MDP3 && MDP3.isEnabled()) {
             const targetPerson = MDP3.getTargetPersonInfo();
-            const mdpFeeInState = (appState.fees.totalSupp > 0) && 
-                                  Object.values(appState.fees.byPerson).some(p => p.suppDetails?.mdp3 > 0);
+            // Specifically check if an MDP fee exists in the state.
+            const mdpFeeInState = Object.values(appState.fees.byPerson || {}).some(p => p.suppDetails?.mdp3 > 0);
             
+            // If a fee exists, but we can't identify who it's for, the state is inconsistent.
             if (mdpFeeInState && !targetPerson) {
                 throw new Error("Inconsistent MDP State: Fee exists but target person does not. This is a temporary state after deleting a person. Please try again or re-select the MDP target.");
             }
