@@ -1,6 +1,6 @@
 
 
-import { GLOBAL_CONFIG, PRODUCT_CATALOG } from './structure.js';
+import { GLOBAL_CONFIG, PRODUCT_CATALOG, WAIVER_PRODUCTS } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
 // ===================================================================================
