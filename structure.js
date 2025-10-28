@@ -658,7 +658,7 @@ export const PRODUCT_CATALOG = {
             controls: []
         },
         rules: {
-            eligibility: [ { type: 'age', min: 18, max: 60, renewalMax: 60 }, { type: 'riskGroup', required: true } ],
+            eligibility: [ { type: 'age', min: 18, max: 60, renewalMax: 64 }, { type: 'riskGroup', required: true } ],
         },
         calculation: {
             calculate: (personInfo, stbhBase, helpers) => {
