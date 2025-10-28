@@ -46,7 +46,7 @@ export const PRODUCT_CATALOG = {
         group: 'PUL',
         ui: {
             controls: [
-                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true },
+                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true, validationMessages: { required: 'Vui lòng nhập STBH'}},
                 { type: 'numberInput', id: 'payment-term', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 20', required: true, defaultValue: 20, getMinMax: (age) => ({ min: 4, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`, validationMessages: { required: 'Vui lòng nhập thời gian đóng phí', range: ({min, max}) => `Nhập từ ${min} đến ${max} năm` } },
                 { type: 'currencyInput', id: 'extra-premium', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa ${GLOBAL_CONFIG.EXTRA_PREMIUM_MAX_FACTOR} lần phí chính.`, validationMessages: { max: (factor) => `Tối đa ${factor} lần phí chính` } }
             ],
@@ -92,7 +92,7 @@ export const PRODUCT_CATALOG = {
         group: 'PUL',
         ui: {
             controls: [
-                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true },
+                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true, validationMessages: { required: 'Vui lòng nhập STBH'}},
                 { type: 'numberInput', id: 'payment-term', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 15', required: true, defaultValue: 15, getMinMax: (age) => ({ min: 15, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`, validationMessages: { required: 'Vui lòng nhập thời gian đóng phí', range: ({min, max}) => `Nhập từ ${min} đến ${max} năm` } },
                 { type: 'currencyInput', id: 'extra-premium', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa ${GLOBAL_CONFIG.EXTRA_PREMIUM_MAX_FACTOR} lần phí chính.`, validationMessages: { max: (factor) => `Tối đa ${factor} lần phí chính` } }
             ],
@@ -138,7 +138,7 @@ export const PRODUCT_CATALOG = {
         group: 'PUL',
         ui: {
              controls: [
-                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true },
+                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true, validationMessages: { required: 'Vui lòng nhập STBH'}},
                 { type: 'numberInput', id: 'payment-term', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 5', required: true, defaultValue: 5, getMinMax: (age) => ({ min: 5, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`, validationMessages: { required: 'Vui lòng nhập thời gian đóng phí', range: ({min, max}) => `Nhập từ ${min} đến ${max} năm` } },
                 { type: 'currencyInput', id: 'extra-premium', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa ${GLOBAL_CONFIG.EXTRA_PREMIUM_MAX_FACTOR} lần phí chính.`, validationMessages: { max: (factor) => `Tối đa ${factor} lần phí chính` } }
             ],
