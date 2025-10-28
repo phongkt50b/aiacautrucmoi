@@ -1,4 +1,5 @@
 
+
 /**
  * @file structure.js
  * @description
@@ -237,16 +238,17 @@ export const PRODUCT_CATALOG = {
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
                   validate: ({ value }) => value < 100000000 ? 'STBH tối thiểu 100.000.000' : null,
                 },
-                { id: 'main-premium', type: 'currencyInput', label: 'Phí sản phẩm chính', placeholder: 'Nhập phí', required: true, hintId: 'mul-fee-range',
+                { id: 'main-premium', type: 'currencyInput', label: 'Phí sản phẩm chính', placeholder: 'Nhập phí', required: true, hintId: 'main-premium-hint',
                   onRender: ({ el, allValues, customer }) => {
                       const stbh = allValues['main-stbh'] || 0;
                       const factorRow = HELPERS.data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
-                      if (stbh > 0 && factorRow) {
+                      const hintEl = el.parentElement.querySelector('#main-premium-hint');
+                      if (stbh > 0 && factorRow && hintEl) {
                           const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
                           const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
-                          el.parentElement.querySelector('#mul-fee-range').textContent = `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
-                      } else {
-                          el.parentElement.querySelector('#mul-fee-range').textContent = '';
+                          hintEl.textContent = `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
+                      } else if(hintEl) {
+                          hintEl.textContent = '';
                       }
                   },
                   validate: ({ value, allValues, customer }) => {
@@ -305,16 +307,17 @@ export const PRODUCT_CATALOG = {
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
                   validate: ({ value }) => value < 100000000 ? 'STBH tối thiểu 100.000.000' : null,
                 },
-                { id: 'main-premium', type: 'currencyInput', label: 'Phí sản phẩm chính', placeholder: 'Nhập phí', required: true, hintId: 'mul-fee-range',
+                { id: 'main-premium', type: 'currencyInput', label: 'Phí sản phẩm chính', placeholder: 'Nhập phí', required: true, hintId: 'main-premium-hint',
                   onRender: ({ el, allValues, customer }) => {
                       const stbh = allValues['main-stbh'] || 0;
                       const factorRow = HELPERS.data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
-                      if (stbh > 0 && factorRow) {
+                      const hintEl = el.parentElement.querySelector('#main-premium-hint');
+                      if (stbh > 0 && factorRow && hintEl) {
                           const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
                           const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
-                          el.parentElement.querySelector('#mul-fee-range').textContent = `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
-                      } else {
-                          el.parentElement.querySelector('#mul-fee-range').textContent = '';
+                          hintEl.textContent = `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
+                      } else if(hintEl) {
+                          hintEl.textContent = '';
                       }
                   },
                   validate: ({ value, allValues, customer }) => {
@@ -411,7 +414,7 @@ export const PRODUCT_CATALOG = {
         group: 'PACKAGE',
         packageConfig: {
             underlyingMainProduct: 'AN_BINH_UU_VIET', 
-            fixedValues: { stbh: 100000000, 'abuv-term': '10' },
+            fixedValues: { stbh: 100000000, paymentTerm: '10' },
             mandatoryRiders: ['health_scl'] 
         },
         ui: {
@@ -505,7 +508,8 @@ export const PRODUCT_CATALOG = {
                 const renewalMax = PRODUCT_CATALOG.health_scl.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 99;
                 if (ageToUse > renewalMax) return { base: 0, outpatient: 0, dental: 0, total: 0 };
                 
-                const { program, scope, outpatient, dental } = customer.supplements?.health_scl || {};
+                const suppData = customer.supplements?.health_scl || {};
+                const { program, scope, outpatient, dental } = suppData;
                 if (!program || !scope) return { base: 0, outpatient: 0, dental: 0, total: 0 };
 
                 const ageBandIndex = HELPERS.data.health_scl_rates.age_bands.findIndex(b => ageToUse >= b.min && ageToUse <= b.max);
@@ -526,9 +530,9 @@ export const PRODUCT_CATALOG = {
         name: 'Bệnh Hiểm Nghèo 2.0',
         slug: 'bhn',
         ui: {
-            controls: [ { id: 'bhn-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 200.000.000', 
+            controls: [ { id: 'bhn-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 200.000.000', hintText: 'STBH từ 200 triệu đến 5 tỷ.',
                           validate: ({ value }) => {
-                            if (value < 200000000) return 'Tối thiểu 200.000.000';
+                            if (value > 0 && value < 200000000) return 'Tối thiểu 200.000.000';
                             if (value > 5000000000) return 'Tối đa 5.000.000.000';
                             return null;
                           }
@@ -552,9 +556,9 @@ export const PRODUCT_CATALOG = {
         name: 'Bảo hiểm Tai nạn',
         slug: 'accident',
         ui: {
-            controls: [ { id: 'accident-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 500.000.000',
+            controls: [ { id: 'accident-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 500.000.000', hintText: 'STBH từ 10 triệu đến 8 tỷ.',
                          validate: ({ value }) => {
-                            if (value < 10000000) return 'Tối thiểu 10.000.000';
+                            if (value > 0 && value < 10000000) return 'Tối thiểu 10.000.000';
                             if (value > 8000000000) return 'Tối đa 8.000.000.000';
                             return null;
                           }
@@ -579,17 +583,42 @@ export const PRODUCT_CATALOG = {
         ui: {
             controls: [
                 { id: 'hospital_support-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'Bội số 100.000 (đ/ngày)',
-                  validate: ({ value, customer, mainPremium, totalHospitalSupportStbh }) => {
+                  validate: ({ value, customer, mainPremium, allPersons }) => {
+                      if (value <= 0) return null;
                       if (value % 100000 !== 0) return 'Phải là bội số của 100.000';
+
                       const maxByAge = customer.age >= 18 ? 1000000 : 300000;
-                      const maxByPremium = mainPremium > 0 ? Math.floor(mainPremium / 4000000) * 100000 : 0;
-                      const remaining = maxByPremium - totalHospitalSupportStbh;
                       if (value > maxByAge) return `STBH tối đa cho tuổi ${customer.age} là ${formatCurrency(maxByAge)}`;
-                      if (value > remaining) return 'Vượt quá giới hạn tổng STBH Hỗ trợ viện phí cho phép';
+
+                      const maxSupportTotal = Math.floor(mainPremium / 4000000) * 100000;
+                      let currentTotalStbh = 0;
+                      allPersons.forEach(p => {
+                          if (p.supplements?.hospital_support?.stbh) {
+                              currentTotalStbh += p.supplements.hospital_support.stbh;
+                          }
+                      });
+                      
+                      if (currentTotalStbh > maxSupportTotal) return `Tổng STBH Hỗ trợ viện phí (${formatCurrency(currentTotalStbh)}) vượt quá giới hạn cho phép theo phí chính (${formatCurrency(maxSupportTotal)})`;
+                      
                       return null;
                   }
                 }
-            ]
+            ],
+            onRender: ({ section, customer, mainPremium, allPersons }) => {
+                 const hintEl = section.querySelector('.text-sm');
+                 if(hintEl) {
+                    const maxByAge = customer.age >= 18 ? 1000000 : 300000;
+                    const maxSupportTotal = Math.floor(mainPremium / 4000000) * 100000;
+                    let currentTotalStbh = 0;
+                      allPersons.forEach(p => {
+                           if (p.id !== customer.id && p.supplements?.hospital_support?.stbh) {
+                              currentTotalStbh += p.supplements.hospital_support.stbh;
+                          }
+                      });
+                    const remaining = Math.max(0, maxSupportTotal - currentTotalStbh);
+                    hintEl.textContent = `Tối đa ${formatCurrency(Math.min(maxByAge, remaining))} đ/ngày. Phải là bội số của 100.000.`;
+                 }
+            }
         },
         rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 55, renewalMax: 59 } ] },
         calculation: {
@@ -612,6 +641,7 @@ export const PRODUCT_CATALOG = {
         rules: { eligibility: [ { type: 'age', min: 18, max: 60 } ] },
         calculation: {
             calculate: ({ customer, stbhBase }) => {
+                 if(!customer || !stbhBase || customer.age < 18 || customer.age > 60) return 0;
                  const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
                  const rate = HELPERS.findRateByRange('mdp3_rates', customer.age, genderKey);
                  return HELPERS.roundDownTo1000((stbhBase / 1000) * rate);
