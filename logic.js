@@ -1085,9 +1085,12 @@ function renderSuppListSummary() {
   if (!box) return;
 
   const getPersonName = (id) => {
-    if (id === 'wop_other') {
-      const form = document.getElementById('person-container-wop-other');
-      return (form ? collectPersonData(form, false, true)?.name : 'Người khác') || 'Người khác';
+    if (id && id.includes('_other')) {
+        const configId = id.split('_')[0]; // e.g., 'mdp3'
+        const form = document.getElementById(`person-container-${configId}-other`);
+        const personData = form ? collectPersonData(form, false, true) : null;
+        // Return entered name, or a default label if name is empty
+        return (personData && personData.name && personData.name !== 'Người khác') ? personData.name : 'Người được miễn đóng phí';
     }
     return appState.persons.find(p => p.id === id)?.name || 'Người không xác định';
   };
@@ -1258,13 +1261,26 @@ function buildSummaryData() {
     }
 
     const allPersons = [...appState.persons];
-    const mdpEnabled = window.MDP3 && MDP3.isEnabled();
+    const waiverInstance = window.WaiverManager.getInstance('mdp3');
+    const mdpEnabled = waiverInstance?.isEnabled() || false;
     let mdpTarget = null;
-    if (mdpEnabled) {
-      mdpTarget = MDP3.getTargetPersonInfo();
-      if(mdpTarget && mdpTarget.id === 'wop_other') {
-          allPersons.push(mdpTarget);
-      }
+    
+    if (mdpEnabled && waiverInstance) {
+        const mdpTargetData = waiverInstance.getTargetPersonInfo();
+        if (mdpTargetData && mdpTargetData.id.includes('_other')) {
+            // Create a clean object to avoid passing DOM elements
+            mdpTarget = {
+                id: mdpTargetData.id,
+                isMain: false,
+                name: mdpTargetData.name,
+                age: mdpTargetData.age,
+                gender: mdpTargetData.gender,
+                supplements: {}
+            };
+            allPersons.push(mdpTarget);
+        } else {
+            mdpTarget = mdpTargetData; // It's a regular person from appState
+        }
     }
     
     const part1 = buildPart1RowsData({ persons: allPersons, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, mdpEnabled, mdpTarget });
@@ -1279,8 +1295,8 @@ function buildPart1RowsData(ctx) {
     const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
 
     let mdpStbhBase = 0;
-    if (mdpEnabled && window.MDP3) {
-      mdpStbhBase = MDP3.getStbhBase();
+    if (mdpEnabled && window.WaiverManager.getInstance('mdp3')) {
+      mdpStbhBase = window.WaiverManager.getInstance('mdp3').getStbhBase();
     }
 
     let rows = [], perPersonTotals = [], grand = { per: 0, eq: 0, base: 0, diff: 0 };
@@ -1317,7 +1333,6 @@ function buildPart1RowsData(ctx) {
             pushRow(acc, p.name, 'Phí đóng thêm', '—', paymentTerm || '—', appState.mainProduct.values['extra-premium'] || 0, false);
         }
         
-        // Process supplements (skip if wop_other - người khác không có supplements)
         if (p.supplements) {
             for (const rid in p.supplements) {
                 const baseAnnual = appState.fees.byPerson[p.id]?.suppDetails?.[rid] || 0;
@@ -1341,9 +1356,8 @@ function buildPart1RowsData(ctx) {
             }
         }
         
-        // Handle MDP3 - lấy phí từ appState.fees
         if (mdpEnabled && mdpTarget && p.id === mdpTarget.id) {
-            const personIdForFee = p.id === 'wop_other' ? 'wop_other' : p.id;
+            const personIdForFee = p.id;
             const mdpFeeYear = appState.fees.byPerson[personIdForFee]?.suppDetails?.['mdp3'] || 0;
             
             if (mdpFeeYear > 0) {
@@ -1385,7 +1399,6 @@ function buildPart2ScheduleRows(ctx) {
                 if (!isAnnual) sumPer += Math.round((baseFee * riderFactor) / periods / 1000) * 1000;
             };
 
-            // Process regular supplements (chỉ xử lý nếu có supplements)
             if (p.supplements) {
                 for(const rid in p.supplements) {
                      const prodConfig = PRODUCT_CATALOG[rid];
@@ -1401,16 +1414,13 @@ function buildPart2ScheduleRows(ctx) {
                 }
             }
 
-            // Handle MDP3 - tính lại cho từng năm
             if (mdpEnabled && mdpTarget && p.id === mdpTarget.id && attained <= 60) {
                 let mdpStbhBaseForYear = 0;
                 
-                // Thêm phí chính nếu còn trong kỳ đóng phí
                 if (inTerm) {
                     mdpStbhBaseForYear += baseMainAnnual;
                 }
                 
-                // Thêm phí bổ sung của những người khác
                 persons.forEach(otherP => {
                     if (otherP.id === p.id || !otherP.supplements) return;
                     const otherAttained = otherP.age + year - 1;
@@ -1431,13 +1441,12 @@ function buildPart2ScheduleRows(ctx) {
                     }
                 });
                 
-                // Tính phí MDP3 cho năm này
                 const mdpConfig = PRODUCT_CATALOG['mdp3'];
                 if (mdpConfig && mdpConfig.calculation.calculate) {
                     const mdpFeeForYear = mdpConfig.calculation.calculate(
-                        { ...p, age: attained }, // customer info for the current year
-                        mdpStbhBaseForYear,       // stbhBase for the current year
-                        { data: product_data, roundDownTo1000 } // helpers
+                        { ...p, age: attained }, 
+                        mdpStbhBaseForYear,
+                        { data: product_data, roundDownTo1000 }
                     );
                     addRider('mdp3', mdpFeeForYear);
                 }
