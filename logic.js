@@ -1146,18 +1146,6 @@ function buildViewerPayload() {
   const mainPerson = appState.persons.find(p => p.isMain);
   const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
 
-  // New check for inconsistent MDP state
-  if (window.MDP3 && MDP3.isEnabled()) {
-    const targetPerson = MDP3.getTargetPersonInfo();
-    // Check if a fee for MDP exists anywhere in the state
-    const mdpFeeInState = (appState.fees.totalSupp > 0) && Object.values(appState.fees.byPerson).some(p => p.suppDetails?.mdp3 > 0);
-    
-    // If a fee exists but we can't find the person it applies to, it's an error.
-    if (mdpFeeInState && !targetPerson) {
-        throw new Error("Dữ liệu Miễn Đóng Phí không nhất quán. Vui lòng bỏ chọn rồi chọn lại người được miễn đóng phí để cập nhật.");
-    }
-  }
-
   const riderList = [];
   appState.persons.forEach(person => {
     Object.keys(person.supplements).forEach(rid => {
@@ -1218,6 +1206,15 @@ function buildViewerPayload() {
 
 function __exportExactSummaryHtml() {
     try {
+        if (window.MDP3 && MDP3.isEnabled()) {
+            const targetPerson = MDP3.getTargetPersonInfo();
+            const mdpFeeInState = (appState.fees.totalSupp > 0) && 
+                                  Object.values(appState.fees.byPerson).some(p => p.suppDetails?.mdp3 > 0);
+            
+            if (mdpFeeInState && !targetPerson) {
+                throw new Error("Inconsistent MDP State: Fee exists but target person does not. This is a temporary state after deleting a person. Please try again or re-select the MDP target.");
+            }
+        }
         const data = buildSummaryData();
         const introHtml = buildIntroSection(data);
         const part1Html = buildPart1Section(data);
@@ -1227,6 +1224,9 @@ function __exportExactSummaryHtml() {
         return introHtml + part1Html + part2Html + part3Html;
     } catch (e) {
         console.error('[__exportExactSummaryHtml] error:', e);
+        if (e.message.includes("Inconsistent MDP State")) {
+             return '<div style="color:red; padding: 1rem;">Lỗi tạo bảng minh họa do dữ liệu chưa đồng bộ (thường xảy ra khi xóa NĐBH được miễn đóng phí và xem chi tiết quá nhanh).<br><strong>Cách khắc phục:</strong> Vui lòng bỏ chọn "Miễn Đóng Phí", sau đó chọn lại và thử xem lại bảng minh họa.</div>';
+        }
         return '<div style="color:red">Lỗi tạo summaryHtml</div>';
     }
 }
@@ -1528,7 +1528,7 @@ function buildPart3ScheduleSection(summaryData) {
 }
 
 function buildFooterSection() {
-    return `<div style="font-size: 10px; font-style: italic; color: #555; margin-top: 1rem;">(*) Công cụ này chỉ mang tính chất tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA...</div>`;
+    return `<div style="font-size: 10px; font-style: italic; color: #555; margin-top: 1rem;">(*) Công cụ này chỉ mang tính tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA...</div>`;
 }
 
 function buildPart2BenefitsSection(summaryData) {
