@@ -385,13 +385,17 @@ export const PRODUCT_CATALOG = {
                     validate: ({ value }) => !value ? 'Vui lòng chọn thời hạn' : null
                 }
             ],
-             validationMessages: { notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.' }
+             validationMessages: { 
+                 notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.',
+                 minPremium: `Phí chính tối thiểu ${formatCurrency(5000000)}`
+            }
         },
         rules: {
             eligibility: [
                 { type: 'age', min: 12, max: 65, condition: (p) => p.gender === 'Nam' },
                 { type: 'age', min: 28, max: 65, condition: (p) => p.gender === 'Nữ' },
             ],
+            premium: { min: 5000000 }
         },
         calculation: {
             calculate: ({ productInfo, customer }) => {
@@ -401,8 +405,7 @@ export const PRODUCT_CATALOG = {
                 const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
                 const rate = HELPERS.findRateByTerm('an_binh_uu_viet_rates', term, customer.age, genderKey);
                 const premium = Math.round((stbh / 1000) * rate);
-                const finalPremium = HELPERS.roundDownTo1000(premium);
-                return finalPremium < 5000000 ? 0 : finalPremium;
+                return HELPERS.roundDownTo1000(premium);
             }
         }
     },
@@ -733,7 +736,7 @@ function calculateGenericAccountValueProjection(productConfig, args, helpers) {
 
         if (periods === 1 && monthInYear === 1) isPaymentMonth = true;
         if (periods === 2 && (monthInYear === 1 || monthInYear === 7)) isPaymentMonth = true;
-        if (periods === 4 && (monthInYear === 1 || monthInYear === 4 || monthInYear === 7 || monthInYear === 10)) isPaymentMonth = true;
+        if (periods === 4 && (monthInYear === 1 || monthInYear === 4 || monthInYear === 10)) isPaymentMonth = true;
 
         for (const key in scenarios) {
             let currentAccountValue = scenarios[key].accountValue || 0;
