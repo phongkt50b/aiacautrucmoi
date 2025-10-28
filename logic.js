@@ -367,16 +367,18 @@ function renderSupplementaryProductsForPerson(customer, isMainProductSectionVali
             feeDisplay.textContent = fee > 0 ? `Phí: ${formatCurrency(fee)}` : '';
         }
 
-        prodConfig.ui.onRender?.({
-            section,
-            el: section,
-            customer,
-            mainPremium: appState.fees.baseMain,
-            allValues: appState.mainProduct.values,
-            allPersons: appState.persons,
-            config: prodConfig,
-            mainProductConfig
-        });
+        if (prodConfig.ui.onRender) {
+             prodConfig.ui.onRender({
+                section,
+                el: section,
+                customer,
+                mainPremium: appState.fees.baseMain,
+                allValues: appState.mainProduct.values,
+                allPersons: appState.persons,
+                config: prodConfig,
+                mainProductConfig
+            });
+        }
     });
 }
 
@@ -755,7 +757,7 @@ function attachGlobalListeners() {
             if (newProductConfig?.rules?.noSupplementaryInsured) {
                 // Immediately clear UI to prevent stale data reading
                 document.getElementById('supplementary-insured-container').innerHTML = '';
-                window.MDP3.reset();
+                if(window.MDP3) window.MDP3.reset();
 
                 const mainPerson = appState.persons.find(p => p.isMain);
                 if (mainPerson) mainPerson.supplements = {};
@@ -977,14 +979,14 @@ function updateTargetAge() {
     if (productConfig.group === 'TRADITIONAL' || productConfig.group === 'PACKAGE') {
         let term = (productConfig.group === 'PACKAGE')
             ? productConfig.packageConfig.fixedValues.paymentTerm
-            : parseInt(appState.mainProduct.values['abuv-term'] || '0', 10);
+            : parseInt(document.getElementById('abuv-term')?.value || '0', 10);
         targetAgeInput.disabled = true;
         targetAgeInput.value = term ? mainPerson.age + term - 1 : mainPerson.age;
         return;
     }
 
     targetAgeInput.disabled = false;
-    const paymentTerm = parseInt(appState.mainProduct.values['payment-term'], 10) || 0;
+    const paymentTerm = parseInt(document.getElementById('payment-term')?.value, 10) || 0;
     const hintEl = document.getElementById('target-age-hint');
 
     if (!paymentTerm || paymentTerm <= 0) {
@@ -1677,6 +1679,11 @@ window.MDP3 = (function () {
         attachListeners();
     }
     
+    function isEnabled() {
+        const cb = document.getElementById('mdp3-enable');
+        return !!(cb && cb.checked);
+    }
+
     function attachListeners(){
          document.body.addEventListener('change', function (e) {
             if (e.target.id === 'mdp3-enable') {
