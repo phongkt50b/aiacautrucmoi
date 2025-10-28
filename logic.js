@@ -179,6 +179,7 @@ function performCalculations(state) {
         fees.byPerson[mainPerson.id].main = fees.baseMain + fees.extra;
     }
     
+    // PASS 1: Calculate all non-MDP3 fees
     let totalHospitalSupportStbh = 0;
     allInsuredPersons.forEach(person => {
         let personSuppFee = 0;
@@ -205,7 +206,7 @@ function performCalculations(state) {
         fees.totalSupp += personSuppFee;
     });
 
-    // Create a snapshot of fees before calculating MDP3 (inspired by logic-1.js)
+    // CREATE SNAPSHOT (The critical part from logic-1.js)
     window.personFees = {};
     allInsuredPersons.forEach(p => {
         const totalMainForPerson = p.isMain ? (fees.baseMain + fees.extra) : 0;
@@ -217,7 +218,7 @@ function performCalculations(state) {
         };
     });
 
-    // Calculate Waiver of Premium fees via its dedicated module
+    // PASS 2: Calculate Waiver of Premium fee using the snapshot
     if (window.MDP3) {
         const mdpFee = MDP3.getPremium();
         if (mdpFee > 0) {
@@ -1218,17 +1219,6 @@ function buildViewerPayload() {
 
 function __exportExactSummaryHtml() {
     try {
-        // More robust check for inconsistent state, placed at the very beginning.
-        if (window.MDP3 && MDP3.isEnabled()) {
-            const targetPerson = MDP3.getTargetPersonInfo();
-            // Specifically check if an MDP fee exists in the state.
-            const mdpFeeInState = Object.values(appState.fees.byPerson || {}).some(p => p.suppDetails?.mdp3 > 0);
-            
-            // If a fee exists, but we can't identify who it's for, the state is inconsistent.
-            if (mdpFeeInState && !targetPerson) {
-                throw new Error("Inconsistent MDP State: Fee exists but target person does not. This is a temporary state after deleting a person. Please try again or re-select the MDP target.");
-            }
-        }
         const data = buildSummaryData();
         const introHtml = buildIntroSection(data);
         const part1Html = buildPart1Section(data);
@@ -1238,9 +1228,6 @@ function __exportExactSummaryHtml() {
         return introHtml + part1Html + part2Html + part3Html;
     } catch (e) {
         console.error('[__exportExactSummaryHtml] error:', e);
-        if (e.message.includes("Inconsistent MDP State")) {
-             return '<div style="color:red; padding: 1rem;">Lỗi tạo bảng minh họa do dữ liệu chưa đồng bộ (thường xảy ra khi xóa NĐBH được miễn đóng phí và xem chi tiết quá nhanh).<br><strong>Cách khắc phục:</strong> Vui lòng bỏ chọn "Miễn Đóng Phí", sau đó chọn lại và thử xem lại bảng minh họa.</div>';
-        }
         return '<div style="color:red">Lỗi tạo summaryHtml</div>';
     }
 }
@@ -1915,6 +1902,29 @@ window.MDP3 = (function () {
         return premium;
     }
     
+    function getStbhBase() { // Helper for summary table
+        if (!isEnabled() || !selectedId || !window.personFees) return 0;
+        
+        let stbhBase = 0;
+        const feesModel = appState.fees;
+        
+        for (const pid in window.personFees) {
+            if (pid === 'wop_other') continue;
+            const pf = window.personFees[pid];
+            const mdp3Part = feesModel?.byPerson?.[pid]?.suppDetails?.mdp3 || 0;
+            const suppNet = (pf.supp || 0) - mdp3Part;
+            stbhBase += (pf.mainBase || 0) + Math.max(0, suppNet);
+        }
+        
+        if (selectedId && selectedId !== 'other' && window.personFees[selectedId]) {
+            const mdp3Part = feesModel?.byPerson?.[selectedId]?.suppDetails?.mdp3 || 0;
+            const suppNet = (window.personFees[selectedId].supp || 0) - mdp3Part;
+            stbhBase -= Math.max(0, suppNet);
+        }
+        
+        return Math.max(0, stbhBase);
+    }
+
     function validate() {
         if (!isEnabled()) return true;
         const selEl = document.getElementById('mdp3-person-select');
@@ -1956,5 +1966,5 @@ window.MDP3 = (function () {
           </div>`;
     }
 
-    return { init, isEnabled, getSelectedId: () => selectedId, getPremium, reset, updateOptions, render, validate, getTargetPersonInfo };
+    return { init, isEnabled, getSelectedId: () => selectedId, getPremium, reset, updateOptions, render, validate, getTargetPersonInfo, getStbhBase };
 })();
