@@ -205,9 +205,21 @@ function performCalculations(state) {
         fees.totalSupp += personSuppFee;
     });
 
+    // Create a snapshot of fees before calculating MDP3 (inspired by logic-1.js)
+    window.personFees = {};
+    allInsuredPersons.forEach(p => {
+        const totalMainForPerson = p.isMain ? (fees.baseMain + fees.extra) : 0;
+        window.personFees[p.id] = {
+            main: totalMainForPerson,
+            mainBase: p.isMain ? fees.baseMain : 0,
+            supp: fees.byPerson[p.id]?.supp || 0,
+            total: totalMainForPerson + (fees.byPerson[p.id]?.supp || 0)
+        };
+    });
+
     // Calculate Waiver of Premium fees via its dedicated module
     if (window.MDP3) {
-        const mdpFee = MDP3.getPremium(fees);
+        const mdpFee = MDP3.getPremium();
         if (mdpFee > 0) {
             fees.totalSupp += mdpFee;
             const mdpTargetId = MDP3.getSelectedId();
@@ -1855,41 +1867,36 @@ window.MDP3 = (function () {
         }
     }
 
-    function getStbhBase(currentFees) {
-        const mdpTargetId = selectedId;
-        
-        // Use the fees object passed during calculation, or the global appState.fees otherwise.
-        const feesContext = currentFees || appState.fees;
-        if (!feesContext) return 0;
-
-        // Sum of main product premium + extra premium.
-        let totalPremiums = (feesContext.baseMain || 0) + (feesContext.extra || 0);
-
-        // Sum all supplementary premiums (at this stage of calculation, it won't include MDP's own fee).
-        if (feesContext.byPerson) {
-            for (const personId in feesContext.byPerson) {
-                totalPremiums += feesContext.byPerson[personId].supp || 0;
-            }
-        }
-
-        // Now, subtract the supplementary premiums of the person being waived.
-        let targetPersonSuppFees = 0;
-        if (mdpTargetId && mdpTargetId !== 'other' && feesContext.byPerson && feesContext.byPerson[mdpTargetId]) {
-            // This is the total supplementary fee for the target person, which is what we need to subtract.
-            targetPersonSuppFees = feesContext.byPerson[mdpTargetId].supp || 0;
-        }
-
-        const finalStbhBase = totalPremiums - targetPersonSuppFees;
-        return Math.max(0, finalStbhBase);
-    }
-    
-    function getPremium(currentFees) {
+    function getPremium() {
         const feeEl = document.getElementById('mdp3-fee-display');
-        if (!isEnabled() || !selectedId) {
+        if (!isEnabled() || !selectedId || !window.personFees) {
             if (feeEl) feeEl.textContent = '';
             return 0;
         }
-        const stbhBase = getStbhBase(currentFees);
+
+        let stbhBase = 0;
+        const feesModel = appState.fees; // This is the fees from the *previous* render cycle
+        
+        // Sum up main premium + all rider premiums (which don't include MDP3 yet at this stage)
+        // This logic is adapted from logic-1.js for robustness.
+        for (const pid in window.personFees) {
+            if (pid === 'wop_other') continue; 
+            const pf = window.personFees[pid];
+            // This part is to make the calculation idempotent. Subtract any old MDP fee.
+            const mdp3Part = feesModel?.byPerson?.[pid]?.suppDetails?.mdp3 || 0;
+            const suppNet = (pf.supp || 0) - mdp3Part;
+            stbhBase += (pf.mainBase || 0) + Math.max(0, suppNet);
+        }
+        
+        // Subtract the rider premiums of the person being waived
+        if (selectedId && selectedId !== 'other' && window.personFees[selectedId]) {
+            const mdp3Part = feesModel?.byPerson?.[selectedId]?.suppDetails?.mdp3 || 0;
+            const suppNet = (window.personFees[selectedId].supp || 0) - mdp3Part;
+            stbhBase -= Math.max(0, suppNet);
+        }
+        
+        if (stbhBase < 0) stbhBase = 0;
+
         const personInfo = getTargetPersonInfo();
 
         if (!personInfo || !personInfo.age || personInfo.age < 18 || personInfo.age > 60) {
@@ -1907,7 +1914,7 @@ window.MDP3 = (function () {
         }
         return premium;
     }
-
+    
     function validate() {
         if (!isEnabled()) return true;
         const selEl = document.getElementById('mdp3-person-select');
@@ -1949,5 +1956,5 @@ window.MDP3 = (function () {
           </div>`;
     }
 
-    return { init, isEnabled, getSelectedId: () => selectedId, getPremium, getStbhBase, reset, updateOptions, render, validate, getTargetPersonInfo };
+    return { init, isEnabled, getSelectedId: () => selectedId, getPremium, reset, updateOptions, render, validate, getTargetPersonInfo };
 })();
