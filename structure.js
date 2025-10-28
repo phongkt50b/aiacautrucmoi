@@ -649,6 +649,26 @@ export const PRODUCT_CATALOG = {
             }
         }
     },
+    'mdp3': {
+        type: 'rider',
+        name: 'Miễn đóng phí 3.0',
+        slug: 'mien-dong-phi-3',
+        isStandalone: true,
+        ui: {
+            controls: []
+        },
+        rules: {
+            eligibility: [ { type: 'age', min: 18, max: 60, renewalMax: 60 } ],
+        },
+        calculation: {
+            calculate: (personInfo, stbhBase, helpers) => {
+                 if(!personInfo || !stbhBase || personInfo.age < 18 || personInfo.age > 60) return 0;
+                 const genderKey = personInfo.gender === 'Nữ' ? 'nu' : 'nam';
+                 const rate = helpers.data.mdp3_rates.find(r => personInfo.age >= r.ageMin && personInfo.age <= r.ageMax)?.[genderKey] || 0;
+                 return helpers.roundDownTo1000((stbhBase / 1000) * rate);
+            }
+        }
+    }
 };
 
 /**
