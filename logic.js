@@ -642,7 +642,6 @@ function validateTargetAge() {
   if (!productConfig) return true;
 
   let term = 0;
-  // FIX: Read term directly from DOM for accuracy, like logic-1.js
   if (productConfig.group === 'PACKAGE') {
       term = productConfig.packageConfig.fixedValues.paymentTerm;
   } else if (document.getElementById('abuv-term')) {
@@ -1686,7 +1685,7 @@ function getProductLabel(key) {
 }
 
 // ===================================================================================
-// ===== MODULE: MIỄN ĐÓNG PHÍ 3.0 (RESTORED FROM logic-1.js)
+// ===== MODULE: MIỄN ĐÓNG PHÍ 3.0 (NEW, RESTRUCTURED)
 // ===================================================================================
 window.MDP3 = (function () {
     let selectedId = null;
@@ -1703,11 +1702,8 @@ window.MDP3 = (function () {
     }
     
     function renderSection() {
-        const sec = document.getElementById('waiver-of-premium-section');
-        if (!sec) return;
-        
         const container = document.getElementById('waiver-of-premium-container');
-        if (container && !document.getElementById('mdp3-enable')) {
+        if (container && !container.innerHTML.trim()) {
             container.innerHTML = `
                 <label class="flex items-center space-x-3 cursor-pointer">
                     <input type="checkbox" id="mdp3-enable" class="form-checkbox">
@@ -1725,8 +1721,11 @@ window.MDP3 = (function () {
         
         const sectionIsDisabled = mainProductConfig?.rules?.noSupplementaryInsured;
         
-        waiverSection.classList.toggle('opacity-50', sectionIsDisabled);
-        waiverSection.classList.toggle('pointer-events-none', sectionIsDisabled);
+        if (waiverSection) {
+            waiverSection.classList.toggle('disabled', sectionIsDisabled);
+            waiverSection.style.pointerEvents = sectionIsDisabled ? 'none' : 'auto';
+            waiverSection.style.opacity = sectionIsDisabled ? '0.6' : '1';
+        }
         
         if (sectionIsDisabled) {
             reset();
@@ -1770,7 +1769,6 @@ window.MDP3 = (function () {
             }
         });
 
-        // Listen for changes in supplementary person info
         document.getElementById('supplementary-insured-container').addEventListener('input', debounce(updateOptions, 300));
     }
     
@@ -1842,16 +1840,18 @@ window.MDP3 = (function () {
     }
 
     function getStbhBase() {
-        let stbhBase = 0;
-        stbhBase += (appState.fees.baseMain || 0) + (appState.fees.extra || 0);
-        
-        appState.persons.forEach(p => {
-             stbhBase += appState.fees.byPerson[p.id]?.supp || 0;
-        });
-        
-        const mdpTarget = getTargetPersonInfo();
-        if (mdpTarget && mdpTarget.id !== 'wop_other') {
-             stbhBase -= appState.fees.byPerson[mdpTarget.id]?.supp || 0;
+        let stbhBase = appState.fees.baseMain + appState.fees.extra;
+        const mdpTargetId = getSelectedId();
+
+        for (const personId in appState.fees.byPerson) {
+            const personFees = appState.fees.byPerson[personId];
+            if (personId === mdpTargetId) {
+                // For selected person, add main fee (if they are main) but not their supp fees
+                stbhBase += personFees.main;
+            } else {
+                // For others, add all their fees
+                stbhBase += (personFees.main + personFees.supp);
+            }
         }
         return Math.max(0, stbhBase);
     }
@@ -1882,12 +1882,18 @@ window.MDP3 = (function () {
     }
 
     function validate() {
-        if (!isEnabled() || !selectedId) return true;
+        if (!isEnabled()) return true;
+        const selEl = document.getElementById('mdp3-person-select');
+        if(!selEl || !selEl.value) {
+            setFieldError(selEl, "Vui lòng chọn người được miễn đóng phí");
+            return false;
+        }
+        clearFieldError(selEl);
         
-        const personInfo = getTargetPersonInfo();
         if (selectedId === 'other') {
             const dobInput = document.querySelector('#person-container-wop-other .dob-input');
             if (!validateDobField(dobInput)) return false;
+            const personInfo = getTargetPersonInfo();
             if (personInfo.age < 18 || personInfo.age > 60) {
                  setFieldError(dobInput, 'Tuổi phải từ 18-60');
                  return false;
