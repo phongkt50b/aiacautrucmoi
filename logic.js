@@ -207,7 +207,7 @@ function performCalculations(state) {
 
     // Calculate Waiver of Premium fees via its dedicated module
     if (window.MDP3) {
-        const mdpFee = MDP3.getPremium();
+        const mdpFee = MDP3.getPremium(fees);
         if (mdpFee > 0) {
             fees.totalSupp += mdpFee;
             const mdpTargetId = MDP3.getSelectedId();
@@ -1855,43 +1855,41 @@ window.MDP3 = (function () {
         }
     }
 
-    function getStbhBase() {
+    function getStbhBase(currentFees) {
         const mdpTargetId = selectedId;
         
-        let oldMdpFee = 0;
-        if (appState.fees && appState.fees.byPerson) {
-            for (const personId in appState.fees.byPerson) {
-                const details = appState.fees.byPerson[personId].suppDetails;
-                if (details && details.mdp3) {
-                    oldMdpFee = details.mdp3;
-                    break;
-                }
+        // Use the fees object passed during calculation, or the global appState.fees otherwise.
+        const feesContext = currentFees || appState.fees;
+        if (!feesContext) return 0;
+
+        // Sum of main product premium + extra premium.
+        let totalPremiums = (feesContext.baseMain || 0) + (feesContext.extra || 0);
+
+        // Sum all supplementary premiums (at this stage of calculation, it won't include MDP's own fee).
+        if (feesContext.byPerson) {
+            for (const personId in feesContext.byPerson) {
+                totalPremiums += feesContext.byPerson[personId].supp || 0;
             }
         }
-        
-        const totalPremiumWithoutMdp = (appState.fees.total || 0) - oldMdpFee;
-    
-        let targetPersonSuppFeesWithoutMdp = 0;
-        if (mdpTargetId && mdpTargetId !== 'other' && appState.fees.byPerson && appState.fees.byPerson[mdpTargetId]) {
-            const suppDetails = appState.fees.byPerson[mdpTargetId].suppDetails || {};
-            for (const rider in suppDetails) {
-                if (rider !== 'mdp3') {
-                    targetPersonSuppFeesWithoutMdp += suppDetails[rider];
-                }
-            }
+
+        // Now, subtract the supplementary premiums of the person being waived.
+        let targetPersonSuppFees = 0;
+        if (mdpTargetId && mdpTargetId !== 'other' && feesContext.byPerson && feesContext.byPerson[mdpTargetId]) {
+            // This is the total supplementary fee for the target person, which is what we need to subtract.
+            targetPersonSuppFees = feesContext.byPerson[mdpTargetId].supp || 0;
         }
-        
-        const stbhBase = totalPremiumWithoutMdp - targetPersonSuppFeesWithoutMdp;
-        return Math.max(0, stbhBase);
+
+        const finalStbhBase = totalPremiums - targetPersonSuppFees;
+        return Math.max(0, finalStbhBase);
     }
     
-    function getPremium() {
+    function getPremium(currentFees) {
         const feeEl = document.getElementById('mdp3-fee-display');
         if (!isEnabled() || !selectedId) {
             if (feeEl) feeEl.textContent = '';
             return 0;
         }
-        const stbhBase = getStbhBase();
+        const stbhBase = getStbhBase(currentFees);
         const personInfo = getTargetPersonInfo();
 
         if (!personInfo || !personInfo.age || personInfo.age < 18 || personInfo.age > 60) {
