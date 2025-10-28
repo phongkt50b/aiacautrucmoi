@@ -1304,6 +1304,7 @@ function buildPart1RowsData(ctx) {
 
     persons.forEach(p => {
         const acc = { per: 0, eq: 0, base: 0, diff: 0 };
+        
         if (p.isMain && productKey) {
             const baseAnnual = appState.fees.baseMain;
             const stbhVal = appState.mainProduct.values['main-stbh'];
@@ -1314,41 +1315,50 @@ function buildPart1RowsData(ctx) {
         if (p.isMain && (appState.mainProduct.values['extra-premium'] || 0) > 0) {
             pushRow(acc, p.name, 'Phí đóng thêm', '—', paymentTerm || '—', appState.mainProduct.values['extra-premium'] || 0, false);
         }
-        for (const rid in p.supplements) {
-            const baseAnnual = appState.fees.byPerson[p.id]?.suppDetails?.[rid] || 0;
-            if (baseAnnual <= 0) continue;
+        
+        // Process supplements (skip if wop_other - người khác không có supplements)
+        if (p.supplements) {
+            for (const rid in p.supplements) {
+                const baseAnnual = appState.fees.byPerson[p.id]?.suppDetails?.[rid] || 0;
+                if (baseAnnual <= 0) continue;
 
-            const maxA = riderMaxAge(rid);
-            const years = Math.max(0, Math.min(maxA - p.age, targetAge - mainAge) + 1);
-            let stbh = p.supplements[rid].stbh;
-            let prodName = getProductLabel(rid);
+                const maxA = riderMaxAge(rid);
+                const years = Math.max(0, Math.min(maxA - p.age, targetAge - mainAge) + 1);
+                let stbh = p.supplements[rid].stbh;
+                let prodName = getProductLabel(rid);
 
-            if (rid === 'health_scl') {
-                const scl = p.supplements.health_scl;
-                const programMap = { co_ban: 'Cơ bản', nang_cao: 'Nâng cao', toan_dien: 'Toàn diện', hoan_hao: 'Hoàn hảo' };
-                const programName = programMap[scl.program] || '';
-                const scopeStr = (scl.scope === 'main_global' ? 'Nước ngoài' : 'Việt Nam') + (scl.outpatient ? ', Ngoại trú' : '') + (scl.dental ? ', Nha khoa' : '');
-                prodName = `Sức khoẻ Bùng Gia Lực – ${programName} (${scopeStr})`;
-                stbh = getHealthSclStbhByProgram(scl.program);
+                if (rid === 'health_scl') {
+                    const scl = p.supplements.health_scl;
+                    const programMap = { co_ban: 'Cơ bản', nang_cao: 'Nâng cao', toan_dien: 'Toàn diện', hoan_hao: 'Hoàn hảo' };
+                    const programName = programMap[scl.program] || '';
+                    const scopeStr = (scl.scope === 'main_global' ? 'Nước ngoài' : 'Việt Nam') + (scl.outpatient ? ', Ngoại trú' : '') + (scl.dental ? ', Nha khoa' : '');
+                    prodName = `Sức khoẻ Bùng Gia Lực – ${programName} (${scopeStr})`;
+                    stbh = getHealthSclStbhByProgram(scl.program);
+                }
+                
+                pushRow(acc, p.name, prodName, formatCurrency(stbh), years, baseAnnual, true);
             }
-            
-            pushRow(acc, p.name, prodName, formatCurrency(stbh), years, baseAnnual, true);
         }
         
+        // Handle MDP3 - lấy phí từ appState.fees
         if (mdpEnabled && mdpTarget && p.id === mdpTarget.id) {
-            const mdpFeeYear = appState.fees.byPerson[p.id]?.suppDetails?.['mdp3'] || 0;
+            const personIdForFee = p.id === 'wop_other' ? 'wop_other' : p.id;
+            const mdpFeeYear = appState.fees.byPerson[personIdForFee]?.suppDetails?.['mdp3'] || 0;
+            
             if (mdpFeeYear > 0) {
                 const years = Math.max(0, Math.min(60 - p.age, targetAge - mainAge) + 1);
                 pushRow(acc, p.name, 'Miễn đóng phí 3.0', formatCurrency(mdpStbhBase), years, mdpFeeYear, true);
             }
         }
-        perPersonTotals.push({ personName: p.name, ...acc });
-        grand.per += acc.per; grand.eq += acc.eq; grand.base += acc.base; grand.diff += acc.diff;
+        
+        if (acc.base > 0) {
+            perPersonTotals.push({ personName: p.name, ...acc });
+            grand.per += acc.per; grand.eq += acc.eq; grand.base += acc.base; grand.diff += acc.diff;
+        }
     });
 
     return { rows, perPersonTotals, grand, isAnnual, periods, riderFactor };
 }
-
 
 function buildPart2ScheduleRows(ctx) {
     const { persons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, mdpEnabled, mdpTarget } = ctx;
@@ -1367,25 +1377,70 @@ function buildPart2ScheduleRows(ctx) {
         persons.forEach(p => {
             let sumBase = 0, sumPer = 0;
             const attained = p.age + year - 1;
+            
             const addRider = (key, baseFee) => {
                 if (!baseFee || attained > riderMaxAge(key)) return;
                 sumBase += baseFee;
                 if (!isAnnual) sumPer += Math.round((baseFee * riderFactor) / periods / 1000) * 1000;
             };
 
-            for(const rid in p.supplements) {
-                 const prodConfig = PRODUCT_CATALOG[rid];
-                 if (!prodConfig || !prodConfig.calculation.calculate) continue;
-                 const premiumForYear = prodConfig.calculation.calculate({ config: prodConfig, customer: p, ageOverride: attained, mainPremium: baseMainAnnual, totalHospitalSupportStbh: 0 });
-                 addRider(rid, premiumForYear);
+            // Process regular supplements (chỉ xử lý nếu có supplements)
+            if (p.supplements) {
+                for(const rid in p.supplements) {
+                     const prodConfig = PRODUCT_CATALOG[rid];
+                     if (!prodConfig || !prodConfig.calculation.calculate) continue;
+                     const premiumForYear = prodConfig.calculation.calculate({ 
+                         config: prodConfig, 
+                         customer: p, 
+                         ageOverride: attained, 
+                         mainPremium: baseMainAnnual, 
+                         totalHospitalSupportStbh: 0 
+                     });
+                     addRider(rid, premiumForYear);
+                }
             }
 
-            if (mdpEnabled && mdpTarget && p.id === mdpTarget.id) {
-                const mdpStbhBase = window.MDP3.getStbhBase();
+            // Handle MDP3 - tính lại cho từng năm
+            if (mdpEnabled && mdpTarget && p.id === mdpTarget.id && attained <= 60) {
+                let mdpStbhBaseForYear = 0;
+                
+                // Thêm phí chính nếu còn trong kỳ đóng phí
+                if (inTerm) {
+                    mdpStbhBaseForYear += baseMainAnnual;
+                }
+                
+                // Thêm phí bổ sung của những người khác
+                persons.forEach(otherP => {
+                    if (otherP.id === p.id || !otherP.supplements) return;
+                    const otherAttained = otherP.age + year - 1;
+                    
+                    for(const rid in otherP.supplements) {
+                        const prodConfig = PRODUCT_CATALOG[rid];
+                        if (!prodConfig || !prodConfig.calculation.calculate) continue;
+                        if (otherAttained > riderMaxAge(rid)) continue;
+                        
+                        const otherPremium = prodConfig.calculation.calculate({ 
+                            config: prodConfig, 
+                            customer: otherP, 
+                            ageOverride: otherAttained, 
+                            mainPremium: baseMainAnnual, 
+                            totalHospitalSupportStbh: 0 
+                        });
+                        mdpStbhBaseForYear += otherPremium;
+                    }
+                });
+                
+                // Tính phí MDP3 cho năm này
                 const mdpConfig = PRODUCT_CATALOG['mdp3'];
-                const mdpFeeForYear = mdpConfig.calculation.calculate({ customer: p, stbhBase });
-                 addRider('mdp3', mdpFeeForYear);
+                if (mdpConfig && mdpConfig.calculation.calculate) {
+                    const mdpFeeForYear = mdpConfig.calculation.calculate({ 
+                        customer: { ...p, age: attained }, 
+                        stbhBase: mdpStbhBaseForYear 
+                    });
+                    addRider('mdp3', mdpFeeForYear);
+                }
             }
+            
             perPersonSuppBase.push(sumBase);
             perPersonSuppPerPeriod.push(sumPer);
             perPersonSuppAnnualEq.push(isAnnual ? sumBase : sumPer * periods);
@@ -1400,6 +1455,7 @@ function buildPart2ScheduleRows(ctx) {
     }
     return { rows, extraAllZero: rows.every(r => r.extraYearBase === 0) };
 }
+
 
 function buildIntroSection(data) {
     const sel = document.getElementById('payment-frequency');
