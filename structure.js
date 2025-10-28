@@ -658,14 +658,26 @@ export const PRODUCT_CATALOG = {
             controls: []
         },
         rules: {
-            eligibility: [ { type: 'age', min: 18, max: 60, renewalMax: 60 } ],
+            eligibility: [ { type: 'age', min: 18, max: 60, renewalMax: 60 }, { type: 'riskGroup', required: true } ],
         },
         calculation: {
             calculate: (personInfo, stbhBase, helpers) => {
-                 if(!personInfo || !stbhBase || personInfo.age < 18 || personInfo.age > 60) return 0;
+                 if(!personInfo || !stbhBase || personInfo.age < 18 || personInfo.age > 60 || !personInfo.riskGroup) return 0;
+                 
+                 const riskGroup = personInfo.riskGroup;
+                 let riskFactor = 1.0;
+                 if (riskGroup === 2 || riskGroup === 3) {
+                     riskFactor = 1.5;
+                 } else if (riskGroup === 4) {
+                     riskFactor = 2.0;
+                 }
+                 
                  const genderKey = personInfo.gender === 'Nữ' ? 'nu' : 'nam';
                  const rate = helpers.data.mdp3_rates.find(r => personInfo.age >= r.ageMin && personInfo.age <= r.ageMax)?.[genderKey] || 0;
-                 return helpers.roundDownTo1000((stbhBase / 1000) * rate);
+                 
+                 const premium = (stbhBase / 1000) * rate * riskFactor;
+                 
+                 return helpers.roundDownTo1000(premium);
             }
         }
     }
@@ -858,14 +870,6 @@ export const WAIVER_PRODUCTS = {
             
             otherPersonForm: {
                 title: 'Người được miễn đóng phí',
-                fields: [
-                    { id: 'name', type: 'text', label: 'Họ và Tên', required: true },
-                    { id: 'dob', type: 'date', label: 'Ngày sinh', placeholder: 'DD/MM/YYYY', required: true },
-                    { id: 'gender', type: 'select', label: 'Giới tính', options: [
-                        { value: 'Nam', label: 'Nam' },
-                        { value: 'Nữ', label: 'Nữ' }
-                    ]}
-                ]
             },
             
             feeDisplayTemplate: 'STBH: {stbhBase} | Phí: {premium}',
