@@ -1757,7 +1757,6 @@ function getProductLabel(key) {
 // ===== MODULE: MIỄN ĐÓNG PHÍ 3.0 (NEW, RESTRUCTURED & ROBUST)
 // ===================================================================================
 // ===== THAY THẾ TOÀN BỘ window.MDP3 trong logic.js =====
-import { WAIVER_PRODUCTS, getEnabledWaiverProducts } from './structure.js';
 
 // ===== WAIVER MANAGER - Quản lý TẤT CẢ sản phẩm miễn đóng phí =====
 window.WaiverManager = (function () {
