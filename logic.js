@@ -935,28 +935,48 @@ function initOccupationAutocomplete(input, container) {
     if (riskGroupSpan) riskGroupSpan.textContent = occ.group;
     clearFieldError(input);
     autocompleteContainer.classList.add('hidden');
+    autocompleteContainer.innerHTML = ''; // Dọn dẹp danh sách
     runWorkflow();
   };
+  
+  // Dùng một listener duy nhất cho cả khung chứa (Event Delegation)
+  autocompleteContainer.addEventListener('mousedown', (e) => {
+      // Chỉ xử lý khi bấm vào một mục nghề nghiệp
+      if (e.target && e.target.matches('.autocomplete-item')) {
+          e.preventDefault(); // Ngăn input bị mất focus trước khi click được xử lý
+          const occName = e.target.textContent;
+          const selectedOcc = product_data.occupations.find(o => o.name === occName);
+          if (selectedOcc) {
+              applyOccupation(selectedOcc);
+          }
+      }
+  });
 
   input.addEventListener('input', () => {
     const value = input.value.trim().toLowerCase();
-    if (value.length < 2) { autocompleteContainer.classList.add('hidden'); return; }
+    if (value.length < 2) {
+      autocompleteContainer.classList.add('hidden');
+      autocompleteContainer.innerHTML = '';
+      return;
+    }
     const filtered = product_data.occupations.filter(o => o.group > 0 && o.name.toLowerCase().includes(value));
+    
+    // Chỉ tạo chuỗi HTML, không gắn listener ở đây
     autocompleteContainer.innerHTML = filtered.map(occ => {
-        const item = document.createElement('div');
-        item.className = 'p-2 hover:bg-gray-100 cursor-pointer';
-        item.textContent = occ.name;
-        item.addEventListener('mousedown', (ev) => { ev.preventDefault(); applyOccupation(occ); });
-        return item.outerHTML;
+      // Thêm class 'autocomplete-item' để dễ bắt sự kiện
+      return `<div class="p-2 hover:bg-gray-100 cursor-pointer autocomplete-item">${occ.name}</div>`;
     }).join('');
+
     autocompleteContainer.classList.remove('hidden');
   });
 
   input.addEventListener('blur', () => {
-    setTimeout(() => { autocompleteContainer.classList.add('hidden'); }, 200);
+    // Ẩn danh sách sau một khoảng trễ ngắn để sự kiện mousedown kịp chạy
+    setTimeout(() => {
+      autocompleteContainer.classList.add('hidden');
+    }, 200);
   });
 }
-
 function initDateFormatter(input) {
   if (!input) return;
   input.addEventListener('input', (e) => {
