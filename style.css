@@ -1,3 +1,5 @@
+
+
 :root {
   --aia-red: #D9232D;
   --gray-50: #fafafa;
@@ -110,6 +112,7 @@ input[type="number"] { -moz-appearance: textfield; }
   color: #dc2626;
   font-size: 12.5px;
   margin-top: 4px;
+  min-height: 1px;
 }
 .border-red-500 { border-color: #ef4444 !important; }
 
@@ -134,9 +137,25 @@ input[type="number"] { -moz-appearance: textfield; }
   min-height: 1.5rem;
 }
 
-/* Modal */
-#summary-modal.hidden { display: none; }
-#summary-modal { display: flex; }
+/* Modal Viewer */
+.modal-container {
+  transition: opacity 0.3s ease-in-out;
+}
+.modal-container.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.modal-container.loading #viewer-iframe {
+    opacity: 0.5;
+}
+
+#close-viewer-modal-btn {
+  z-index: 110; 
+  position: absolute; 
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
 
 /* Customize frequency breakdown display */
 #frequency-breakdown > div {
@@ -360,22 +379,4 @@ input[type="number"] { -moz-appearance: textfield; }
   .img-lightbox-nav button{
     transition:none !important;
   }
-}
-/* Thêm đoạn này vào file CSS của bạn */
-.modal-container.loading #viewer-iframe {
-    /* Tạm thời làm mờ iframe khi đang tải */
-    opacity: 0.5;
-    /* Có thể thêm một spinner ở đây nếu muốn */
-}
-/* SỬA LỖI HIỂN THỊ NÚT ĐÓNG MODAL TRÊN MOBILE */
-#close-viewer-modal-btn {
-  /* Buộc nút phải nằm ở lớp trên cùng, cao hơn cả iframe */
-  z-index: 110; 
-
-  /* Đảm bảo trình duyệt mobile không hiểu sai về vị trí */
-  position: absolute; 
-
-  /* Fix một số lỗi cảm ứng trên iOS, giúp nút dễ bấm hơn */
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
 }
