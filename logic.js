@@ -859,7 +859,7 @@ function initSupplementaryButton() {
         });
         
         initPerson(newPersonState);
-        window.MDP3.updateOptions();
+        window.WaiverManager.updateAllOptions();
         runWorkflow();
     });
 }
