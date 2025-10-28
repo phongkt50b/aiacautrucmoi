@@ -1135,7 +1135,7 @@ function openFullViewer() {
 
     } catch (e) {
         console.error('[FullViewer] Error creating payload:', e);
-        alert('Không tạo được dữ liệu để mở bảng minh họa.');
+        alert('Không tạo được dữ liệu để mở bảng minh họa.\n\nLỗi: ' + e.message);
     }
 }
 function getHealthSclStbhByProgram(program) {
@@ -1145,6 +1145,18 @@ function getHealthSclStbhByProgram(program) {
 function buildViewerPayload() {
   const mainPerson = appState.persons.find(p => p.isMain);
   const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+
+  // New check for inconsistent MDP state
+  if (window.MDP3 && MDP3.isEnabled()) {
+    const targetPerson = MDP3.getTargetPersonInfo();
+    // Check if a fee for MDP exists anywhere in the state
+    const mdpFeeInState = (appState.fees.totalSupp > 0) && Object.values(appState.fees.byPerson).some(p => p.suppDetails?.mdp3 > 0);
+    
+    // If a fee exists but we can't find the person it applies to, it's an error.
+    if (mdpFeeInState && !targetPerson) {
+        throw new Error("Dữ liệu Miễn Đóng Phí không nhất quán. Vui lòng bỏ chọn rồi chọn lại người được miễn đóng phí để cập nhật.");
+    }
+  }
 
   const riderList = [];
   appState.persons.forEach(person => {
@@ -1842,14 +1854,10 @@ window.MDP3 = (function () {
     }
 
     function getStbhBase() {
-        const mdpTargetId = selectedId; // FIX 1: ReferenceError
-        
-        // FIX 2: Correctly implement formula to avoid stale data issues.
-        // The STBH base is (Total Premium - MDP Fee) - (Target Person's Supp Fees - their MDP fee part).
+        const mdpTargetId = selectedId;
         
         let oldMdpFee = 0;
         if (appState.fees && appState.fees.byPerson) {
-            // Find the MDP fee from the last calculation cycle, regardless of who it was on.
             for (const personId in appState.fees.byPerson) {
                 const details = appState.fees.byPerson[personId].suppDetails;
                 if (details && details.mdp3) {
@@ -1859,14 +1867,12 @@ window.MDP3 = (function () {
             }
         }
         
-        // This is the total premium of all products *except* MDP
         const totalPremiumWithoutMdp = (appState.fees.total || 0) - oldMdpFee;
     
         let targetPersonSuppFeesWithoutMdp = 0;
         if (mdpTargetId && mdpTargetId !== 'other' && appState.fees.byPerson && appState.fees.byPerson[mdpTargetId]) {
             const suppDetails = appState.fees.byPerson[mdpTargetId].suppDetails || {};
             for (const rider in suppDetails) {
-                // Sum up all supp fees for the target person, but exclude the MDP fee itself
                 if (rider !== 'mdp3') {
                     targetPersonSuppFeesWithoutMdp += suppDetails[rider];
                 }
