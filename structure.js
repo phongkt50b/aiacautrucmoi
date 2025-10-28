@@ -66,6 +66,7 @@ export const PRODUCT_CATALOG = {
             controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
                   validate: ({ value: stbh, basePremium }) => {
+                    if (!stbh || stbh <= 0) return 'Vui lòng nhập Số tiền bảo hiểm';
                     if (stbh > 0 && stbh < 100000000) return 'STBH tối thiểu 100.000.000';
                     if (stbh < 1000000000 && basePremium > 0 && basePremium < 20000000) return 'Với STBH < 1 tỷ, phí tối thiểu là 20.000.000';
                     if (stbh >= 1000000000 && basePremium > 0 && basePremium < 5000000) return 'Với STBH >= 1 tỷ, phí tối thiểu là 5.000.000';
@@ -123,6 +124,7 @@ export const PRODUCT_CATALOG = {
              controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
                   validate: ({ value: stbh, basePremium }) => {
+                    if (!stbh || stbh <= 0) return 'Vui lòng nhập Số tiền bảo hiểm';
                     if (stbh > 0 && stbh < 100000000) return 'STBH tối thiểu 100.000.000';
                     if (stbh < 1000000000 && basePremium > 0 && basePremium < 20000000) return 'Với STBH < 1 tỷ, phí tối thiểu là 20.000.000';
                     if (stbh >= 1000000000 && basePremium > 0 && basePremium < 5000000) return 'Với STBH >= 1 tỷ, phí tối thiểu là 5.000.000';
@@ -180,6 +182,7 @@ export const PRODUCT_CATALOG = {
              controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
                   validate: ({ value: stbh, basePremium }) => {
+                    if (!stbh || stbh <= 0) return 'Vui lòng nhập Số tiền bảo hiểm';
                     if (stbh > 0 && stbh < 100000000) return 'STBH tối thiểu 100.000.000';
                     if (stbh < 1000000000 && basePremium > 0 && basePremium < 20000000) return 'Với STBH < 1 tỷ, phí tối thiểu là 20.000.000';
                     if (stbh >= 1000000000 && basePremium > 0 && basePremium < 5000000) return 'Với STBH >= 1 tỷ, phí tối thiểu là 5.000.000';
