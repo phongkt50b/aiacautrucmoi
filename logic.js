@@ -186,7 +186,7 @@ function performCalculations(state) {
             const prodConfig = PRODUCT_CATALOG[prodId];
             if (!prodConfig?.calculation?.calculate) return;
             
-            const ageOverride = null; // Can be used for projections
+            const ageOverride = null;
             const fee = prodConfig.calculation.calculate({
                 config: prodConfig,
                 customer: person,
@@ -205,7 +205,7 @@ function performCalculations(state) {
         fees.totalSupp += personSuppFee;
     });
 
-    // CREATE SNAPSHOT (The critical part from logic-1.js)
+    // CREATE SNAPSHOT
     window.personFees = {};
     allInsuredPersons.forEach(p => {
         const totalMainForPerson = p.isMain ? (fees.baseMain + fees.extra) : 0;
@@ -237,6 +237,11 @@ function performCalculations(state) {
         }
     });
 
+    // ✅ THÊM DÒNG NÀY
+    fees.totalMain = fees.baseMain + fees.extra;
+    fees.total = fees.totalMain + fees.totalSupp;
+    
+    return fees; // ✅ RETURN
 }
 
 function calculateMainPremium(customer, productInfo) {
