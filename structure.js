@@ -836,3 +836,64 @@ function calculateGenericAccountValueProjection(productConfig, args, helpers) {
         customFull: scenarios.customFull.yearEndValues,
     };
 }
+// ===== THÊM VÀO structure.js =====
+export const MDP3_CONFIG = {
+    name: 'Miễn đóng phí 3.0',
+    productKey: 'mdp3',
+    
+    // UI Configuration
+    ui: {
+        enableCheckboxLabel: 'Bật Miễn đóng phí 3.0',
+        personSelectLabel: 'Áp dụng cho',
+        personSelectPlaceholder: '-- Chọn người --',
+        otherPersonOption: { value: 'other', label: 'Người khác' },
+        
+        // Form cho "Người khác"
+        otherPersonForm: {
+            title: 'Người được miễn đóng phí',
+            fields: [
+                { id: 'name', type: 'text', label: 'Họ và Tên', required: true },
+                { id: 'dob', type: 'date', label: 'Ngày sinh', placeholder: 'DD/MM/YYYY', required: true },
+                { id: 'gender', type: 'select', label: 'Giới tính', options: [
+                    { value: 'Nam', label: 'Nam' },
+                    { value: 'Nữ', label: 'Nữ' }
+                ]}
+            ]
+        },
+        
+        // Display templates
+        feeDisplayTemplate: 'STBH: {stbhBase} | Phí: {premium}',
+        noEligibleMessage: 'STBH: {stbhBase} | Phí: — (Người không hợp lệ)'
+    },
+    
+    // Business Rules
+    rules: {
+        eligibility: {
+            minAge: 18,
+            maxAge: 60,
+            excludeMainPerson: true, // Không áp dụng cho NĐBH chính
+            message: 'Tuổi phải từ 18-60'
+        },
+        
+        // Quy tắc tính STBH cơ sở
+        stbhCalculation: {
+            // Bước 1: Lấy phí chính nếu còn trong kỳ đóng
+            includeMainBasePremium: true,
+            
+            // Bước 2: Cộng tất cả phí rider (trừ MDP3 và rider của người được miễn)
+            includeAllRiders: true,
+            excludeRidersOfWaivedPerson: true, // Trừ phí rider của người được miễn
+            excludeRiderCategories: ['waiver_of_premium'], // Không tính các rider miễn đóng khác
+            
+            // Công thức
+            formula: '(Phí chính + Tất cả phí rider) - Phí rider của người được miễn'
+        }
+    },
+    
+    // Validation Messages
+    validationMessages: {
+        noPersonSelected: 'Vui lòng chọn người được miễn đóng phí',
+        invalidAge: 'Tuổi phải từ {minAge}-{maxAge}',
+        invalidDob: 'Ngày sinh không hợp lệ'
+    }
+};
