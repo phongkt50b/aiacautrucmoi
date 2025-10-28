@@ -1,4 +1,5 @@
 
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
@@ -1841,19 +1842,32 @@ window.MDP3 = (function () {
     }
 
     function getStbhBase() {
-        let stbhBase = appState.fees.baseMain + appState.fees.extra;
-        const mdpTargetId = getSelectedId();
-
-        for (const personId in appState.fees.byPerson) {
-            const personFees = appState.fees.byPerson[personId];
-            if (personId === mdpTargetId) {
-                // For selected person, add main fee (if they are main) but not their supp fees
-                stbhBase += personFees.main;
-            } else {
-                // For others, add all their fees
-                stbhBase += (personFees.main + personFees.supp);
+        const mdpTargetId = selectedId;
+        
+        let oldMdpFee = 0;
+        if (appState.fees && appState.fees.byPerson) {
+            for (const personId in appState.fees.byPerson) {
+                const details = appState.fees.byPerson[personId].suppDetails;
+                if (details && details.mdp3) {
+                    oldMdpFee = details.mdp3;
+                    break;
+                }
             }
         }
+        
+        const totalPremiumWithoutMdp = (appState.fees.total || 0) - oldMdpFee;
+
+        let targetPersonSuppFees = 0;
+        if (mdpTargetId && mdpTargetId !== 'other' && appState.fees.byPerson && appState.fees.byPerson[mdpTargetId]) {
+            const suppDetails = appState.fees.byPerson[mdpTargetId].suppDetails || {};
+            for (const rider in suppDetails) {
+                if (rider !== 'mdp3') {
+                    targetPersonSuppFees += suppDetails[rider];
+                }
+            }
+        }
+        
+        const stbhBase = totalPremiumWithoutMdp - targetPersonSuppFees;
         return Math.max(0, stbhBase);
     }
     
