@@ -218,28 +218,26 @@ function performCalculations(state) {
         };
     });
 
-    // PASS 2: Calculate Waiver of Premium fee using the snapshot
-    if (window.MDP3) {
-        const mdpFee = MDP3.getPremium();
-        if (mdpFee > 0) {
-            fees.totalSupp += mdpFee;
-            const mdpTargetId = MDP3.getSelectedId();
-
-            const personIdForFee = mdpTargetId === 'other' ? 'wop_other' : mdpTargetId;
-            if (personIdForFee) {
-                if (!fees.byPerson[personIdForFee]) {
-                    fees.byPerson[personIdForFee] = { main: 0, supp: 0, total: 0, suppDetails: {} };
-                }
-                fees.byPerson[personIdForFee].supp += mdpFee;
-                fees.byPerson[personIdForFee].suppDetails['mdp3'] = mdpFee;
+    // PASS 2: Calculate ALL Waiver of Premium fees
+    const waiverPremiums = window.WaiverManager.getAllPremiums();
+    
+    Object.entries(waiverPremiums).forEach(([waiverProductId, waiverData]) => {
+        const { premium, targetPerson } = waiverData;
+        
+        if (premium > 0 && targetPerson) {
+            fees.totalSupp += premium;
+            
+            const personIdForFee = targetPerson.id.includes('_other') ? targetPerson.id : targetPerson.id;
+            
+            if (!fees.byPerson[personIdForFee]) {
+                fees.byPerson[personIdForFee] = { main: 0, supp: 0, total: 0, suppDetails: {} };
             }
+            
+            fees.byPerson[personIdForFee].supp += premium;
+            fees.byPerson[personIdForFee].suppDetails[waiverProductId] = premium;
         }
-    }
+    });
 
-
-    const totalMain = fees.baseMain + fees.extra;
-    const total = totalMain + fees.totalSupp;
-    return { ...fees, totalMain, total };
 }
 
 function calculateMainPremium(customer, productInfo) {
