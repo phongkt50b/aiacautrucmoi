@@ -1088,10 +1088,8 @@ function renderSuppListSummary() {
 
   const getPersonName = (id) => {
     if (id && id.includes('_other')) {
-        const configId = id.split('_')[0]; // e.g., 'mdp3'
-        const form = document.getElementById(`person-container-${configId}-other`);
-        const personData = form ? collectPersonData(form, false, true) : null;
-        // Return entered name, or a default label if name is empty
+        const waiverInstance = window.WaiverManager.getInstance(id.split('_')[0]);
+        const personData = waiverInstance ? waiverInstance.getTargetPersonInfo() : null;
         return (personData && personData.name && personData.name !== 'Người khác') ? personData.name : 'Người được miễn đóng phí';
     }
     return appState.persons.find(p => p.id === id)?.name || 'Người không xác định';
@@ -1294,8 +1292,18 @@ function buildSummaryData() {
 
 function buildPart1RowsData(ctx) {
     const { persons, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, mdpEnabled, mdpTarget } = ctx;
-    const mainAge = persons.find(p => p.isMain)?.age || 0;
-    const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
+    const mainPerson = persons.find(p => p.isMain);
+    const mainAge = mainPerson?.age || 0;
+    const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 99);
+
+    const mainProductConfig = PRODUCT_CATALOG[productKey];
+    let mainContractTerm = 99 - mainAge; // Default for UL products (Khoẻ Trọn Vẹn, Khoẻ Bình An)
+    if (mainProductConfig) {
+        // For Traditional (An Bình Ưu Việt) and Packages (Trọn Tâm An), the contract term equals the premium payment term.
+        if (mainProductConfig.group === 'TRADITIONAL' || mainProductConfig.group === 'PACKAGE') {
+            mainContractTerm = paymentTerm;
+        }
+    }
 
     let mdpStbhBase = 0;
     if (mdpEnabled && window.WaiverManager.getInstance('mdp3')) {
@@ -1342,7 +1350,9 @@ function buildPart1RowsData(ctx) {
                 if (baseAnnual <= 0) continue;
 
                 const maxA = riderMaxAge(rid);
-                const years = Math.max(0, Math.min(maxA - p.age, targetAge - mainAge) + 1);
+                const potentialRiderTerm = Math.max(0, maxA - p.age);
+                const years = Math.min(mainContractTerm, potentialRiderTerm);
+                
                 let stbh = p.supplements[rid].stbh;
                 let prodName = getProductLabel(rid);
 
@@ -1364,14 +1374,15 @@ function buildPart1RowsData(ctx) {
             const mdpFeeYear = appState.fees.byPerson[personIdForFee]?.suppDetails?.['mdp3'] || 0;
             
             if (mdpFeeYear > 0) {
-                const years = Math.max(0, Math.min(60 - p.age, targetAge - mainAge) + 1);
+                const potentialRiderTerm = Math.max(0, riderMaxAge('mdp3') - p.age);
+                const years = Math.min(mainContractTerm, potentialRiderTerm);
                 pushRow(acc, p.name, 'Miễn đóng phí 3.0', formatCurrency(mdpStbhBase), years, mdpFeeYear, true);
             }
         }
         
         if (acc.base > 0) {
             perPersonTotals.push({ personName: p.name, ...acc });
-            grand.per += acc.per; grand.eq += acc.eq; grand.base += acc.base; grand.diff += acc.diff;
+            grand.per += acc.per; grand.eq += acc.eq; grand.base += acc.base; grand.diff += diff;
         }
     });
 
@@ -1380,11 +1391,20 @@ function buildPart1RowsData(ctx) {
 
 function buildPart2ScheduleRows(ctx) {
     const { persons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, mdpEnabled, mdpTarget } = ctx;
-    const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
+    const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 99);
     const rows = [];
     const baseMainAnnual = appState?.fees?.baseMain || 0;
     const extraAnnual = appState.mainProduct.values['extra-premium'] || 0;
     
+    // Pre-calculate fixed MDP fee, as per user requirement.
+    let mdpFeeForYear = 0;
+    if (mdpEnabled && mdpTarget) {
+        const mdpConfig = PRODUCT_CATALOG['mdp3'];
+        // Use the premium calculated for the first year, which is already in appState.fees
+        const personIdForFee = mdpTarget.id;
+        mdpFeeForYear = appState.fees.byPerson[personIdForFee]?.suppDetails?.['mdp3'] || 0;
+    }
+
     for (let year = 1; mainPerson.age + year - 1 <= targetAge; year++) {
         const currentAge = mainPerson.age + year - 1;
         const inTerm = year <= paymentTerm;
@@ -1397,7 +1417,9 @@ function buildPart2ScheduleRows(ctx) {
             const attained = p.age + year - 1;
             
             const addRider = (key, baseFee) => {
-                if (!baseFee || attained > riderMaxAge(key)) return;
+                const maxAge = riderMaxAge(key);
+                // Fee is applicable for the year the person's age is LESS THAN renewalMax
+                if (!baseFee || attained >= maxAge) return; 
                 sumBase += baseFee;
                 if (!isAnnual) sumPer += Math.round((baseFee * riderFactor) / periods / 1000) * 1000;
             };
@@ -1416,43 +1438,9 @@ function buildPart2ScheduleRows(ctx) {
                      addRider(rid, premiumForYear);
                 }
             }
-
-            if (mdpEnabled && mdpTarget && p.id === mdpTarget.id && attained <= 60) {
-                let mdpStbhBaseForYear = 0;
-                
-                if (inTerm) {
-                    mdpStbhBaseForYear += baseMainAnnual;
-                }
-                
-                persons.forEach(otherP => {
-                    if (otherP.id === p.id || !otherP.supplements) return;
-                    const otherAttained = otherP.age + year - 1;
-                    
-                    for(const rid in otherP.supplements) {
-                        const prodConfig = PRODUCT_CATALOG[rid];
-                        if (!prodConfig || !prodConfig.calculation.calculate) continue;
-                        if (otherAttained > riderMaxAge(rid)) continue;
-                        
-                        const otherPremium = prodConfig.calculation.calculate({ 
-                            config: prodConfig, 
-                            customer: otherP, 
-                            ageOverride: otherAttained, 
-                            mainPremium: baseMainAnnual, 
-                            totalHospitalSupportStbh: 0 
-                        });
-                        mdpStbhBaseForYear += otherPremium;
-                    }
-                });
-                
-                const mdpConfig = PRODUCT_CATALOG['mdp3'];
-                if (mdpConfig && mdpConfig.calculation.calculate) {
-                    const mdpFeeForYear = mdpConfig.calculation.calculate(
-                        { ...p, age: attained }, 
-                        mdpStbhBaseForYear,
-                        { data: product_data, roundDownTo1000 }
-                    );
-                    addRider('mdp3', mdpFeeForYear);
-                }
+            // Use pre-calculated fixed MDP fee for every applicable year
+            if (mdpEnabled && mdpTarget && p.id === mdpTarget.id) {
+                addRider('mdp3', mdpFeeForYear);
             }
             
             perPersonSuppBase.push(sumBase);
@@ -1784,9 +1772,10 @@ window.WaiverManager = (function () {
             instances[productConfig.id].init();
         });
     }
-    function createWaiverInstance(config) {
+function createWaiverInstance(config) {
     let selectedId = null;
     let lastSelectedId = null;
+    let otherPersonState = { name: '', dob: '', gender: 'Nam', occupation: '', riskGroup: 0 };
     
     return {
         config,
@@ -1849,12 +1838,23 @@ window.WaiverManager = (function () {
                 newContainer.classList.remove('bg-gray-100', 'p-4', 'mt-4');
                 newContainer.querySelector('h3').textContent = config.ui.otherPersonForm.title || 'Thông tin người được miễn đóng phí';
 
+                // Populate form with saved state from cache
+                newContainer.querySelector('.name-input').value = otherPersonState.name;
+                newContainer.querySelector('.dob-input').value = otherPersonState.dob;
+                newContainer.querySelector('.gender-select').value = otherPersonState.gender;
+                const occInput = newContainer.querySelector('.occupation-input');
+                occInput.value = otherPersonState.occupation || '';
+                occInput.dataset.group = otherPersonState.riskGroup || 0;
+                
                 otherFormWrapper.appendChild(clone);
                 
                 const newFormEl = document.getElementById(newContainer.id);
                 if (newFormEl) {
                     initDateFormatter(newFormEl.querySelector('.dob-input'));
                     initOccupationAutocomplete(newFormEl.querySelector('.occupation-input'), newFormEl);
+                    // Add listener to update state and UI on any input
+                    newFormEl.addEventListener('input', runWorkflowDebounced);
+                    newFormEl.addEventListener('change', runWorkflowDebounced);
                 }
             }
             
@@ -1888,7 +1888,7 @@ window.WaiverManager = (function () {
             const opt = selEl.querySelector(`option[value="${currentSelectedValue}"]`);
             if (opt && !opt.disabled) {
                 selEl.value = currentSelectedValue;
-            } else {
+            } else if (selEl.value) { // if something was selected but now it's invalid
                 selectedId = null;
             }
         },
@@ -2002,7 +2002,18 @@ window.WaiverManager = (function () {
             if (!selectedId) return null;
             if (selectedId === 'other') {
                 const otherForm = document.getElementById(`person-container-${config.id}-other`);
-                return otherForm ? { ...collectPersonData(otherForm, false, true), id: `${config.id}_other` } : null;
+                if (!otherForm) return null;
+
+                // Update cache state from DOM before returning data
+                otherPersonState.name = otherForm.querySelector('.name-input')?.value || '';
+                otherPersonState.dob = otherForm.querySelector('.dob-input')?.value || '';
+                otherPersonState.gender = otherForm.querySelector('.gender-select')?.value || 'Nam';
+                const occInput = otherForm.querySelector('.occupation-input');
+                otherPersonState.occupation = occInput?.value || '';
+                otherPersonState.riskGroup = parseInt(occInput?.dataset.group, 10) || 0;
+                
+                const collected = collectPersonData(otherForm, false, true);
+                return { ...collected, id: `${config.id}_other` };
             }
             return appState.persons.find(p => p.id === selectedId) || null;
         },
@@ -2054,6 +2065,7 @@ window.WaiverManager = (function () {
                     if (e.target.checked) {
                         optionsContainer.classList.remove('hidden');
                         self.renderOptions();
+                        // Restore last selection if it exists and is valid
                         if (lastSelectedId) {
                             const selEl = document.getElementById(`${config.id}-person-select`);
                             if (selEl) {
@@ -2061,6 +2073,9 @@ window.WaiverManager = (function () {
                                 if (opt && !opt.disabled) {
                                     selEl.value = lastSelectedId;
                                     selectedId = lastSelectedId;
+                                    if(selectedId === 'other') {
+                                        document.getElementById(`${config.id}-other-form`).classList.remove('hidden');
+                                    }
                                 }
                             }
                         }
@@ -2074,7 +2089,7 @@ window.WaiverManager = (function () {
                 
                 if (e.target.id === `${config.id}-person-select`) {
                     selectedId = e.target.value;
-                    lastSelectedId = selectedId || null;
+                    lastSelectedId = selectedId || null; // Update cache
                     
                     const otherForm = document.getElementById(`${config.id}-other-form`);
                     if (otherForm) {
