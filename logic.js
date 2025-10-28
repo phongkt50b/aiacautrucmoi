@@ -1700,7 +1700,7 @@ function getProductLabel(key) {
 }
 
 // ===================================================================================
-// ===== MODULE: MIỄN ĐÓNG PHÍ 3.0 (NEW, RESTRUCTURED)
+// ===== MODULE: MIỄN ĐÓNG PHÍ 3.0 (NEW, RESTRUCTURED & ROBUST)
 // ===================================================================================
 window.MDP3 = (function () {
     let selectedId = null;
@@ -1854,40 +1854,38 @@ window.MDP3 = (function () {
         }
     }
 
+    function getStbhBase() {
+        if (!isEnabled() || !window.personFees) return 0;
+        
+        let stbhBase = 0;
+        
+        // Sum up main base premium and all non-MDP supplementary premiums from the clean snapshot
+        for (const pid in window.personFees) {
+            if (pid === 'wop_other') continue; 
+            const pf = window.personFees[pid];
+            stbhBase += (pf.mainBase || 0) + (pf.supp || 0);
+        }
+        
+        // Subtract the non-MDP supplementary premiums of the person being waived
+        if (selectedId && selectedId !== 'other' && window.personFees[selectedId]) {
+            stbhBase -= (window.personFees[selectedId].supp || 0);
+        }
+        
+        return Math.max(0, stbhBase);
+    }
+
     function getPremium() {
         const feeEl = document.getElementById('mdp3-fee-display');
-        if (!isEnabled() || !selectedId || !window.personFees) {
+        if (!isEnabled() || !selectedId) {
             if (feeEl) feeEl.textContent = '';
             return 0;
         }
 
-        let stbhBase = 0;
-        const feesModel = appState.fees; // This is the fees from the *previous* render cycle
-        
-        // Sum up main premium + all rider premiums (which don't include MDP3 yet at this stage)
-        // This logic is adapted from logic-1.js for robustness.
-        for (const pid in window.personFees) {
-            if (pid === 'wop_other') continue; 
-            const pf = window.personFees[pid];
-            // This part is to make the calculation idempotent. Subtract any old MDP fee.
-            const mdp3Part = feesModel?.byPerson?.[pid]?.suppDetails?.mdp3 || 0;
-            const suppNet = (pf.supp || 0) - mdp3Part;
-            stbhBase += (pf.mainBase || 0) + Math.max(0, suppNet);
-        }
-        
-        // Subtract the rider premiums of the person being waived
-        if (selectedId && selectedId !== 'other' && window.personFees[selectedId]) {
-            const mdp3Part = feesModel?.byPerson?.[selectedId]?.suppDetails?.mdp3 || 0;
-            const suppNet = (window.personFees[selectedId].supp || 0) - mdp3Part;
-            stbhBase -= Math.max(0, suppNet);
-        }
-        
-        if (stbhBase < 0) stbhBase = 0;
-
+        const stbhBase = getStbhBase();
         const personInfo = getTargetPersonInfo();
 
         if (!personInfo || !personInfo.age || personInfo.age < 18 || personInfo.age > 60) {
-            if(feeEl) feeEl.textContent = `STBH: ${formatCurrency(stbhBase)} | Phí: — (Người không hợp lệ)`;
+            if (feeEl) feeEl.textContent = `STBH: ${formatCurrency(stbhBase)} | Phí: — (Người không hợp lệ)`;
             return 0;
         }
         
@@ -1900,29 +1898,6 @@ window.MDP3 = (function () {
                 : `STBH: ${formatCurrency(stbhBase)} | Phí: —`;
         }
         return premium;
-    }
-    
-    function getStbhBase() { // Helper for summary table
-        if (!isEnabled() || !selectedId || !window.personFees) return 0;
-        
-        let stbhBase = 0;
-        const feesModel = appState.fees;
-        
-        for (const pid in window.personFees) {
-            if (pid === 'wop_other') continue;
-            const pf = window.personFees[pid];
-            const mdp3Part = feesModel?.byPerson?.[pid]?.suppDetails?.mdp3 || 0;
-            const suppNet = (pf.supp || 0) - mdp3Part;
-            stbhBase += (pf.mainBase || 0) + Math.max(0, suppNet);
-        }
-        
-        if (selectedId && selectedId !== 'other' && window.personFees[selectedId]) {
-            const mdp3Part = feesModel?.byPerson?.[selectedId]?.suppDetails?.mdp3 || 0;
-            const suppNet = (window.personFees[selectedId].supp || 0) - mdp3Part;
-            stbhBase -= Math.max(0, suppNet);
-        }
-        
-        return Math.max(0, stbhBase);
     }
 
     function validate() {
