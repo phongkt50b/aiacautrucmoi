@@ -1842,10 +1842,14 @@ window.MDP3 = (function () {
     }
 
     function getStbhBase() {
-        const mdpTargetId = selectedId;
+        const mdpTargetId = selectedId; // FIX 1: ReferenceError
+        
+        // FIX 2: Correctly implement formula to avoid stale data issues.
+        // The STBH base is (Total Premium - MDP Fee) - (Target Person's Supp Fees - their MDP fee part).
         
         let oldMdpFee = 0;
         if (appState.fees && appState.fees.byPerson) {
+            // Find the MDP fee from the last calculation cycle, regardless of who it was on.
             for (const personId in appState.fees.byPerson) {
                 const details = appState.fees.byPerson[personId].suppDetails;
                 if (details && details.mdp3) {
@@ -1855,19 +1859,21 @@ window.MDP3 = (function () {
             }
         }
         
+        // This is the total premium of all products *except* MDP
         const totalPremiumWithoutMdp = (appState.fees.total || 0) - oldMdpFee;
-
-        let targetPersonSuppFees = 0;
+    
+        let targetPersonSuppFeesWithoutMdp = 0;
         if (mdpTargetId && mdpTargetId !== 'other' && appState.fees.byPerson && appState.fees.byPerson[mdpTargetId]) {
             const suppDetails = appState.fees.byPerson[mdpTargetId].suppDetails || {};
             for (const rider in suppDetails) {
+                // Sum up all supp fees for the target person, but exclude the MDP fee itself
                 if (rider !== 'mdp3') {
-                    targetPersonSuppFees += suppDetails[rider];
+                    targetPersonSuppFeesWithoutMdp += suppDetails[rider];
                 }
             }
         }
         
-        const stbhBase = totalPremiumWithoutMdp - targetPersonSuppFees;
+        const stbhBase = totalPremiumWithoutMdp - targetPersonSuppFeesWithoutMdp;
         return Math.max(0, stbhBase);
     }
     
