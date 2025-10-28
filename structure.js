@@ -1,38 +1,55 @@
 
-
 /**
- * @file data.js
+ * @file structure.js
  * @description
- * Tệp này chứa tất cả dữ liệu cấu hình cho các sản phẩm bảo hiểm, được thiết kế theo kiến trúc "hướng dữ liệu".
- * - GLOBAL_CONFIG: Chứa tất cả các hằng số và quy tắc nghiệp vụ toàn cục.
- * - PRODUCT_CATALOG: "Bộ não" của ứng dụng, định nghĩa tất cả sản phẩm (chính, bổ sung, gói).
- *   Mỗi sản phẩm là một "bản thiết kế" chi tiết mà logic.js sẽ đọc để tự động render UI, áp dụng quy tắc và tính phí.
+ * Tệp này là "bộ não" của ứng dụng, chứa tất cả dữ liệu cấu hình cho các sản phẩm bảo hiểm.
+ * - GLOBAL_CONFIG: Các hằng số và quy tắc nghiệp vụ toàn cục.
+ * - PRODUCT_CATALOG: Định nghĩa tất cả sản phẩm. Mỗi sản phẩm là một "bản thiết kế" chi tiết 
+ *   mà logic.js sẽ đọc để tự động render UI, áp dụng quy tắc và tính phí.
  */
 import { product_data, investment_data } from './data.js';
 
 function formatCurrency(value) {
     return Number(value || 0).toLocaleString('vi-VN');
 }
+function roundDownTo1000(n) {
+    return Math.floor(Number(n || 0) / 1000) * 1000;
+}
 // ===================================================================================
-// ===== CẤU HÌNH TOÀN CỤC (GLOBAL CONFIG & BUSINESS RULES)
+// ===== CẤU HÌNH TOÀN CỤC
 // ===================================================================================
 export const GLOBAL_CONFIG = {
     REFERENCE_DATE: new Date(),
     MAX_SUPPLEMENTARY_INSURED: 10,
-    MAIN_PRODUCT_MIN_PREMIUM: 5000000,
-    MAIN_PRODUCT_MIN_STBH: 100000000,
-    PUL_MIN_PREMIUM_OR: 20000000,
-    PUL_MIN_STBH_OR: 1000000000,
-    EXTRA_PREMIUM_MAX_FACTOR: 5,
+    HOSPITAL_SUPPORT_STBH_MULTIPLE: 100000,
     PAYMENT_FREQUENCY_THRESHOLDS: {
         half: 7000000,
         quarter: 8000000,
     },
-    HOSPITAL_SUPPORT_STBH_MULTIPLE: 100000,
 };
 
 // ===================================================================================
-// ===== BỘ NÃO CỦA ỨNG DỤNG: CATALOG SẢN PHẨM (PRODUCT_CATALOG)
+// ===== HELPER FUNCTIONS (used inside PRODUCT_CATALOG)
+// ===================================================================================
+const HELPERS = {
+    data: product_data,
+    roundDownTo1000,
+    findRate: (tablePath, age, genderKey, ageField = 'age') => {
+        let table = tablePath.split('.').reduce((obj, key) => obj?.[key], product_data);
+        return table?.find(r => r[ageField] === age)?.[genderKey] || 0;
+    },
+    findRateByRange: (tablePath, age, genderKey) => {
+        let table = tablePath.split('.').reduce((obj, key) => obj?.[key], product_data);
+        return table?.find(r => age >= r.ageMin && age <= r.ageMax)?.[genderKey] || 0;
+    },
+    findRateByTerm: (tablePath, term, age, genderKey) => {
+        let table = tablePath.split('.').reduce((obj, key) => obj?.[key], product_data);
+        return table?.[term]?.find(r => r.age === age)?.[genderKey] || 0;
+    }
+};
+
+// ===================================================================================
+// ===== BỘ NÃO CỦA ỨNG DỤNG: CATALOG SẢN PHẨM
 // ===================================================================================
 export const PRODUCT_CATALOG = {
     // =======================================================================
@@ -46,42 +63,53 @@ export const PRODUCT_CATALOG = {
         group: 'PUL',
         ui: {
             controls: [
-                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true, validationMessages: { required: 'Vui lòng nhập STBH'}},
-                { type: 'numberInput', id: 'payment-term', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 20', required: true, defaultValue: 20, getMinMax: (age) => ({ min: 4, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`, validationMessages: { required: 'Vui lòng nhập thời gian đóng phí', range: ({min, max}) => `Nhập từ ${min} đến ${max} năm` } },
-                { type: 'currencyInput', id: 'extra-premium', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa ${GLOBAL_CONFIG.EXTRA_PREMIUM_MAX_FACTOR} lần phí chính.`, validationMessages: { max: (factor) => `Tối đa ${factor} lần phí chính` } }
+                { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
+                  validate: ({ value: stbh, basePremium }) => {
+                    if (stbh > 0 && stbh < 100000000) return 'STBH tối thiểu 100.000.000';
+                    if (stbh < 1000000000 && basePremium > 0 && basePremium < 20000000) return 'Với STBH < 1 tỷ, phí tối thiểu là 20.000.000';
+                    if (stbh >= 1000000000 && basePremium > 0 && basePremium < 5000000) return 'Với STBH >= 1 tỷ, phí tối thiểu là 5.000.000';
+                    return null;
+                  }
+                },
+                { id: 'payment-term', type: 'numberInput', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 20', required: true, defaultValue: 20,
+                  getMinMax: (age) => ({ min: 4, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`,
+                  validate: ({ value, customer, config }) => {
+                      if (!value) return 'Vui lòng nhập thời gian đóng phí';
+                      const { min, max } = config.getMinMax(customer.age);
+                      if (value < min || value > max) return `Nhập từ ${min} đến ${max} năm`;
+                      return null;
+                  }
+                },
+                { id: 'extra-premium', type: 'currencyInput', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa 5 lần phí chính.`,
+                  validate: ({ value, basePremium }) => {
+                    if (value > 0 && basePremium > 0 && value > 5 * basePremium) return 'Tối đa 5 lần phí chính';
+                    return null;
+                  }
+                }
             ],
-            validationMessages: {
-                required: 'Vui lòng chọn sản phẩm chính',
-                notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.',
-                ridersDisabled: 'Cần STBH hoặc Phí chính hợp lệ để thêm sản phẩm bổ sung.'
-            }
+            validationMessages: { notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.' }
         },
-        rules: {
-            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ],
-            stbh: { special: 'PUL_ELIGIBILITY' },
-            premium: { special: 'PUL_ELIGIBILITY' },
-            paymentTerm: { min: 4, maxFn: (age) => 100 - age, default: 20 },
-            extraPremium: { maxFactorOfBase: 5 }
-        },
+        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ] },
         calculation: {
-            calculate: (prodConfig, customer, productInfo, helpers) => {
-                if (productInfo.stbh === 0) return 0;
+            calculate: ({ productInfo, customer }) => {
+                if (!productInfo.values['main-stbh']) return 0;
                 const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
-                const rate = helpers.findRate('pul_rates.PUL_TRON_DOI', customer.age, genderKey);
-                const premium = Math.round((productInfo.stbh / 1000) * rate);
-                return helpers.roundDownTo1000(premium);
+                const rate = HELPERS.findRate('pul_rates.PUL_TRON_DOI', customer.age, genderKey);
+                const premium = Math.round((productInfo.values['main-stbh'] / 1000) * rate);
+                return HELPERS.roundDownTo1000(premium);
             }
         },
         accountValue: {
             enabled: true,
-            costOfInsuranceRef: 'pul_cost_of_insurance_rates',
-            initialFeeRef: 'PUL_TRON_DOI',
-            persistencyBonusRef: 'persistency_bonus',
-            guaranteedInterestRef: 'guaranteed_interest_rates',
-            useGuaranteedInterest: true,
-            includeExtraPremium: true,
-            bonusType: 'standard_pul',
             calculateProjection: calculateGenericAccountValueProjection,
+            config: {
+                costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+                initialFeeRef: 'PUL_TRON_DOI',
+                persistencyBonusRef: 'persistency_bonus',
+                guaranteedInterestRef: 'guaranteed_interest_rates',
+                includeExtraPremium: true,
+                bonusType: 'standard_pul',
+            }
         }
     },
 
@@ -91,43 +119,54 @@ export const PRODUCT_CATALOG = {
         slug: 'khoe-tron-ven',
         group: 'PUL',
         ui: {
-            controls: [
-                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true, validationMessages: { required: 'Vui lòng nhập STBH'}},
-                { type: 'numberInput', id: 'payment-term', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 15', required: true, defaultValue: 15, getMinMax: (age) => ({ min: 15, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`, validationMessages: { required: 'Vui lòng nhập thời gian đóng phí', range: ({min, max}) => `Nhập từ ${min} đến ${max} năm` } },
-                { type: 'currencyInput', id: 'extra-premium', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa ${GLOBAL_CONFIG.EXTRA_PREMIUM_MAX_FACTOR} lần phí chính.`, validationMessages: { max: (factor) => `Tối đa ${factor} lần phí chính` } }
+             controls: [
+                { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
+                  validate: ({ value: stbh, basePremium }) => {
+                    if (stbh > 0 && stbh < 100000000) return 'STBH tối thiểu 100.000.000';
+                    if (stbh < 1000000000 && basePremium > 0 && basePremium < 20000000) return 'Với STBH < 1 tỷ, phí tối thiểu là 20.000.000';
+                    if (stbh >= 1000000000 && basePremium > 0 && basePremium < 5000000) return 'Với STBH >= 1 tỷ, phí tối thiểu là 5.000.000';
+                    return null;
+                  }
+                },
+                { id: 'payment-term', type: 'numberInput', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 15', required: true, defaultValue: 15,
+                  getMinMax: (age) => ({ min: 15, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`,
+                  validate: ({ value, customer, config }) => {
+                      if (!value) return 'Vui lòng nhập thời gian đóng phí';
+                      const { min, max } = config.getMinMax(customer.age);
+                      if (value < min || value > max) return `Nhập từ ${min} đến ${max} năm`;
+                      return null;
+                  }
+                },
+                { id: 'extra-premium', type: 'currencyInput', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa 5 lần phí chính.`,
+                  validate: ({ value, basePremium }) => {
+                    if (value > 0 && basePremium > 0 && value > 5 * basePremium) return 'Tối đa 5 lần phí chính';
+                    return null;
+                  }
+                }
             ],
-            validationMessages: {
-                required: 'Vui lòng chọn sản phẩm chính',
-                notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.',
-                ridersDisabled: 'Cần STBH hoặc Phí chính hợp lệ để thêm sản phẩm bổ sung.'
-            }
+            validationMessages: { notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.' }
         },
-        rules: {
-            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ],
-            stbh: { special: 'PUL_ELIGIBILITY' },
-            premium: { special: 'PUL_ELIGIBILITY' },
-            paymentTerm: { min: 15, maxFn: (age) => 100 - age, default: 15 },
-            extraPremium: { maxFactorOfBase: 5 }
-        },
+        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ] },
         calculation: {
-            calculate: (prodConfig, customer, productInfo, helpers) => {
-                if (productInfo.stbh === 0) return 0;
+            calculate: ({ productInfo, customer }) => {
+                if (!productInfo.values['main-stbh']) return 0;
                 const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
-                const rate = helpers.findRate('pul_rates.PUL_15NAM', customer.age, genderKey);
-                const premium = Math.round((productInfo.stbh / 1000) * rate);
-                return helpers.roundDownTo1000(premium);
+                const rate = HELPERS.findRate('pul_rates.PUL_15NAM', customer.age, genderKey);
+                const premium = Math.round((productInfo.values['main-stbh'] / 1000) * rate);
+                return HELPERS.roundDownTo1000(premium);
             }
         },
         accountValue: {
             enabled: true,
-            costOfInsuranceRef: 'pul_cost_of_insurance_rates',
-            initialFeeRef: 'PUL_15NAM',
-            persistencyBonusRef: 'persistency_bonus',
-            guaranteedInterestRef: 'guaranteed_interest_rates',
-            useGuaranteedInterest: true,
-            includeExtraPremium: true,
-            bonusType: 'standard_pul',
             calculateProjection: calculateGenericAccountValueProjection,
+            config: {
+                costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+                initialFeeRef: 'PUL_15NAM',
+                persistencyBonusRef: 'persistency_bonus',
+                guaranteedInterestRef: 'guaranteed_interest_rates',
+                includeExtraPremium: true,
+                bonusType: 'standard_pul',
+            }
         }
     },
 
@@ -138,42 +177,53 @@ export const PRODUCT_CATALOG = {
         group: 'PUL',
         ui: {
              controls: [
-                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true, validationMessages: { required: 'Vui lòng nhập STBH'}},
-                { type: 'numberInput', id: 'payment-term', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 5', required: true, defaultValue: 5, getMinMax: (age) => ({ min: 5, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`, validationMessages: { required: 'Vui lòng nhập thời gian đóng phí', range: ({min, max}) => `Nhập từ ${min} đến ${max} năm` } },
-                { type: 'currencyInput', id: 'extra-premium', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa ${GLOBAL_CONFIG.EXTRA_PREMIUM_MAX_FACTOR} lần phí chính.`, validationMessages: { max: (factor) => `Tối đa ${factor} lần phí chính` } }
+                { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
+                  validate: ({ value: stbh, basePremium }) => {
+                    if (stbh > 0 && stbh < 100000000) return 'STBH tối thiểu 100.000.000';
+                    if (stbh < 1000000000 && basePremium > 0 && basePremium < 20000000) return 'Với STBH < 1 tỷ, phí tối thiểu là 20.000.000';
+                    if (stbh >= 1000000000 && basePremium > 0 && basePremium < 5000000) return 'Với STBH >= 1 tỷ, phí tối thiểu là 5.000.000';
+                    return null;
+                  }
+                },
+                { id: 'payment-term', type: 'numberInput', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 5', required: true, defaultValue: 5,
+                  getMinMax: (age) => ({ min: 5, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`,
+                  validate: ({ value, customer, config }) => {
+                      if (!value) return 'Vui lòng nhập thời gian đóng phí';
+                      const { min, max } = config.getMinMax(customer.age);
+                      if (value < min || value > max) return `Nhập từ ${min} đến ${max} năm`;
+                      return null;
+                  }
+                },
+                { id: 'extra-premium', type: 'currencyInput', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa 5 lần phí chính.`,
+                  validate: ({ value, basePremium }) => {
+                    if (value > 0 && basePremium > 0 && value > 5 * basePremium) return 'Tối đa 5 lần phí chính';
+                    return null;
+                  }
+                }
             ],
-            validationMessages: {
-                required: 'Vui lòng chọn sản phẩm chính',
-                notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.',
-                ridersDisabled: 'Cần STBH hoặc Phí chính hợp lệ để thêm sản phẩm bổ sung.'
-            }
+            validationMessages: { notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.' }
         },
-        rules: {
-            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ],
-            stbh: { special: 'PUL_ELIGIBILITY' },
-            premium: { special: 'PUL_ELIGIBILITY' },
-            paymentTerm: { min: 5, maxFn: (age) => 100 - age, default: 5 },
-            extraPremium: { maxFactorOfBase: 5 }
-        },
+        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ] },
         calculation: {
-            calculate: (prodConfig, customer, productInfo, helpers) => {
-                if (productInfo.stbh === 0) return 0;
+            calculate: ({ productInfo, customer }) => {
+                if (!productInfo.values['main-stbh']) return 0;
                 const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
-                const rate = helpers.findRate('pul_rates.PUL_5NAM', customer.age, genderKey);
-                const premium = Math.round((productInfo.stbh / 1000) * rate);
-                return helpers.roundDownTo1000(premium);
+                const rate = HELPERS.findRate('pul_rates.PUL_5NAM', customer.age, genderKey);
+                const premium = Math.round((productInfo.values['main-stbh'] / 1000) * rate);
+                return HELPERS.roundDownTo1000(premium);
             }
         },
         accountValue: {
             enabled: true,
-            costOfInsuranceRef: 'pul_cost_of_insurance_rates',
-            initialFeeRef: 'PUL_5NAM',
-            persistencyBonusRef: 'persistency_bonus',
-            guaranteedInterestRef: 'guaranteed_interest_rates',
-            useGuaranteedInterest: true,
-            includeExtraPremium: true,
-            bonusType: 'standard_pul',
             calculateProjection: calculateGenericAccountValueProjection,
+            config: {
+                costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+                initialFeeRef: 'PUL_5NAM',
+                persistencyBonusRef: 'persistency_bonus',
+                guaranteedInterestRef: 'guaranteed_interest_rates',
+                includeExtraPremium: true,
+                bonusType: 'standard_pul',
+            }
         }
     },
 
@@ -184,38 +234,64 @@ export const PRODUCT_CATALOG = {
         group: 'MUL',
         ui: {
             controls: [
-                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true, validationMessages: { required: 'Vui lòng nhập STBH', min: (val) => `STBH tối thiểu ${formatCurrency(val)}` } },
-                { type: 'currencyInput', id: 'main-premium', label: 'Phí sản phẩm chính', placeholder: 'Nhập phí', hintId: 'mul-fee-range', validationMessages: { required: 'Vui lòng nhập phí sản phẩm chính', invalid: 'Phí không hợp lệ so với STBH', min: (val) => `Phí tối thiểu ${formatCurrency(val)}`, rangeHint: ({min, max}) => `Phí hợp lệ từ ${min} đến ${max}.` } },
-                { type: 'numberInput', id: 'payment-term', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 20', required: true, defaultValue: 20, getMinMax: (age) => ({ min: 4, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`, validationMessages: { required: 'Vui lòng nhập thời gian đóng phí', range: ({min, max}) => `Nhập từ ${min} đến ${max} năm` } },
-                { type: 'currencyInput', id: 'extra-premium', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa ${GLOBAL_CONFIG.EXTRA_PREMIUM_MAX_FACTOR} lần phí chính.`, validationMessages: { max: (factor) => `Tối đa ${factor} lần phí chính` } }
+                { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
+                  validate: ({ value }) => value < 100000000 ? 'STBH tối thiểu 100.000.000' : null,
+                },
+                { id: 'main-premium', type: 'currencyInput', label: 'Phí sản phẩm chính', placeholder: 'Nhập phí', required: true, hintId: 'mul-fee-range',
+                  onRender: ({ el, allValues, customer }) => {
+                      const stbh = allValues['main-stbh'] || 0;
+                      const factorRow = HELPERS.data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
+                      if (stbh > 0 && factorRow) {
+                          const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
+                          const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
+                          el.parentElement.querySelector('#mul-fee-range').textContent = `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
+                      } else {
+                          el.parentElement.querySelector('#mul-fee-range').textContent = '';
+                      }
+                  },
+                  validate: ({ value, allValues, customer }) => {
+                      if (!value) return 'Vui lòng nhập phí sản phẩm chính';
+                      if (value < 5000000) return 'Phí tối thiểu 5.000.000';
+                      const stbh = allValues['main-stbh'] || 0;
+                      const factorRow = HELPERS.data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
+                      if (stbh > 0 && factorRow) {
+                          const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
+                          const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
+                          if (value < minFee || value > maxFee) return 'Phí không hợp lệ so với STBH';
+                      }
+                      return null;
+                  }
+                },
+                { id: 'payment-term', type: 'numberInput', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 20', required: true, defaultValue: 20,
+                  getMinMax: (age) => ({ min: 4, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`,
+                  validate: ({ value, customer, config }) => {
+                      if (!value) return 'Vui lòng nhập thời gian đóng phí';
+                      const { min, max } = config.getMinMax(customer.age);
+                      if (value < min || value > max) return `Nhập từ ${min} đến ${max} năm`;
+                      return null;
+                  }
+                },
+                { id: 'extra-premium', type: 'currencyInput', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa 5 lần phí chính.`,
+                  validate: ({ value, basePremium }) => {
+                    if (value > 0 && basePremium > 0 && value > 5 * basePremium) return 'Tối đa 5 lần phí chính';
+                    return null;
+                  }
+                }
             ],
-            validationMessages: {
-                required: 'Vui lòng chọn sản phẩm chính',
-                notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.',
-            }
         },
-        rules: {
-            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ],
-            stbh: { min: 100000000 },
-            premium: { min: 5000000, special: 'MUL_FACTOR_CHECK' },
-            paymentTerm: { min: 4, maxFn: (age) => 100 - age, default: 20 },
-            extraPremium: { maxFactorOfBase: 5 }
-        },
-        calculation: {
-            calculate: (prodConfig, customer, productInfo, helpers) => {
-                return helpers.roundDownTo1000(productInfo.premium);
-            }
-        },
+        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ] },
+        calculation: { calculate: ({ productInfo }) => HELPERS.roundDownTo1000(productInfo.values['main-premium']) },
         accountValue: {
             enabled: true,
-            costOfInsuranceRef: 'mul_cost_of_insurance_rates',
-            initialFeeRef: 'KHOE_BINH_AN',
-            persistencyBonusRef: null,
-            guaranteedInterestRef: 'guaranteed_interest_rates',
-            useGuaranteedInterest: true,
-            includeExtraPremium: false,
-            bonusType: 'mul_periodic',
             calculateProjection: calculateGenericAccountValueProjection,
+            config: {
+                costOfInsuranceRef: 'mul_cost_of_insurance_rates',
+                initialFeeRef: 'KHOE_BINH_AN',
+                persistencyBonusRef: null,
+                guaranteedInterestRef: 'guaranteed_interest_rates',
+                includeExtraPremium: false,
+                bonusType: 'mul_periodic',
+            }
         }
     },
 
@@ -225,39 +301,106 @@ export const PRODUCT_CATALOG = {
         slug: 'vung-tuong-lai',
         group: 'MUL',
         ui: {
-            controls: [
-                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true, validationMessages: { required: 'Vui lòng nhập STBH', min: (val) => `STBH tối thiểu ${formatCurrency(val)}` } },
-                { type: 'currencyInput', id: 'main-premium', label: 'Phí sản phẩm chính', placeholder: 'Nhập phí', hintId: 'mul-fee-range', validationMessages: { required: 'Vui lòng nhập phí sản phẩm chính', invalid: 'Phí không hợp lệ so với STBH', min: (val) => `Phí tối thiểu ${formatCurrency(val)}`, rangeHint: ({min, max}) => `Phí hợp lệ từ ${min} đến ${max}.` } },
-                { type: 'numberInput', id: 'payment-term', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 20', required: true, defaultValue: 20, getMinMax: (age) => ({ min: 4, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`, validationMessages: { required: 'Vui lòng nhập thời gian đóng phí', range: ({min, max}) => `Nhập từ ${min} đến ${max} năm` } },
-                { type: 'currencyInput', id: 'extra-premium', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa ${GLOBAL_CONFIG.EXTRA_PREMIUM_MAX_FACTOR} lần phí chính.`, validationMessages: { max: (factor) => `Tối đa ${factor} lần phí chính` } }
+             controls: [
+                { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
+                  validate: ({ value }) => value < 100000000 ? 'STBH tối thiểu 100.000.000' : null,
+                },
+                { id: 'main-premium', type: 'currencyInput', label: 'Phí sản phẩm chính', placeholder: 'Nhập phí', required: true, hintId: 'mul-fee-range',
+                  onRender: ({ el, allValues, customer }) => {
+                      const stbh = allValues['main-stbh'] || 0;
+                      const factorRow = HELPERS.data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
+                      if (stbh > 0 && factorRow) {
+                          const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
+                          const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
+                          el.parentElement.querySelector('#mul-fee-range').textContent = `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
+                      } else {
+                          el.parentElement.querySelector('#mul-fee-range').textContent = '';
+                      }
+                  },
+                  validate: ({ value, allValues, customer }) => {
+                      if (!value) return 'Vui lòng nhập phí sản phẩm chính';
+                      if (value < 5000000) return 'Phí tối thiểu 5.000.000';
+                      const stbh = allValues['main-stbh'] || 0;
+                      const factorRow = HELPERS.data.mul_factors.find(f => customer.age >= f.ageMin && customer.age <= f.ageMax);
+                      if (stbh > 0 && factorRow) {
+                          const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
+                          const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
+                          if (value < minFee || value > maxFee) return 'Phí không hợp lệ so với STBH';
+                      }
+                      return null;
+                  }
+                },
+                { id: 'payment-term', type: 'numberInput', label: 'Thời gian đóng phí (năm)', placeholder: 'VD: 20', required: true, defaultValue: 20,
+                  getMinMax: (age) => ({ min: 4, max: 100 - age }), hintTextFn: (min, max) => `Nhập từ ${min} đến ${max} năm.`,
+                  validate: ({ value, customer, config }) => {
+                      if (!value) return 'Vui lòng nhập thời gian đóng phí';
+                      const { min, max } = config.getMinMax(customer.age);
+                      if (value < min || value > max) return `Nhập từ ${min} đến ${max} năm`;
+                      return null;
+                  }
+                },
+                { id: 'extra-premium', type: 'currencyInput', label: 'Phí đóng thêm', placeholder: 'VD: 10.000.000', hintText: `Tối đa 5 lần phí chính.`,
+                  validate: ({ value, basePremium }) => {
+                    if (value > 0 && basePremium > 0 && value > 5 * basePremium) return 'Tối đa 5 lần phí chính';
+                    return null;
+                  }
+                }
             ],
-            validationMessages: {
-                required: 'Vui lòng chọn sản phẩm chính',
-                notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.',
-            }
         },
-        rules: {
-            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ],
-            stbh: { min: 100000000 },
-            premium: { min: 5000000, special: 'MUL_FACTOR_CHECK' },
-            paymentTerm: { min: 4, maxFn: (age) => 100 - age, default: 20 },
-            extraPremium: { maxFactorOfBase: 5 }
-        },
-        calculation: {
-             calculate: (prodConfig, customer, productInfo, helpers) => {
-                return helpers.roundDownTo1000(productInfo.premium);
-            }
-        },
+        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ] },
+        calculation: { calculate: ({ productInfo }) => HELPERS.roundDownTo1000(productInfo.values['main-premium']) },
         accountValue: {
             enabled: true,
-            costOfInsuranceRef: 'mul_cost_of_insurance_rates',
-            initialFeeRef: 'VUNG_TUONG_LAI',
-            persistencyBonusRef: null,
-            guaranteedInterestRef: 'guaranteed_interest_rates',
-            useGuaranteedInterest: true,
-            includeExtraPremium: false,
-            bonusType: 'mul_periodic',
             calculateProjection: calculateGenericAccountValueProjection,
+            config: {
+                costOfInsuranceRef: 'mul_cost_of_insurance_rates',
+                initialFeeRef: 'VUNG_TUONG_LAI',
+                persistencyBonusRef: null,
+                guaranteedInterestRef: 'guaranteed_interest_rates',
+                includeExtraPremium: false,
+                bonusType: 'mul_periodic',
+            }
+        }
+    },
+
+    'AN_BINH_UU_VIET': {
+        type: 'main',
+        name: 'An Bình Ưu Việt',
+        slug: 'an-binh-uu-viet',
+        group: 'TRADITIONAL',
+        ui: {
+            controls: [
+                { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 100.000.000', required: true, 
+                  validate: ({ value }) => value < 100000000 ? 'STBH tối thiểu 100.000.000' : null 
+                },
+                { id: 'abuv-term', type: 'select', label: 'Thời hạn đóng phí', required: true, hintText: 'Thời hạn đóng phí bằng thời hạn hợp đồng.',
+                    options: [
+                        { value: '15', label: '15 năm', condition: (p) => p.age <= 55 },
+                        { value: '10', label: '10 năm', condition: (p) => p.age <= 60 },
+                        { value: '5', label: '5 năm', condition: (p) => p.age <= 65 },
+                    ],
+                    validate: ({ value }) => !value ? 'Vui lòng chọn thời hạn' : null
+                }
+            ],
+             validationMessages: { notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.' }
+        },
+        rules: {
+            eligibility: [
+                { type: 'age', min: 12, max: 65, condition: (p) => p.gender === 'Nam' },
+                { type: 'age', min: 28, max: 65, condition: (p) => p.gender === 'Nữ' },
+            ],
+        },
+        calculation: {
+            calculate: ({ productInfo, customer }) => {
+                const stbh = productInfo.values['main-stbh'];
+                const term = productInfo.values['abuv-term'];
+                if (!stbh || !term) return 0;
+                const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
+                const rate = HELPERS.findRateByTerm('an_binh_uu_viet_rates', term, customer.age, genderKey);
+                const premium = Math.round((stbh / 1000) * rate);
+                const finalPremium = HELPERS.roundDownTo1000(premium);
+                return finalPremium < 5000000 ? 0 : finalPremium;
+            }
         }
     },
     
@@ -268,21 +411,15 @@ export const PRODUCT_CATALOG = {
         group: 'PACKAGE',
         packageConfig: {
             underlyingMainProduct: 'AN_BINH_UU_VIET', 
-            fixedValues: {
-                stbh: 100000000,
-                paymentTerm: 10,
-            },
+            fixedValues: { stbh: 100000000, 'abuv-term': '10' },
             mandatoryRiders: ['health_scl'] 
         },
         ui: {
             controls: [
-                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', defaultValue: 100000000, disabled: true },
-                { type: 'staticText', text: '<p class="text-sm text-gray-600 mt-1">Thời hạn đóng phí: 10 năm (bằng thời hạn hợp đồng). Thời gian bảo vệ: 10 năm.</p>' }
+                { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', defaultValue: 100000000, disabled: true },
+                { id: 'static-text', type: 'staticText', text: '<p class="text-sm text-gray-600 mt-1">Thời hạn đóng phí: 10 năm (bằng thời hạn hợp đồng). Thời gian bảo vệ: 10 năm.</p>' }
             ],
-             validationMessages: {
-                required: 'Vui lòng chọn sản phẩm chính',
-                notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.',
-            }
+            validationMessages: { notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.' }
         },
         rules: {
             eligibility: [
@@ -292,170 +429,120 @@ export const PRODUCT_CATALOG = {
             ],
             noSupplementaryInsured: true
         },
-        calculation: {
-            calculate: () => 0 // Phí được tính từ sản phẩm con, không có phí riêng
-        }
+        calculation: { calculate: () => 0 } // Phí được tính từ sản phẩm con
     },
     
-    'AN_BINH_UU_VIET': {
-        type: 'main',
-        name: 'An Bình Ưu Việt',
-        slug: 'an-binh-uu-viet',
-        group: 'TRADITIONAL',
-        ui: {
-            controls: [
-                { type: 'currencyInput', id: 'main-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 100.000.000', required: true, validationMessages: { min: (val) => `STBH tối thiểu ${formatCurrency(val)}` } },
-                { type: 'select', id: 'abuv-term', label: 'Thời hạn đóng phí', required: true, hintText: 'Thời hạn đóng phí bằng thời hạn hợp đồng.',
-                    options: [
-                        { value: '15', label: '15 năm', condition: (p) => p.age <= 55 },
-                        { value: '10', label: '10 năm', condition: (p) => p.age <= 60 },
-                        { value: '5', label: '5 năm', condition: (p) => p.age <= 65 },
-                    ],
-                    validationMessages: { required: 'Vui lòng chọn thời hạn' }
-                }
-            ],
-            validationMessages: {
-                required: 'Vui lòng chọn sản phẩm chính',
-                notEligible: 'Sản phẩm không hợp lệ với tuổi/giới tính hiện tại.',
-                minPremium: (val) => `Phí chính tối thiểu ${formatCurrency(val)}`
-            }
-        },
-        rules: {
-            eligibility: [
-                { type: 'age', min: 12, max: 65, condition: (p) => p.gender === 'Nam' },
-                { type: 'age', min: 28, max: 65, condition: (p) => p.gender === 'Nữ' },
-            ],
-            stbh: { min: 100000000 },
-            premium: { min: 5000000 }
-        },
-        calculation: {
-            calculate: (prodConfig, customer, productInfo, helpers) => {
-                if (productInfo.stbh === 0) return 0;
-                const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
-                const termValue = productInfo.options.paymentTerm;
-                if (!termValue) return 0;
-                const rate = helpers.findRateByTerm('an_binh_uu_viet_rates', termValue, customer.age, genderKey);
-                const premium = Math.round((productInfo.stbh / 1000) * rate);
-                return helpers.roundDownTo1000(premium);
-            }
-        }
-    },
-
     // =======================================================================
     // ===== SẢN PHẨM BỔ SUNG (RIDERS)
     // =======================================================================
-
     'health_scl': {
         type: 'rider',
         name: 'Sức khỏe Bùng Gia Lực',
         slug: 'bung-gia-luc',
         ui: {
             controls: [
-                { type: 'select', id: 'health_scl-program', label: 'Quyền lợi chính',
-                  options: [
-                      { value: 'co_ban', label: 'Cơ bản' },
-                      { value: 'nang_cao', label: 'Nâng cao' },
-                      { value: 'toan_dien', label: 'Toàn diện' },
-                      { value: 'hoan_hao', label: 'Hoàn hảo' }
-                  ],
+                { id: 'health_scl-program', type: 'select', label: 'Quyền lợi chính',
+                  options: [ { value: 'co_ban', label: 'Cơ bản' }, { value: 'nang_cao', label: 'Nâng cao' }, { value: 'toan_dien', label: 'Toàn diện' }, { value: 'hoan_hao', label: 'Hoàn hảo' } ],
                   defaultValue: 'nang_cao'
                 },
-                { type: 'select', id: 'health_scl-scope', label: 'Phạm vi địa lý',
-                  options: [
-                      { value: 'main_vn', label: 'Việt Nam' },
-                      { value: 'main_global', label: 'Nước ngoài' }
-                  ],
+                { id: 'health_scl-scope', type: 'select', label: 'Phạm vi địa lý',
+                  options: [ { value: 'main_vn', label: 'Việt Nam' }, { value: 'main_global', label: 'Nước ngoài' } ],
                   defaultValue: 'main_vn'
                 },
-                { type: 'checkboxGroup', label: 'Quyền lợi tùy chọn:', items: [
+                { id: 'health_scl-options', type: 'checkboxGroup', label: 'Quyền lợi tùy chọn:', items: [
                     { id: 'health_scl-outpatient', label: 'Điều trị ngoại trú', hintId: 'scl-outpatient-fee-hint' },
                     { id: 'health_scl-dental', label: 'Chăm sóc nha khoa', hintId: 'scl-dental-fee-hint' }
                   ]
                 }
             ],
-            validationMessages: {
-                programNotEligible: 'Phí chính không đủ điều kiện cho chương trình {program}, vui lòng chọn lại.'
+            onRender: ({ section, customer, mainPremium, mainProductConfig }) => {
+                const programSelect = section.querySelector('#health_scl-program');
+                const outpatientCb = section.querySelector('#health_scl-outpatient');
+                const dentalCb = section.querySelector('#health_scl-dental');
+                const msgEl = section.querySelector('.dynamic-validation-msg');
+                const outSpan = section.querySelector(`#scl-outpatient-fee-hint`);
+                const dentalSpan = section.querySelector(`#scl-dental-fee-hint`);
+
+                dentalCb.disabled = !outpatientCb.checked;
+                if (!outpatientCb.checked && dentalCb.checked) dentalCb.checked = false;
+
+                let highestAllowed = ['co_ban', 'nang_cao', 'toan_dien', 'hoan_hao'];
+                if(mainProductConfig?.group !== 'PACKAGE') {
+                    highestAllowed = ['nang_cao']; 
+                    PRODUCT_CATALOG.health_scl.rules.dependencies.premiumThresholdsForProgram.forEach(tier => {
+                        if (mainPremium >= tier.minPremium) highestAllowed = tier.allowed;
+                    });
+                }
+                programSelect.querySelectorAll('option').forEach(opt => opt.disabled = !highestAllowed.includes(opt.value));
+                
+                if (programSelect.options[programSelect.selectedIndex]?.disabled) {
+                    msgEl.textContent = `Phí chính không đủ điều kiện cho chương trình này.`;
+                    msgEl.classList.remove('hidden');
+                    programSelect.value = 'nang_cao';
+                } else {
+                    msgEl.classList.add('hidden');
+                }
+
+                // Update fee hints for options
+                const comps = PRODUCT_CATALOG.health_scl.calculation.getFeeComponents(customer);
+                if (outSpan) outSpan.textContent = (outpatientCb?.checked && comps.outpatient > 0) ? `(+${formatCurrency(comps.outpatient)})` : '';
+                if (dentalSpan) dentalSpan.textContent = (dentalCb?.checked && comps.dental > 0) ? `(+${formatCurrency(comps.dental)})` : '';
             }
         },
         rules: {
-            eligibility: [
-                { type: 'daysFromBirth', min: 30 },
-                { type: 'age', max: 65, renewalMax: 74 },
-                { type: 'riskGroup', exclude: [4], required: true }
-            ],
+            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 65, renewalMax: 74 }, { type: 'riskGroup', exclude: [4], required: true } ],
             dependencies: {
                 premiumThresholdsForProgram: [
-                    { minPremium: 5000000, allowed: ['co_ban', 'nang_cao'] },
-                    { minPremium: 10000000, allowed: ['co_ban', 'nang_cao', 'toan_dien'] },
-                    { minPremium: 15000000, allowed: ['co_ban', 'nang_cao', 'toan_dien', 'hoan_hao'] }
-                ],
-                dentalRequiresOutpatient: true
+                    { minPremium: 5000000, allowed: ['co_ban', 'nang_cao'] }, { minPremium: 10000000, allowed: ['co_ban', 'nang_cao', 'toan_dien'] }, { minPremium: 15000000, allowed: ['co_ban', 'nang_cao', 'toan_dien', 'hoan_hao'] }
+                ]
             },
-            stbhByProgram: {
-                co_ban: 100000000,
-                nang_cao: 250000000,
-                toan_dien: 500000000,
-                hoan_hao: 1000000000,
-            }
+            stbhByProgram: { co_ban: 100000000, nang_cao: 250000000, toan_dien: 500000000, hoan_hao: 1000000000 }
         },
         calculation: {
-            calculate: (prodConfig, customer, helpers, ageOverride = null) => {
-                const { total } = prodConfig.calculation.getFeeComponents(customer, helpers, ageOverride);
-                return total;
-            },
-            getFeeComponents: (customer, helpers, ageOverride = null) => {
+            calculate: ({ customer, ageOverride }) => PRODUCT_CATALOG.health_scl.calculation.getFeeComponents(customer, ageOverride).total,
+            getFeeComponents: (customer, ageOverride = null) => {
                 const ageToUse = ageOverride ?? customer.age;
                 const renewalMax = PRODUCT_CATALOG.health_scl.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 99;
                 if (ageToUse > renewalMax) return { base: 0, outpatient: 0, dental: 0, total: 0 };
                 
-                if (!customer?.supplements?.health_scl) return { base: 0, outpatient: 0, dental: 0, total: 0 };
-
-                const { program, scope, outpatient, dental } = customer.supplements.health_scl;
+                const { program, scope, outpatient, dental } = customer.supplements?.health_scl || {};
                 if (!program || !scope) return { base: 0, outpatient: 0, dental: 0, total: 0 };
 
-                const ageBandIndex = helpers.data.health_scl_rates.age_bands.findIndex(b => ageToUse >= b.min && ageToUse <= b.max);
+                const ageBandIndex = HELPERS.data.health_scl_rates.age_bands.findIndex(b => ageToUse >= b.min && ageToUse <= b.max);
                 if (ageBandIndex === -1) return { base: 0, outpatient: 0, dental: 0, total: 0 };
-
-                const base = helpers.data.health_scl_rates[scope]?.[ageBandIndex]?.[program] || 0;
-                const outpatientFee = outpatient ? (helpers.data.health_scl_rates.outpatient?.[ageBandIndex]?.[program] || 0) : 0;
-                const dentalFee = dental ? (helpers.data.health_scl_rates.dental?.[ageBandIndex]?.[program] || 0) : 0;
-                const total = base + outpatientFee + dentalFee;
-
-                return {
-                    base: helpers.roundDownTo1000(base),
-                    outpatient: helpers.roundDownTo1000(outpatientFee),
-                    dental: helpers.roundDownTo1000(dentalFee),
-                    total: helpers.roundDownTo1000(total)
-                };
+                
+                const rates = HELPERS.data.health_scl_rates;
+                const base = rates[scope]?.[ageBandIndex]?.[program] || 0;
+                const outpatientFee = outpatient ? (rates.outpatient?.[ageBandIndex]?.[program] || 0) : 0;
+                const dentalFee = (outpatient && dental) ? (rates.dental?.[ageBandIndex]?.[program] || 0) : 0;
+                
+                return { base, outpatient: outpatientFee, dental: dentalFee, total: HELPERS.roundDownTo1000(base + outpatientFee + dentalFee) };
             }
         }
     },
-    
+
     'bhn': {
         type: 'rider',
         name: 'Bệnh Hiểm Nghèo 2.0',
-        slug: 'benh-hiem-ngheo-20',
+        slug: 'bhn',
         ui: {
-            controls: [
-                { type: 'currencyInput', id: 'bhn-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 200.000.000', hintText: 'STBH từ 200 triệu đến 5 tỷ.', validationMessages: { min: (val) => `Tối thiểu ${formatCurrency(val)}`, max: (val) => `Tối đa ${formatCurrency(val)}` } }
-            ]
+            controls: [ { id: 'bhn-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 200.000.000', 
+                          validate: ({ value }) => {
+                            if (value < 200000000) return 'Tối thiểu 200.000.000';
+                            if (value > 5000000000) return 'Tối đa 5.000.000.000';
+                            return null;
+                          }
+            }]
         },
-        rules: {
-            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70, renewalMax: 85 } ],
-            stbh: { min: 200000000, max: 5000000000 }
-        },
+        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70, renewalMax: 85 } ] },
         calculation: {
-            calculate: (prodConfig, customer, helpers, ageOverride = null) => {
+            calculate: ({ customer, ageOverride }) => {
                 const ageToUse = ageOverride ?? customer.age;
-                const renewalMax = prodConfig.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 99;
-                if (ageToUse > renewalMax) return 0;
-                const { stbh } = customer.supplements[prodConfig.slug] || {};
+                const { stbh } = customer.supplements.bhn || {};
                 if (!stbh) return 0;
                 const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
-                const rate = helpers.findRateByRange('bhn_rates', ageToUse, genderKey);
-                if (!rate) return 0;
-                const premiumRaw = (stbh / 1000) * rate;
-                return helpers.roundDownTo1000(premiumRaw);
+                const rate = HELPERS.findRateByRange('bhn_rates', ageToUse, genderKey);
+                return HELPERS.roundDownTo1000((stbh / 1000) * rate);
             }
         }
     },
@@ -463,29 +550,23 @@ export const PRODUCT_CATALOG = {
     'accident': {
         type: 'rider',
         name: 'Bảo hiểm Tai nạn',
-        slug: 'tai-nan',
+        slug: 'accident',
         ui: {
-            controls: [
-                { type: 'currencyInput', id: 'accident-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 500.000.000', hintText: 'STBH từ 10 triệu đến 8 tỷ.', validationMessages: { min: (val) => `Tối thiểu ${formatCurrency(val)}`, max: (val) => `Tối đa ${formatCurrency(val)}` } }
-            ]
+            controls: [ { id: 'accident-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 500.000.000',
+                         validate: ({ value }) => {
+                            if (value < 10000000) return 'Tối thiểu 10.000.000';
+                            if (value > 8000000000) return 'Tối đa 8.000.000.000';
+                            return null;
+                          }
+            }]
         },
-        rules: {
-            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 64, renewalMax: 65 }, { type: 'riskGroup', required: true } ],
-            stbh: { min: 10000000, max: 8000000000 }
-        },
+        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 64, renewalMax: 65 }, { type: 'riskGroup', required: true } ] },
         calculation: {
-            calculate: (prodConfig, customer, helpers, ageOverride = null) => {
-                const ageToUse = ageOverride ?? customer.age;
-                const renewalMax = prodConfig.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 99;
-                if (ageToUse > renewalMax) return 0;
-
-                const { stbh } = customer.supplements[prodConfig.slug] || {};
-                if (!stbh) return 0;
-                if (customer.riskGroup === 0 || customer.riskGroup > 4) return 0;
-                const rate = helpers.data.accident_rates[customer.riskGroup] || 0;
-                if (!rate) return 0;
-                const premiumRaw = (stbh / 1000) * rate;
-                return helpers.roundDownTo1000(premiumRaw);
+            calculate: ({ customer, ageOverride }) => {
+                const { stbh } = customer.supplements.accident || {};
+                if (!stbh || !customer.riskGroup || customer.riskGroup > 4) return 0;
+                const rate = HELPERS.data.accident_rates[customer.riskGroup] || 0;
+                return HELPERS.roundDownTo1000((stbh / 1000) * rate);
             }
         }
     },
@@ -493,50 +574,47 @@ export const PRODUCT_CATALOG = {
     'hospital_support': {
         type: 'rider',
         name: 'Hỗ trợ chi phí nằm viện',
-        slug: 'ho-tro-vien-phi',
+        slug: 'hospital_support',
+        category: 'hospital_support',
         ui: {
             controls: [
-                { type: 'currencyInput', id: 'hospital_support-stbh', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'Bội số 100.000 (đ/ngày)', customClass: 'hospital-support-stbh', hintText: `<p class="hospital-support-validation text-sm text-gray-500 mt-1"></p>`, validationMessages: { hint: ({max, multiple}) => `Tối đa: ${max}. Phải là bội số của ${multiple}.`, multipleOf: (val) => `Là bội số của ${formatCurrency(val)}`, limitExceeded: 'Vượt quá giới hạn cho phép' } }
+                { id: 'hospital_support-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'Bội số 100.000 (đ/ngày)',
+                  validate: ({ value, customer, mainPremium, totalHospitalSupportStbh }) => {
+                      if (value % 100000 !== 0) return 'Phải là bội số của 100.000';
+                      const maxByAge = customer.age >= 18 ? 1000000 : 300000;
+                      const maxByPremium = mainPremium > 0 ? Math.floor(mainPremium / 4000000) * 100000 : 0;
+                      const remaining = maxByPremium - totalHospitalSupportStbh;
+                      if (value > maxByAge) return `STBH tối đa cho tuổi ${customer.age} là ${formatCurrency(maxByAge)}`;
+                      if (value > remaining) return 'Vượt quá giới hạn tổng STBH Hỗ trợ viện phí cho phép';
+                      return null;
+                  }
+                }
             ]
         },
-        rules: {
-            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 55, renewalMax: 59 } ],
-            stbh: { 
-                multipleOf: 100000,
-                maxByAge: { under18: 300000, from18: 1000000 },
-                special: 'HOSPITAL_SUPPORT_MAX_BY_MAIN_PREMIUM'
-            }
-        },
+        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 55, renewalMax: 59 } ] },
         calculation: {
-             calculate: (prodConfig, customer, helpers, ageOverride = null) => {
+            calculate: ({ customer, ageOverride }) => {
                 const ageToUse = ageOverride ?? customer.age;
-                const renewalMax = prodConfig.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 99;
-                if (ageToUse > renewalMax) return 0;
-                const { stbh } = customer.supplements[prodConfig.slug] || {};
+                const { stbh } = customer.supplements.hospital_support || {};
                 if (!stbh) return 0;
-                const rate = helpers.findRateByRange('hospital_fee_support_rates', ageToUse, 'rate');
-                if (!rate) return 0;
-                const premiumRaw = (stbh / 100) * rate;
-                return helpers.roundDownTo1000(premiumRaw);
+                const rate = HELPERS.findRateByRange('hospital_fee_support_rates', ageToUse, 'rate');
+                return HELPERS.roundDownTo1000((stbh / 100) * rate);
             }
         }
     },
+
     'mdp3': {
         type: 'rider',
         name: 'Miễn đóng phí 3.0',
-        slug: 'mien-dong-phi-3',
-        isStandalone: true,
-        ui: {
-            controls: []
-        },
-        rules: {
-            eligibility: [ { type: 'age', min: 18, max: 60, renewalMax: 60 } ],
-        },
+        slug: 'mdp3',
+        category: 'waiver_of_premium',
+        ui: { controls: [] },
+        rules: { eligibility: [ { type: 'age', min: 18, max: 60 } ] },
         calculation: {
-            calculate: (personInfo, stbhBase, helpers) => {
-                 const genderKey = personInfo.gender === 'Nữ' ? 'nu' : 'nam';
-                 const rate = helpers.data.mdp3_rates.find(r => personInfo.age >= r.ageMin && personInfo.age <= r.ageMax)?.[genderKey] || 0;
-                 return helpers.roundDownTo1000((stbhBase / 1000) * rate);
+            calculate: ({ customer, stbhBase }) => {
+                 const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
+                 const rate = HELPERS.findRateByRange('mdp3_rates', customer.age, genderKey);
+                 return HELPERS.roundDownTo1000((stbhBase / 1000) * rate);
             }
         }
     }
@@ -549,16 +627,14 @@ export const PRODUCT_CATALOG = {
 function calculateGenericAccountValueProjection(productConfig, args, helpers) {
     const { mainPerson, mainProduct, basePremium, extraPremium, targetAge, customInterestRate, paymentFrequency } = args;
     const { investment_data, roundDownTo1000, GLOBAL_CONFIG } = helpers;
-    const accountValueConfig = productConfig.accountValue;
+    const accountValueConfig = productConfig.accountValue.config;
 
     const { gender, age: initialAge } = mainPerson;
-    const { key: productKey, stbh: stbhInitial = 0, paymentTerm } = mainProduct;
+    const { key: productKey, values } = mainProduct;
+    const stbhInitial = values['main-stbh'] || 0;
+    const paymentTerm = values['payment-term'] || 0;
     
-    const { 
-        initial_fees, 
-        guaranteed_interest_rates, 
-        admin_fees, 
-    } = investment_data;
+    const { initial_fees, guaranteed_interest_rates, admin_fees } = investment_data;
 
     const costOfInsuranceRates = investment_data[accountValueConfig.costOfInsuranceRef] || [];
     const persistencyBonusRates = investment_data[accountValueConfig.persistencyBonusRef] || [];
@@ -646,7 +722,7 @@ function calculateGenericAccountValueProjection(productConfig, args, helpers) {
             }
 
             const investmentAmount = currentAccountValue + premiumIn - initialFee;
-            const adminFee = getAdminFeeForYear(calendarYear);
+            const adminFee = getAdminFeeForYear(calendarYear) / 12;
             const stbhCurrent = getStbhForPolicyYear(policyYear);
             
             const riskRateRecord = costOfInsuranceRates.find(r => Number(r.age) === Number(attainedAge));
@@ -659,13 +735,11 @@ function calculateGenericAccountValueProjection(productConfig, args, helpers) {
             const netInvestmentAmount = investmentAmount - adminFee - costOfInsurance;
             
             let guaranteedRate = 0;
-            if(accountValueConfig.useGuaranteedInterest) {
-                const guaranteedRateRaw = (guaranteed_interest_rates && (guaranteed_interest_rates[policyYear] !== undefined))
-                    ? guaranteed_interest_rates[policyYear]
-                    : (guaranteed_interest_rates && guaranteed_interest_rates.default ? guaranteed_interest_rates.default : 0);
-                guaranteedRate = Number(guaranteedRateRaw) || 0;
-                guaranteedRate = (guaranteedRate > 1) ? (guaranteedRate / 100) : guaranteedRate;
-            }
+            const guaranteedRateRaw = (guaranteed_interest_rates && (guaranteed_interest_rates[policyYear] !== undefined))
+                ? guaranteed_interest_rates[policyYear]
+                : (guaranteed_interest_rates && guaranteed_interest_rates.default ? guaranteed_interest_rates.default : 0);
+            guaranteedRate = Number(guaranteedRateRaw) || 0;
+            guaranteedRate = (guaranteedRate > 1) ? (guaranteedRate / 100) : guaranteedRate;
 
             let interestRateYearly = 0;
             if (key === 'guaranteed') {
