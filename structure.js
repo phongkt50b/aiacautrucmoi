@@ -239,7 +239,11 @@ export const PRODUCT_CATALOG = {
         ui: {
             controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
-                  validate: ({ value }) => value < 100000000 ? 'STBH tối thiểu 100.000.000' : null,
+                  validate: ({ value }) => {
+                      if (!value || value <= 0) return 'Vui lòng nhập Số tiền bảo hiểm';
+                      if (value < 100000000) return 'STBH tối thiểu 100.000.000';
+                      return null;
+                  }
                 },
                 { id: 'main-premium', type: 'currencyInput', label: 'Phí sản phẩm chính', placeholder: 'Nhập phí', required: true, hintId: 'main-premium-hint',
                   onRender: ({ el, allValues, customer }) => {
@@ -308,7 +312,11 @@ export const PRODUCT_CATALOG = {
         ui: {
              controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
-                  validate: ({ value }) => value < 100000000 ? 'STBH tối thiểu 100.000.000' : null,
+                  validate: ({ value }) => {
+                      if (!value || value <= 0) return 'Vui lòng nhập Số tiền bảo hiểm';
+                      if (value < 100000000) return 'STBH tối thiểu 100.000.000';
+                      return null;
+                  }
                 },
                 { id: 'main-premium', type: 'currencyInput', label: 'Phí sản phẩm chính', placeholder: 'Nhập phí', required: true, hintId: 'main-premium-hint',
                   onRender: ({ el, allValues, customer }) => {
@@ -377,7 +385,11 @@ export const PRODUCT_CATALOG = {
         ui: {
             controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 100.000.000', required: true, 
-                  validate: ({ value }) => value < 100000000 ? 'STBH tối thiểu 100.000.000' : null 
+                  validate: ({ value }) => {
+                       if (!value || value <= 0) return 'Vui lòng nhập Số tiền bảo hiểm';
+                       if (value < 100000000) return 'STBH tối thiểu 100.000.000';
+                       return null;
+                  }
                 },
                 { id: 'abuv-term', type: 'select', label: 'Thời hạn đóng phí', required: true, hintText: 'Thời hạn đóng phí bằng thời hạn hợp đồng.',
                     options: [
