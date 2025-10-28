@@ -755,11 +755,22 @@ function attachGlobalListeners() {
     document.body.addEventListener('change', (e) => {
         hideGlobalErrors();
         if (e.target.id === 'main-product') {
+            const oldStbh = appState.mainProduct.values['main-stbh'] || 0;
+
             productJustChanged = true;
             lastRenderedProductKey = null;
             appState.mainProduct.values = {};
             
-            const newProductConfig = PRODUCT_CATALOG[e.target.value];
+            const newProductKey = e.target.value;
+            const newProductConfig = PRODUCT_CATALOG[newProductKey];
+
+            const hasFixedStbh = newProductConfig?.group === 'PACKAGE' && newProductConfig.packageConfig?.fixedValues?.stbh;
+            const hasStbhInput = newProductConfig?.ui?.controls.some(c => c.id === 'main-stbh' && c.type === 'currencyInput' && !c.disabled);
+
+            if (!hasFixedStbh && hasStbhInput && oldStbh > 0) {
+                appState.mainProduct.values['main-stbh'] = oldStbh;
+            }
+            
             if (newProductConfig?.rules?.noSupplementaryInsured) {
                 // Immediately clear UI to prevent stale data reading
                 document.getElementById('supplementary-insured-container').innerHTML = '';
