@@ -1,3 +1,4 @@
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
@@ -1703,7 +1704,7 @@ window.MDP3 = (function () {
     
     function renderSection() {
         const container = document.getElementById('waiver-of-premium-container');
-        if (container && !container.innerHTML.trim()) {
+        if (container && !container.querySelector('#mdp3-enable')) {
             container.innerHTML = `
                 <label class="flex items-center space-x-3 cursor-pointer">
                     <input type="checkbox" id="mdp3-enable" class="form-checkbox">
