@@ -43,11 +43,6 @@ function initState() {
         },
         paymentFrequency: 'year',
         persons: [],
-        waiverOfPremium: {
-            selectedPersonId: null,
-            otherPersonInfo: null, // Stores info if "other" is selected
-            products: {} // e.g., { mdp3: { enabled: true, fee: 123 } }
-        },
         fees: {
             baseMain: 0,
             extra: 0,
@@ -91,25 +86,6 @@ function updateStateFromUI() {
     appState.persons.forEach(person => {
         Object.assign(person, collectPersonData(person.container, person.isMain));
     });
-    
-    const waiverContainer = document.getElementById('waiver-of-premium-container');
-    if (waiverContainer) {
-        const selectedPersonId = waiverContainer.querySelector('.wop-person-select')?.value || null;
-        appState.waiverOfPremium.selectedPersonId = selectedPersonId;
-
-        if (selectedPersonId === 'other') {
-            const otherForm = document.getElementById('wop-other-person-form');
-            appState.waiverOfPremium.otherPersonInfo = otherForm ? collectPersonData(otherForm, false, true) : null;
-        } else {
-            appState.waiverOfPremium.otherPersonInfo = null;
-        }
-
-        appState.waiverOfPremium.products = {};
-        waiverContainer.querySelectorAll('.wop-product-checkbox').forEach(cb => {
-            const prodKey = cb.dataset.productKey;
-            appState.waiverOfPremium.products[prodKey] = { enabled: cb.checked };
-        });
-    }
 }
 
 function collectPersonData(container, isMain, isWopOther = false) {
@@ -227,50 +203,24 @@ function performCalculations(state) {
         fees.totalSupp += personSuppFee;
     });
 
-    // Calculate Waiver of Premium fees
-    const wopState = state.waiverOfPremium;
-    if (wopState.selectedPersonId) {
-        let stbhBase = (fees.baseMain + fees.extra);
+    // Calculate Waiver of Premium fees via its dedicated module
+    if (window.MDP3) {
+        const mdpFee = MDP3.getPremium();
+        if (mdpFee > 0) {
+            fees.totalSupp += mdpFee;
+            const mdpTargetId = MDP3.getSelectedId();
 
-        // Sum up all rider fees first
-        let totalRiderFees = 0;
-        allInsuredPersons.forEach(p => {
-            totalRiderFees += fees.byPerson[p.id]?.supp || 0;
-        });
-        stbhBase += totalRiderFees;
-        
-        // If the waived person is one of the insured, subtract their rider fees
-        if (wopState.selectedPersonId !== 'other') {
-            const waivedPersonFees = fees.byPerson[wopState.selectedPersonId]?.supp || 0;
-            stbhBase -= waivedPersonFees;
-        }
-
-        let wopTargetPerson = wopState.selectedPersonId === 'other'
-            ? wopState.otherPersonInfo
-            : state.persons.find(p => p.id === wopState.selectedPersonId);
-        
-        if (wopTargetPerson && wopTargetPerson.age > 0) { // Ensure person has valid info
-            Object.keys(wopState.products).forEach(prodId => {
-                if (wopState.products[prodId].enabled) {
-                    const prodConfig = PRODUCT_CATALOG[prodId];
-                    if (!prodConfig?.calculation?.calculate) return;
-                    
-                    const fee = prodConfig.calculation.calculate({ customer: wopTargetPerson, stbhBase });
-                    
-                    wopState.products[prodId].fee = fee;
-                    wopState.products[prodId].stbhBase = stbhBase;
-                    fees.totalSupp += fee;
-
-                    const personIdForFee = wopState.selectedPersonId === 'other' ? 'wop_other' : wopState.selectedPersonId;
-                    if (!fees.byPerson[personIdForFee]) {
-                        fees.byPerson[personIdForFee] = { main: 0, supp: 0, total: 0, suppDetails: {} };
-                    }
-                    fees.byPerson[personIdForFee].supp += fee;
-                    fees.byPerson[personIdForFee].suppDetails[prodId] = fee;
+            const personIdForFee = mdpTargetId === 'other' ? 'wop_other' : mdpTargetId;
+            if (personIdForFee) {
+                if (!fees.byPerson[personIdForFee]) {
+                    fees.byPerson[personIdForFee] = { main: 0, supp: 0, total: 0, suppDetails: {} };
                 }
-            });
+                fees.byPerson[personIdForFee].supp += mdpFee;
+                fees.byPerson[personIdForFee].suppDetails['mdp3'] = mdpFee;
+            }
         }
     }
+
 
     const totalMain = fees.baseMain + fees.extra;
     const total = totalMain + fees.totalSupp;
@@ -328,7 +278,6 @@ function renderUI(validationResult) {
     
     renderMainProductSection();
     appState.persons.forEach(p => renderSupplementaryProductsForPerson(p, isMainProductSectionValid));
-    renderWaiverOfPremiumSection(isMainProductSectionValid);
     renderSummary(isMainProductSectionValid);
     updateSupplementaryAddButtonState(isMainProductSectionValid);
     updatePaymentFrequencyOptions(appState.fees.baseMain);
@@ -429,71 +378,6 @@ function renderSupplementaryProductsForPerson(customer, isMainProductSectionVali
             mainProductConfig
         });
     });
-}
-
-function renderWaiverOfPremiumSection(isMainProductSectionValid) {
-    const container = document.getElementById('waiver-of-premium-container');
-    const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
-    const isDisabled = !isMainProductSectionValid || mainProductConfig?.rules?.noSupplementaryInsured;
-    
-    container.parentElement.classList.toggle('opacity-50', isDisabled);
-    container.parentElement.classList.toggle('pointer-events-none', isDisabled);
-    if(isDisabled) { container.innerHTML = ''; return; }
-
-    let html = `<div><label for="wop-person-select" class="font-medium text-gray-700 block mb-1">Áp dụng cho</label>
-                <select id="wop-person-select" class="form-select wop-person-select">${getWopPersonOptions()}</select></div>`;
-    
-    Object.entries(PRODUCT_CATALOG).forEach(([prodKey, config]) => {
-        if (config.category === 'waiver_of_premium') {
-            const isChecked = appState.waiverOfPremium.products[prodKey]?.enabled;
-            const feeData = appState.waiverOfPremium.products[prodKey] || {};
-            
-            html += `<div class="wop-product-block mt-4" data-product-key="${prodKey}">
-                <label class="flex items-center space-x-3 cursor-pointer">
-                    <input type="checkbox" class="form-checkbox wop-product-checkbox" data-product-key="${prodKey}" ${isChecked ? 'checked' : ''}>
-                    <span class="font-medium text-gray-800">${config.name}</span>
-                </label>
-                <div class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-1 wop-fee-display">
-                    ${feeData.fee > 0 ? `STBH: ${formatCurrency(feeData.stbhBase)} | Phí: ${formatCurrency(feeData.fee)}` : ''}
-                </div>
-            </div>`;
-        }
-    });
-
-    html += `<div id="wop-other-person-form" class="${appState.waiverOfPremium.selectedPersonId === 'other' ? '' : 'hidden'} mt-4 p-3 border rounded bg-gray-50"></div>`;
-    
-    // Only update if content changes to avoid losing focus
-    if (container.innerHTML.trim() !== html.trim()) {
-        container.innerHTML = html;
-        // Re-attach event listeners if needed (though global listeners handle most)
-    } else { // Just update fee
-         Object.entries(PRODUCT_CATALOG).forEach(([prodKey, config]) => {
-            if (config.category === 'waiver_of_premium') {
-                 const feeData = appState.waiverOfPremium.products[prodKey] || {};
-                 const feeDisplay = container.querySelector(`[data-product-key="${prodKey}"] .wop-fee-display`);
-                 if(feeDisplay) {
-                    feeDisplay.textContent = feeData.fee > 0 ? `STBH: ${formatCurrency(feeData.stbhBase)} | Phí: ${formatCurrency(feeData.fee)}` : '';
-                 }
-            }
-        });
-    }
-
-    // Always ensure the other person form is correctly rendered/hidden
-    const otherFormContainer = document.getElementById('wop-other-person-form');
-    if (otherFormContainer) {
-        otherFormContainer.classList.toggle('hidden', appState.waiverOfPremium.selectedPersonId !== 'other');
-        if (appState.waiverOfPremium.selectedPersonId === 'other') {
-            renderWopOtherPersonForm();
-        }
-    }
-}
-
-function renderWopOtherPersonForm() {
-    const otherFormContainer = document.getElementById('wop-other-person-form');
-    if (!otherFormContainer || otherFormContainer.querySelector('.person-container')) return;
-    otherFormContainer.innerHTML = `<div id="person-container-wop-other" class="person-container">${generateWopOtherPersonHtml()}</div>`;
-    const container = document.getElementById('person-container-wop-other');
-    initDateFormatter(container.querySelector('.dob-input'));
 }
 
 function renderSummary(isValid) {
@@ -626,7 +510,7 @@ function runAllValidations() {
         }
     });
     
-    if (!validateWaiverOfPremium()) result.isValid = false;
+    if (window.MDP3 && !MDP3.validate()) result.isValid = false;
     if (!validateTargetAge()) result.isValid = false;
 
     result.errors = collectSimpleErrors();
@@ -742,24 +626,6 @@ function validateSupplementaryProduct(person, prodId, totalHospitalSupportStbh) 
     return ok;
 }
 
-function validateWaiverOfPremium() {
-    const { selectedPersonId, otherPersonInfo } = appState.waiverOfPremium;
-    if (!selectedPersonId) return true;
-
-    if (selectedPersonId === 'other') {
-        const otherForm = document.getElementById('wop-other-person-form');
-        const dobInput = otherForm?.querySelector('.dob-input');
-        if (!validateDobField(dobInput)) return false;
-        if (otherPersonInfo.age < 18 || otherPersonInfo.age > 60) {
-            setFieldError(dobInput, 'Tuổi phải từ 18-60');
-            return false;
-        }
-        clearFieldError(dobInput);
-    }
-    return true;
-}
-
-
 function validateTargetAge() {
   const input = document.getElementById('target-age-input');
   if (!input || input.disabled) return true;
@@ -854,14 +720,17 @@ document.addEventListener('DOMContentLoaded', () => {
     initSupplementaryButton();
     initSummaryAndViewer();
     attachGlobalListeners();
+    window.MDP3.init();
     runWorkflow();
 });
 
 function runWorkflow() {
   updateStateFromUI();
-  appState.fees = performCalculations(appState);
   const validationResult = runAllValidations();
+  appState.fees = performCalculations(appState);
   renderUI(validationResult);
+  window.MDP3.render(validationResult.isMainProductSectionValid);
+  updateTargetAge();
 }
 
 const runWorkflowDebounced = debounce(runWorkflow, 60);
@@ -884,19 +753,15 @@ function attachGlobalListeners() {
             
             const newProductConfig = PRODUCT_CATALOG[e.target.value];
             if (newProductConfig?.rules?.noSupplementaryInsured) {
+                // Immediately clear UI to prevent stale data reading
+                document.getElementById('supplementary-insured-container').innerHTML = '';
+                window.MDP3.reset();
+
                 const mainPerson = appState.persons.find(p => p.isMain);
-                if (mainPerson) {
-                    mainPerson.supplements = {}; // Clear riders for main person
-                }
-                 // Reset Waiver of Premium state
-                appState.waiverOfPremium = {
-                    selectedPersonId: null,
-                    otherPersonInfo: null,
-                    products: {}
-                };
+                if (mainPerson) mainPerson.supplements = {};
             }
         }
-        if (e.target.matches('input[type="checkbox"]')) {
+        if (e.target.matches('input[type="checkbox"]') && e.target.id !== 'mdp3-enable') {
             runWorkflowDebounced();
         } else {
             runWorkflow();
@@ -955,10 +820,12 @@ function initSupplementaryButton() {
         newContainer.querySelector('.remove-supp-btn').addEventListener('click', () => {
             appState.persons = appState.persons.filter(p => p.id !== newPersonState.id);
             newContainer.remove();
+            window.MDP3.updateOptions();
             runWorkflow();
         });
         
         initPerson(newPersonState);
+        window.MDP3.updateOptions();
         runWorkflow();
     });
 }
@@ -997,30 +864,6 @@ function generateSupplementaryProductsHtml() {
     }).join('');
 }
 
-function getWopPersonOptions() {
-    let optionsHtml = `<option value="">-- Chọn người --</option>`;
-    const selected = appState.waiverOfPremium.selectedPersonId;
-    appState.persons.forEach(p => {
-        if (p.isMain) return; // Exclude main insured person
-        const isEligible = p.age >= 18 && p.age <= 60;
-        let label = `${p.name || (p.isMain ? 'NĐBH chính' : 'NĐBH bổ sung')} (tuổi ${p.age || "?"})`;
-        if (!isEligible) label += ' - Không đủ điều kiện';
-        optionsHtml += `<option value="${p.id}" ${isEligible ? '' : 'disabled'} ${selected === p.id ? 'selected' : ''}>${label}</option>`;
-    });
-    optionsHtml += `<option value="other" ${selected === 'other' ? 'selected' : ''}>Người khác</option>`;
-    return optionsHtml;
-}
-
-function generateWopOtherPersonHtml() {
-    const info = appState.waiverOfPremium.otherPersonInfo || {};
-    return `<h3 class="text-lg font-bold text-gray-700 mb-2 border-t pt-4">Người được miễn đóng phí</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><label class="font-medium text-gray-700 block mb-1">Họ và Tên</label><input type="text" class="form-input name-input" value="${sanitizeHtml(info.name || '')}"></div>
-        <div><label class="font-medium text-gray-700 block mb-1">Ngày sinh</label><input type="text" class="form-input dob-input" placeholder="DD/MM/YYYY" value="${sanitizeHtml(info.dob || '')}"></div>
-        <div><label class="font-medium text-gray-700 block mb-1">Giới tính</label><select class="form-select gender-select"><option value="Nam" ${info.gender==='Nam'?'selected':''}>Nam</option><option value="Nữ" ${info.gender==='Nữ'?'selected':''}>Nữ</option></select></div>
-        <div class="flex items-end space-x-4"><p class="text-lg">Tuổi: <span class="font-bold text-aia-red age-span">${info.age || 0}</span></p></div>
-      </div>`;
-}
 
 // ===================================================================================
 // ===== HELPERS & MISC UI
@@ -1203,7 +1046,8 @@ function renderSuppListSummary() {
 
   const getPersonName = (id) => {
     if (id === 'wop_other') {
-      return appState.waiverOfPremium.otherPersonInfo?.name || 'Người khác (Miễn phí)';
+      const form = document.getElementById('person-container-wop-other');
+      return (form ? collectPersonData(form, false, true)?.name : 'Người khác') || 'Người khác';
     }
     return appState.persons.find(p => p.id === id)?.name || 'Người không xác định';
   };
@@ -1295,18 +1139,13 @@ function buildViewerPayload() {
   });
 
   let mdp3Obj = null;
-  const wopState = appState.waiverOfPremium;
-  if(wopState.selectedPersonId) {
-      Object.entries(wopState.products).forEach(([prodId, data]) => {
-          if(data.enabled && data.fee > 0) {
-            let targetPerson = wopState.selectedPersonId === 'other'
-                ? wopState.otherPersonInfo
-                : appState.persons.find(p => p.id === wopState.selectedPersonId);
-
-            mdp3Obj = { premium: data.fee, selectedName: targetPerson.name, selectedAge: targetPerson.age };
-            riderList.push({ slug: prodId, selected: true, stbh: 0, premium: data.fee });
-          }
-      });
+  if(window.MDP3 && MDP3.isEnabled()){
+      const premium = MDP3.getPremium();
+      if(premium > 0){
+        const targetPerson = MDP3.getTargetPersonInfo();
+        mdp3Obj = { premium, selectedName: targetPerson.name, selectedAge: targetPerson.age };
+        riderList.push({ slug: 'mdp3', selected: true, stbh: 0, premium: premium });
+      }
   }
   
   const summaryHtml = __exportExactSummaryHtml();
@@ -1379,16 +1218,12 @@ function buildSummaryData() {
     }
 
     const allPersons = [...appState.persons];
-    const { selectedPersonId, products, otherPersonInfo } = appState.waiverOfPremium;
-    const mdpEnabled = Object.values(products).some(p => p.enabled);
-
+    const mdpEnabled = window.MDP3 && MDP3.isEnabled();
     let mdpTarget = null;
     if (mdpEnabled) {
-      if (selectedPersonId === 'other' && otherPersonInfo) {
-          mdpTarget = { ...otherPersonInfo, id: 'wop_other', isMain: false, supplements: {} };
+      mdpTarget = MDP3.getTargetPersonInfo();
+      if(mdpTarget && mdpTarget.id === 'wop_other') {
           allPersons.push(mdpTarget);
-      } else {
-          mdpTarget = appState.persons.find(p => p.id === selectedPersonId);
       }
     }
     
@@ -1404,8 +1239,8 @@ function buildPart1RowsData(ctx) {
     const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
 
     let mdpStbhBase = 0;
-    if (mdpEnabled) {
-      mdpStbhBase = appState.waiverOfPremium.products['mdp3']?.stbhBase || 0;
+    if (mdpEnabled && window.MDP3) {
+      mdpStbhBase = MDP3.getStbhBase();
     }
 
     let rows = [], perPersonTotals = [], grand = { per: 0, eq: 0, base: 0, diff: 0 };
@@ -1462,7 +1297,7 @@ function buildPart1RowsData(ctx) {
         }
         
         if (mdpEnabled && mdpTarget && p.id === mdpTarget.id) {
-            const mdpFeeYear = appState.waiverOfPremium.products['mdp3']?.fee || 0;
+            const mdpFeeYear = appState.fees.byPerson[p.id]?.suppDetails?.['mdp3'] || 0;
             if (mdpFeeYear > 0) {
                 const years = Math.max(0, Math.min(60 - p.age, targetAge - mainAge) + 1);
                 pushRow(acc, p.name, 'Miễn đóng phí 3.0', formatCurrency(mdpStbhBase), years, mdpFeeYear, true);
@@ -1507,7 +1342,7 @@ function buildPart2ScheduleRows(ctx) {
             }
 
             if (mdpEnabled && mdpTarget && p.id === mdpTarget.id) {
-                const mdpStbhBase = appState.waiverOfPremium.products['mdp3']?.stbhBase || 0;
+                const mdpStbhBase = window.MDP3.getStbhBase();
                 const mdpConfig = PRODUCT_CATALOG['mdp3'];
                 const mdpFeeForYear = mdpConfig.calculation.calculate({ customer: p, stbhBase });
                  addRider('mdp3', mdpFeeForYear);
@@ -1593,7 +1428,7 @@ function buildPart3ScheduleSection(summaryData) {
         header.push(...activePersonIdx.map(i => `<th>Phí BS (${sanitizeHtml(persons[i].name)})</th>`));
         header.push('<th>Tổng đóng/năm</th>');
         header.push('<th>Giá trị TK (Lãi suất cam kết)</th>');
-        header.push(`<th>Giá trị TK (Lãi suất ${customRateInput}% trong 20 năm đầu...)</th>`);
+        header.push(`<th>Giá trị TK (Lãi suất ${customRateInput}% trong 20 năm đầu, từ năm 21 là lãi suất cam kết)</th>`);
         header.push(`<th>Giá trị TK (Lãi suất ${customRateInput}% xuyên suốt hợp đồng)</th>`);
 
         let sums = { main: 0, extra: 0, supp: activePersonIdx.map(() => 0), totalBase: 0 };
@@ -1820,3 +1655,219 @@ function bm_renderSchemaTables(schemaKey, columns) {
 function getProductLabel(key) {
   return PRODUCT_CATALOG[key]?.name || key || '';
 }
+
+// ===================================================================================
+// ===== MODULE: MIỄN ĐÓNG PHÍ 3.0 (REFACTORED)
+// ===================================================================================
+window.MDP3 = (function () {
+    let selectedId = null;
+    let lastSelectedId = null;
+
+    function init() {
+        const container = document.getElementById('waiver-of-premium-container');
+        if (!container) return;
+        
+        container.innerHTML = `
+            <label class="flex items-center space-x-3 cursor-pointer">
+                <input type="checkbox" id="mdp3-enable" class="form-checkbox">
+                <span class="font-medium text-gray-800">Bật Miễn đóng phí 3.0</span>
+            </label>
+            <div id="mdp3-options-container" class="hidden mt-4 space-y-4"></div>
+        `;
+        attachListeners();
+    }
+    
+    function attachListeners(){
+         document.body.addEventListener('change', function (e) {
+            if (e.target.id === 'mdp3-enable') {
+                const optionsContainer = document.getElementById('mdp3-options-container');
+                if (e.target.checked) {
+                    optionsContainer.classList.remove('hidden');
+                    renderOptions();
+                    if (lastSelectedId) {
+                        const selEl = document.getElementById('mdp3-person-select');
+                        if (selEl) {
+                            const opt = selEl.querySelector(`option[value="${lastSelectedId}"]`);
+                            if (opt && !opt.disabled) {
+                                selEl.value = lastSelectedId;
+                                selectedId = lastSelectedId;
+                                if(lastSelectedId === 'other') showOtherForm();
+                            }
+                        }
+                    }
+                } else {
+                    optionsContainer.classList.add('hidden');
+                    optionsContainer.innerHTML = '';
+                    selectedId = null;
+                }
+                runWorkflow();
+            }
+            if (e.target.id === 'mdp3-person-select') {
+                selectedId = e.target.value;
+                lastSelectedId = selectedId || null;
+                const otherForm = document.getElementById('mdp3-other-form');
+                if (selectedId === 'other') showOtherForm();
+                else if(otherForm) otherForm.classList.add('hidden');
+                runWorkflow();
+            }
+        });
+
+        // Listen for changes in supplementary person info
+        document.getElementById('supplementary-insured-container').addEventListener('input', debounce(updateOptions, 300));
+    }
+
+    function render(isMainProductValid) {
+        const waiverSection = document.getElementById('waiver-of-premium-section');
+        const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+        const isDisabled = !isMainProductValid || mainProductConfig?.rules?.noSupplementaryInsured;
+
+        waiverSection.classList.toggle('opacity-50', isDisabled);
+        waiverSection.classList.toggle('pointer-events-none', isDisabled);
+
+        if (isDisabled) reset();
+    }
+    
+    function renderOptions(){
+        const optionsContainer = document.getElementById('mdp3-options-container');
+        if (!optionsContainer) return;
+        
+        optionsContainer.innerHTML = `
+            <div>
+                <label for="mdp3-person-select" class="font-medium text-gray-700 block mb-1">Áp dụng cho</label>
+                <select id="mdp3-person-select" class="form-select w-full"></select>
+            </div>
+            <div id="mdp3-other-form" class="hidden mt-4 p-3 border rounded bg-gray-50"></div>
+            <div id="mdp3-fee-display" class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2"></div>
+        `;
+        updateOptions();
+    }
+
+    function reset() {
+        selectedId = null;
+        lastSelectedId = null;
+        const enableCb = document.getElementById('mdp3-enable');
+        if (enableCb) enableCb.checked = false;
+        const optionsContainer = document.getElementById('mdp3-options-container');
+        if (optionsContainer) {
+            optionsContainer.classList.add('hidden');
+            optionsContainer.innerHTML = '';
+        }
+    }
+    
+    function updateOptions() {
+        if (!isEnabled()) return;
+        const selEl = document.getElementById('mdp3-person-select');
+        if (!selEl) return;
+    
+        const currentSelectedValue = selEl.value;
+    
+        let optionsHtml = `<option value="">-- Chọn người --</option>`;
+        appState.persons.forEach(p => {
+            if (p.isMain) return; // Exclude main person
+            let label = p.name || 'NĐBH bổ sung';
+            label += ` (tuổi ${p.age || "?"})`;
+            const isEligible = p.age >= 18 && p.age <= 60;
+            optionsHtml += `<option value="${p.id}" ${isEligible ? '' : 'disabled'}>${label}${!isEligible ? ' - Không đủ ĐK' : ''}</option>`;
+        });
+        optionsHtml += `<option value="other">Người khác</option>`;
+        selEl.innerHTML = optionsHtml;
+    
+        // Restore selection if possible
+        const opt = selEl.querySelector(`option[value="${currentSelectedValue}"]`);
+        if (opt && !opt.disabled) {
+            selEl.value = currentSelectedValue;
+        } else {
+            selectedId = null;
+            if (currentSelectedValue !== 'other') {
+                const otherForm = document.getElementById('mdp3-other-form');
+                if (otherForm) otherForm.classList.add('hidden');
+            }
+        }
+    }
+
+    function showOtherForm() {
+        const otherForm = document.getElementById('mdp3-other-form');
+        otherForm.classList.remove('hidden');
+        if(!otherForm.querySelector('.person-container')) {
+             otherForm.innerHTML = `<div id="person-container-wop-other" class="person-container">${generateOtherPersonHtml()}</div>`;
+             initDateFormatter(otherForm.querySelector('.dob-input'));
+        }
+    }
+
+    function getStbhBase() {
+        let stbhBase = 0;
+        stbhBase += (appState.fees.baseMain || 0) + (appState.fees.extra || 0);
+        
+        appState.persons.forEach(p => {
+             stbhBase += appState.fees.byPerson[p.id]?.supp || 0;
+        });
+        
+        const mdpTarget = getTargetPersonInfo();
+        if (mdpTarget && mdpTarget.id !== 'wop_other') {
+             stbhBase -= appState.fees.byPerson[mdpTarget.id]?.supp || 0;
+        }
+        return Math.max(0, stbhBase);
+    }
+    
+    function getPremium() {
+        const feeEl = document.getElementById('mdp3-fee-display');
+        if (!isEnabled() || !selectedId) {
+            if (feeEl) feeEl.textContent = '';
+            return 0;
+        }
+        const stbhBase = getStbhBase();
+        const personInfo = getTargetPersonInfo();
+
+        if (!personInfo || !personInfo.age || personInfo.age < 18 || personInfo.age > 60) {
+            if(feeEl) feeEl.textContent = `STBH: ${formatCurrency(stbhBase)} | Phí: — (Người không hợp lệ)`;
+            return 0;
+        }
+        
+        const mdpConfig = PRODUCT_CATALOG['mdp3'];
+        const premium = mdpConfig.calculation.calculate({ customer: personInfo, stbhBase });
+        
+        if (feeEl) {
+            feeEl.textContent = premium > 0
+                ? `STBH: ${formatCurrency(stbhBase)} | Phí: ${formatCurrency(premium)}`
+                : `STBH: ${formatCurrency(stbhBase)} | Phí: —`;
+        }
+        return premium;
+    }
+
+    function validate() {
+        if (!isEnabled() || !selectedId) return true;
+        
+        const personInfo = getTargetPersonInfo();
+        if (selectedId === 'other') {
+            const dobInput = document.querySelector('#person-container-wop-other .dob-input');
+            if (!validateDobField(dobInput)) return false;
+            if (personInfo.age < 18 || personInfo.age > 60) {
+                 setFieldError(dobInput, 'Tuổi phải từ 18-60');
+                 return false;
+            }
+            clearFieldError(dobInput);
+        }
+        return true;
+    }
+
+    function getTargetPersonInfo() {
+        if (!selectedId) return null;
+        if (selectedId === 'other') {
+            const otherForm = document.getElementById('person-container-wop-other');
+            return otherForm ? { ...collectPersonData(otherForm, false, true), id: 'wop_other' } : null;
+        }
+        return appState.persons.find(p => p.id === selectedId) || null;
+    }
+    
+    function generateOtherPersonHtml() {
+        return `<h3 class="text-lg font-bold text-gray-700 mb-2 border-t pt-4">Người được miễn đóng phí</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label class="font-medium text-gray-700 block mb-1">Họ và Tên</label><input type="text" class="form-input name-input"></div>
+            <div><label class="font-medium text-gray-700 block mb-1">Ngày sinh</label><input type="text" class="form-input dob-input" placeholder="DD/MM/YYYY"></div>
+            <div><label class="font-medium text-gray-700 block mb-1">Giới tính</label><select class="form-select gender-select"><option value="Nam">Nam</option><option value="Nữ">Nữ</option></select></div>
+            <div class="flex items-end space-x-4"><p class="text-lg">Tuổi: <span class="font-bold text-aia-red age-span">0</span></p></div>
+          </div>`;
+    }
+
+    return { init, isEnabled, getSelectedId: () => selectedId, getPremium, getStbhBase, reset, updateOptions, render, validate, getTargetPersonInfo };
+})();
