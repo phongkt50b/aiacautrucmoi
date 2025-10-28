@@ -1,4 +1,5 @@
 
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, WAIVER_PRODUCTS, getEnabledWaiverProducts } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
@@ -147,7 +148,7 @@ function collectPersonData(container, isMain, isWopOther = false) {
         dob: dobStr,
         age, daysFromBirth,
         gender: container.querySelector('.gender-select')?.value || 'Nam',
-        riskGroup: isWopOther ? 0 : (parseInt(container.querySelector('.occupation-input')?.dataset.group, 10) || 0),
+        riskGroup: parseInt(container.querySelector('.occupation-input')?.dataset.group, 10) || 0,
         supplements
     };
 }
@@ -1820,49 +1821,42 @@ window.WaiverManager = (function () {
         renderOptions() {
             const optionsContainer = document.getElementById(`${config.id}-options-container`);
             if (!optionsContainer) return;
-            
+
             optionsContainer.innerHTML = `
                 <div>
                     <label for="${config.id}-person-select" class="font-medium text-gray-700 block mb-1">${config.ui.personSelectLabel}</label>
                     <select id="${config.id}-person-select" class="form-select w-full"></select>
                 </div>
                 <div id="${config.id}-other-form" class="hidden mt-4 p-3 border rounded bg-gray-50">
-                    <div id="person-container-${config.id}-other" class="person-container">
-                        <div class="space-y-3">
-                            <div>
-                                <label class="font-medium text-gray-700 block mb-1">Họ và Tên</label>
-                                <input type="text" class="form-input name-input" placeholder="Nhập họ và tên">
-                            </div>
-                            <div>
-                                <label class="font-medium text-gray-700 block mb-1">Ngày sinh</label>
-                                <input type="text" class="form-input dob-input" placeholder="DD/MM/YYYY">
-                                <span class="text-sm text-gray-600">Tuổi: <span class="age-span">0</span></span>
-                            </div>
-                            <div>
-                                <label class="font-medium text-gray-700 block mb-1">Giới tính</label>
-                                <select class="form-select gender-select">
-                                    <option value="Nam">Nam</option>
-                                    <option value="Nữ">Nữ</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
                 </div>
                 <div id="${config.id}-fee-display" class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2"></div>
             `;
-            this.updateOptions();
-            this.attachOtherFormListeners();
-        },
-        
-        attachOtherFormListeners() {
-            const otherForm = document.getElementById(`person-container-${config.id}-other`);
-            if (!otherForm) return;
             
-            const dobInput = otherForm.querySelector('.dob-input');
-            if (dobInput) {
-                initDateFormatter(dobInput);
-                dobInput.addEventListener('input', () => runWorkflowDebounced());
+            const otherFormWrapper = document.getElementById(`${config.id}-other-form`);
+            const template = document.getElementById('supplementary-person-template');
+
+            if (otherFormWrapper && template) {
+                const clone = template.content.cloneNode(true);
+                
+                clone.querySelector('.remove-supp-btn')?.remove();
+                const suppContainer = clone.querySelector('.supplementary-products-container')?.parentElement;
+                if(suppContainer) suppContainer.remove();
+
+                const newContainer = clone.querySelector('.person-container');
+                newContainer.id = `person-container-${config.id}-other`;
+                newContainer.classList.remove('bg-gray-100', 'p-4', 'mt-4');
+                newContainer.querySelector('h3').textContent = config.ui.otherPersonForm.title || 'Thông tin người được miễn đóng phí';
+
+                otherFormWrapper.appendChild(clone);
+                
+                const newFormEl = document.getElementById(newContainer.id);
+                if (newFormEl) {
+                    initDateFormatter(newFormEl.querySelector('.dob-input'));
+                    initOccupationAutocomplete(newFormEl.querySelector('.occupation-input'), newFormEl);
+                }
             }
+            
+            this.updateOptions();
         },
         
         updateOptions() {
@@ -1940,7 +1934,8 @@ window.WaiverManager = (function () {
 
             if (!personInfo || !personInfo.age || 
                 personInfo.age < config.rules.eligibility.minAge || 
-                personInfo.age > config.rules.eligibility.maxAge) {
+                personInfo.age > config.rules.eligibility.maxAge ||
+                !personInfo.riskGroup) {
                 if (feeEl) {
                     const msg = config.ui.noEligibleMessage
                         .replace('{stbhBase}', formatCurrency(stbhBase));
@@ -1974,7 +1969,17 @@ window.WaiverManager = (function () {
             clearFieldError(selEl);
             
             if (selectedId === 'other') {
-                const dobInput = document.querySelector(`#person-container-${config.id}-other .dob-input`);
+                const otherForm = document.getElementById(`person-container-${config.id}-other`);
+                if (!otherForm) return false;
+
+                const occupationInput = otherForm.querySelector('.occupation-input');
+                if (!occupationInput || !(parseInt(occupationInput.dataset.group, 10) > 0)) {
+                    setFieldError(occupationInput, 'Vui lòng chọn nghề nghiệp');
+                    return false;
+                }
+                clearFieldError(occupationInput);
+
+                const dobInput = otherForm.querySelector('.dob-input');
                 if (!validateDobField(dobInput)) return false;
                 
                 const personInfo = this.getTargetPersonInfo();
