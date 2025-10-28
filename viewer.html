@@ -624,6 +624,7 @@
         bhn:'benh-hiem-ngheo-20',
         accident:'tai-nan',
         hospital_support:'ho-tro-vien-phi',
+        mdp3: 'rider-prod-5' // Assuming mdp3 has its own images
       };
 
     // 1. Gắn summaryHtml
@@ -671,7 +672,7 @@
 
     // 2. Chèn ảnh công ty TRƯỚC TOÀN BỘ bảng minh họa
     const companyFiles = state.imageConfig['company-intro-image'] || [];
-    const companyImgs = companyFiles.map(file => `/images/${file}`);
+    const companyImgs = companyFiles.map(file => `./images/${file}`);
     const companyBlock = renderImageBlock(companyImgs, true);
     if(companyBlock){
       main.insertBefore(companyBlock, container);
@@ -680,13 +681,14 @@
     // 3. Chèn ảnh sản phẩm chính và riders sau phần 3
     const part3Headings = qa('h3', container).filter(h => /Phần\s*3/i.test(h.textContent));
     const lastPart3 = part3Headings.length ? part3Headings[part3Headings.length - 1] : null;
-    let insertAfterNode = lastPart3 ? lastPart3.parentElement : container.lastElementChild;
+    let insertAfterNode = lastPart3 ? (lastPart3.nextElementSibling || lastPart3) : container.lastElementChild;
+
 
     // 3.1 Ảnh sản phẩm chính
     const prodSlug = payload.productSlug || (payload.productKey || '').toLowerCase();
     const prodKey = slugToKeyMap[prodSlug];
     const productFiles = state.imageConfig[prodKey] || [];
-    const productImgs = productFiles.map(file => `/images/${file}`);
+    const productImgs = productFiles.map(file => `./images/${file}`);
     if(productImgs.length){
       const prodBlock = renderImageBlock(productImgs);
       insertAfterNode.parentNode.insertBefore(prodBlock, insertAfterNode.nextSibling);
@@ -702,7 +704,7 @@
 
         const riderKey = slugToKeyMap[rSlug];
         const riderFiles = state.imageConfig[riderKey] || [];
-        const riderImgs = riderFiles.map(file => `/images/${file}`);
+        const riderImgs = riderFiles.map(file => `./images/${file}`);
 
         if(riderImgs.length) {
             const riderBlock = renderImageBlock(riderImgs);
