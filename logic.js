@@ -1758,244 +1758,336 @@ function getProductLabel(key) {
 // ===================================================================================
 // ===== MODULE: MIỄN ĐÓNG PHÍ 3.0 (NEW, RESTRUCTURED & ROBUST)
 // ===================================================================================
-window.MDP3 = (function () {
-    let selectedId = null;
-    let lastSelectedId = null;
+// ===== THAY THẾ TOÀN BỘ window.MDP3 trong logic.js =====
+import { WAIVER_PRODUCTS, getEnabledWaiverProducts } from './structure.js';
 
+// ===== WAIVER MANAGER - Quản lý TẤT CẢ sản phẩm miễn đóng phí =====
+window.WaiverManager = (function () {
+    const instances = {}; // { 'mdp3': {...}, 'mdp4': {...} }
+    
     function init() {
-        renderSection();
-        attachListeners();
-    }
-
-    function isEnabled() {
-        const cb = document.getElementById('mdp3-enable');
-        return !!(cb && cb.checked);
+        const enabledProducts = getEnabledWaiverProducts();
+        
+        enabledProducts.forEach(productConfig => {
+            instances[productConfig.id] = createWaiverInstance(productConfig);
+            instances[productConfig.id].init();
+        });
     }
     
-    function renderSection() {
-        const container = document.getElementById('waiver-of-premium-container');
-        if (container && !container.querySelector('#mdp3-enable')) {
-            container.innerHTML = `
-                <label class="flex items-center space-x-3 cursor-pointer">
-                    <input type="checkbox" id="mdp3-enable" class="form-checkbox">
-                    <span class="font-medium text-gray-800">Bật Miễn đóng phí 3.0</span>
-                </label>
-                <div id="mdp3-options-container" class="hidden mt-4 space-y-4"></div>
-            `;
-        }
-    }
-    
-    function render(isMainProductValid) {
-        const waiverSection = document.getElementById('waiver-of-premium-section');
-        const enableCheckbox = document.getElementById('mdp3-enable');
-        const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+    function createWaiverInstance(config) {
+        let selectedId = null;
+        let lastSelectedId = null;
         
-        const sectionIsDisabled = mainProductConfig?.rules?.noSupplementaryInsured;
-        
-        if (waiverSection) {
-            waiverSection.classList.toggle('disabled', sectionIsDisabled);
-            waiverSection.style.pointerEvents = sectionIsDisabled ? 'none' : 'auto';
-            waiverSection.style.opacity = sectionIsDisabled ? '0.6' : '1';
-        }
-        
-        if (sectionIsDisabled) {
-            reset();
-        } else if (enableCheckbox) {
-            enableCheckbox.disabled = !isMainProductValid;
-        }
-    }
-
-    function attachListeners(){
-         document.body.addEventListener('change', function (e) {
-            if (e.target.id === 'mdp3-enable') {
-                const optionsContainer = document.getElementById('mdp3-options-container');
-                if (e.target.checked) {
-                    optionsContainer.classList.remove('hidden');
-                    renderOptions();
-                    if (lastSelectedId) {
-                        const selEl = document.getElementById('mdp3-person-select');
-                        if (selEl) {
-                            const opt = selEl.querySelector(`option[value="${lastSelectedId}"]`);
-                            if (opt && !opt.disabled) {
-                                selEl.value = lastSelectedId;
-                                selectedId = lastSelectedId;
-                                if(lastSelectedId === 'other') showOtherForm();
-                            }
-                        }
-                    }
+        return {
+            config,
+            
+            init() {
+                this.renderSection();
+                this.attachListeners();
+            },
+            
+            isEnabled() {
+                const cb = document.getElementById(`${config.id}-enable`);
+                return !!(cb && cb.checked);
+            },
+            
+            renderSection() {
+                const container = document.getElementById('waiver-of-premium-container');
+                if (!container) return;
+                
+                // Tạo section cho sản phẩm này
+                const sectionId = `${config.id}-section`;
+                if (!document.getElementById(sectionId)) {
+                    const sectionHtml = `
+                        <div id="${sectionId}" class="waiver-product-section mb-4">
+                            <label class="flex items-center space-x-3 cursor-pointer">
+                                <input type="checkbox" id="${config.id}-enable" class="form-checkbox">
+                                <span class="font-medium text-gray-800">${config.ui.enableCheckboxLabel}</span>
+                            </label>
+                            <div id="${config.id}-options-container" class="hidden mt-4 space-y-4"></div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', sectionHtml);
+                }
+            },
+            
+            renderOptions() {
+                const optionsContainer = document.getElementById(`${config.id}-options-container`);
+                if (!optionsContainer) return;
+                
+                optionsContainer.innerHTML = `
+                    <div>
+                        <label for="${config.id}-person-select" class="font-medium text-gray-700 block mb-1">${config.ui.personSelectLabel}</label>
+                        <select id="${config.id}-person-select" class="form-select w-full"></select>
+                    </div>
+                    <div id="${config.id}-other-form" class="hidden mt-4 p-3 border rounded bg-gray-50"></div>
+                    <div id="${config.id}-fee-display" class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2"></div>
+                `;
+                this.updateOptions();
+            },
+            
+            updateOptions() {
+                if (!this.isEnabled()) return;
+                const selEl = document.getElementById(`${config.id}-person-select`);
+                if (!selEl) return;
+            
+                const currentSelectedValue = selEl.value;
+            
+                let optionsHtml = `<option value="">${config.ui.personSelectPlaceholder}</option>`;
+                
+                appState.persons.forEach(p => {
+                    // Áp dụng rule từ config
+                    if (p.isMain && config.rules.eligibility.excludeMainPerson) return;
+                    
+                    let label = p.name || 'NĐBH bổ sung';
+                    label += ` (tuổi ${p.age || "?"})`;
+                    
+                    const isEligible = p.age >= config.rules.eligibility.minAge && 
+                                     p.age <= config.rules.eligibility.maxAge;
+                    
+                    optionsHtml += `<option value="${p.id}" ${isEligible ? '' : 'disabled'}>${label}${!isEligible ? ' - Không đủ ĐK' : ''}</option>`;
+                });
+                
+                optionsHtml += `<option value="${config.ui.otherPersonOption.value}">${config.ui.otherPersonOption.label}</option>`;
+                selEl.innerHTML = optionsHtml;
+            
+                const opt = selEl.querySelector(`option[value="${currentSelectedValue}"]`);
+                if (opt && !opt.disabled) {
+                    selEl.value = currentSelectedValue;
                 } else {
-                    optionsContainer.classList.add('hidden');
-                    optionsContainer.innerHTML = '';
                     selectedId = null;
                 }
-                runWorkflow();
+            },
+            
+            getStbhBase() {
+                if (!this.isEnabled() || !window.personFees) return 0;
+                
+                let stbhBase = 0;
+                const rules = config.rules.stbhCalculation;
+                
+                // Include main premium
+                if (rules.includeMainBasePremium) {
+                    for (const pid in window.personFees) {
+                        if (pid === 'wop_other') continue;
+                        stbhBase += (window.personFees[pid].mainBase || 0);
+                    }
+                }
+                
+                // Include riders
+                if (rules.includeAllRiders) {
+                    for (const pid in window.personFees) {
+                        if (pid === 'wop_other') continue;
+                        stbhBase += (window.personFees[pid].supp || 0);
+                    }
+                }
+                
+                // Exclude waived person's riders
+                if (rules.excludeRidersOfWaivedPerson && selectedId && selectedId !== 'other') {
+                    stbhBase -= (window.personFees[selectedId]?.supp || 0);
+                }
+                
+                // Apply multiplier (for MDP4)
+                if (rules.multiplier) {
+                    stbhBase *= rules.multiplier;
+                }
+                
+                return Math.max(0, stbhBase);
+            },
+            
+            getPremium() {
+                const feeEl = document.getElementById(`${config.id}-fee-display`);
+                if (!this.isEnabled() || !selectedId) {
+                    if (feeEl) feeEl.textContent = '';
+                    return 0;
+                }
+
+                const stbhBase = this.getStbhBase();
+                const personInfo = this.getTargetPersonInfo();
+
+                if (!personInfo || !personInfo.age || 
+                    personInfo.age < config.rules.eligibility.minAge || 
+                    personInfo.age > config.rules.eligibility.maxAge) {
+                    if (feeEl) {
+                        const msg = config.ui.noEligibleMessage
+                            .replace('{stbhBase}', formatCurrency(stbhBase));
+                        feeEl.textContent = msg;
+                    }
+                    return 0;
+                }
+                
+                const productConfig = PRODUCT_CATALOG[config.productKey];
+                const premium = productConfig.calculation.calculate({ customer: personInfo, stbhBase });
+                
+                if (feeEl) {
+                    const msg = premium > 0
+                        ? config.ui.feeDisplayTemplate
+                            .replace('{stbhBase}', formatCurrency(stbhBase))
+                            .replace('{premium}', formatCurrency(premium))
+                        : config.ui.noEligibleMessage.replace('{stbhBase}', formatCurrency(stbhBase));
+                    feeEl.textContent = msg;
+                }
+                return premium;
+            },
+            
+            validate() {
+                if (!this.isEnabled()) return true;
+                
+                const selEl = document.getElementById(`${config.id}-person-select`);
+                if(!selEl || !selEl.value) {
+                    setFieldError(selEl, config.validationMessages.noPersonSelected);
+                    return false;
+                }
+                clearFieldError(selEl);
+                
+                if (selectedId === 'other') {
+                    const dobInput = document.querySelector(`#person-container-${config.id}-other .dob-input`);
+                    if (!validateDobField(dobInput)) return false;
+                    
+                    const personInfo = this.getTargetPersonInfo();
+                    if (personInfo.age < config.rules.eligibility.minAge || 
+                        personInfo.age > config.rules.eligibility.maxAge) {
+                        const msg = config.validationMessages.invalidAge
+                            .replace('{minAge}', config.rules.eligibility.minAge)
+                            .replace('{maxAge}', config.rules.eligibility.maxAge);
+                        setFieldError(dobInput, msg);
+                        return false;
+                    }
+                    clearFieldError(dobInput);
+                }
+                return true;
+            },
+            
+            getTargetPersonInfo() {
+                if (!selectedId) return null;
+                if (selectedId === 'other') {
+                    const otherForm = document.getElementById(`person-container-${config.id}-other`);
+                    return otherForm ? { ...collectPersonData(otherForm, false, true), id: `${config.id}_other` } : null;
+                }
+                return appState.persons.find(p => p.id === selectedId) || null;
+            },
+            
+            reset() {
+                selectedId = null;
+                lastSelectedId = null;
+                const enableCb = document.getElementById(`${config.id}-enable`);
+                if (enableCb) enableCb.checked = false;
+                const optionsContainer = document.getElementById(`${config.id}-options-container`);
+                if (optionsContainer) {
+                    optionsContainer.classList.add('hidden');
+                    optionsContainer.innerHTML = '';
+                }
+            },
+            
+            render(isMainProductValid) {
+                const waiverSection = document.getElementById('waiver-of-premium-section');
+                const enableCheckbox = document.getElementById(`${config.id}-enable`);
+                const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+                
+                const sectionIsDisabled = mainProductConfig?.rules?.noSupplementaryInsured;
+                
+                if (waiverSection) {
+                    waiverSection.classList.toggle('disabled', sectionIsDisabled);
+                }
+                
+                if (sectionIsDisabled) {
+                    this.reset();
+                } else if (enableCheckbox) {
+                    enableCheckbox.disabled = !isMainProductValid;
+                }
+            },
+            
+            attachListeners() {
+                document.body.addEventListener('change', (e) => {
+                    if (e.target.id === `${config.id}-enable`) {
+                        const optionsContainer = document.getElementById(`${config.id}-options-container`);
+                        if (e.target.checked) {
+                            optionsContainer.classList.remove('hidden');
+                            this.renderOptions();
+                            if (lastSelectedId) {
+                                const selEl = document.getElementById(`${config.id}-person-select`);
+                                if (selEl) {
+                                    const opt = selEl.querySelector(`option[value="${lastSelectedId}"]`);
+                                    if (opt && !opt.disabled) {
+                                        selEl.value = lastSelectedId;
+                                        selectedId = lastSelectedId;
+                                    }
+                                }
+                            }
+                        } else {
+                            optionsContainer.classList.add('hidden');
+                            optionsContainer.innerHTML = '';
+                            selectedId = null;
+                        }
+                        runWorkflow();
+                    }
+                    
+                    if (e.target.id === `${config.id}-person-select`) {
+                        selectedId = e.target.value;
+                        lastSelectedId = selectedId || null;
+                        runWorkflow();
+                    }
+                });
             }
-            if (e.target.id === 'mdp3-person-select') {
-                selectedId = e.target.value;
-                lastSelectedId = selectedId || null;
-                const otherForm = document.getElementById('mdp3-other-form');
-                if (selectedId === 'other') showOtherForm();
-                else if(otherForm) otherForm.classList.add('hidden');
-                runWorkflow();
-            }
-        });
-
-        document.getElementById('supplementary-insured-container').addEventListener('input', debounce(updateOptions, 300));
+        };
     }
     
-    function renderOptions(){
-        const optionsContainer = document.getElementById('mdp3-options-container');
-        if (!optionsContainer) return;
+    // ===== PUBLIC API =====
+    return {
+        init,
         
-        optionsContainer.innerHTML = `
-            <div>
-                <label for="mdp3-person-select" class="font-medium text-gray-700 block mb-1">Áp dụng cho</label>
-                <select id="mdp3-person-select" class="form-select w-full"></select>
-            </div>
-            <div id="mdp3-other-form" class="hidden mt-4 p-3 border rounded bg-gray-50"></div>
-            <div id="mdp3-fee-display" class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2"></div>
-        `;
-        updateOptions();
-    }
-
-    function reset() {
-        selectedId = null;
-        lastSelectedId = null;
-        const enableCb = document.getElementById('mdp3-enable');
-        if (enableCb) enableCb.checked = false;
-        const optionsContainer = document.getElementById('mdp3-options-container');
-        if (optionsContainer) {
-            optionsContainer.classList.add('hidden');
-            optionsContainer.innerHTML = '';
-        }
-    }
-    
-    function updateOptions() {
-        if (!isEnabled()) return;
-        const selEl = document.getElementById('mdp3-person-select');
-        if (!selEl) return;
-    
-        const currentSelectedValue = selEl.value;
-    
-        let optionsHtml = `<option value="">-- Chọn người --</option>`;
-        appState.persons.forEach(p => {
-            if (p.isMain) return; // Exclude main person
-            let label = p.name || 'NĐBH bổ sung';
-            label += ` (tuổi ${p.age || "?"})`;
-            const isEligible = p.age >= 18 && p.age <= 60;
-            optionsHtml += `<option value="${p.id}" ${isEligible ? '' : 'disabled'}>${label}${!isEligible ? ' - Không đủ ĐK' : ''}</option>`;
-        });
-        optionsHtml += `<option value="other">Người khác</option>`;
-        selEl.innerHTML = optionsHtml;
-    
-        // Restore selection if possible
-        const opt = selEl.querySelector(`option[value="${currentSelectedValue}"]`);
-        if (opt && !opt.disabled) {
-            selEl.value = currentSelectedValue;
-        } else {
-            selectedId = null;
-            if (currentSelectedValue !== 'other') {
-                const otherForm = document.getElementById('mdp3-other-form');
-                if (otherForm) otherForm.classList.add('hidden');
-            }
-        }
-    }
-
-    function showOtherForm() {
-        const otherForm = document.getElementById('mdp3-other-form');
-        otherForm.classList.remove('hidden');
-        if(!otherForm.querySelector('.person-container')) {
-             otherForm.innerHTML = `<div id="person-container-wop-other" class="person-container">${generateOtherPersonHtml()}</div>`;
-             initDateFormatter(otherForm.querySelector('.dob-input'));
-        }
-    }
-
-    function getStbhBase() {
-        if (!isEnabled() || !window.personFees) return 0;
+        // Lấy tất cả phí waiver
+        getAllPremiums() {
+            const result = {};
+            Object.keys(instances).forEach(id => {
+                const premium = instances[id].getPremium();
+                if (premium > 0) {
+                    result[id] = {
+                        premium,
+                        targetPerson: instances[id].getTargetPersonInfo(),
+                        stbhBase: instances[id].getStbhBase()
+                    };
+                }
+            });
+            return result;
+        },
         
-        let stbhBase = 0;
+        // Validate tất cả
+        validateAll() {
+            return Object.values(instances).every(inst => inst.validate());
+        },
         
-        // Sum up main base premium and all non-MDP supplementary premiums from the clean snapshot
-        for (const pid in window.personFees) {
-            if (pid === 'wop_other') continue; 
-            const pf = window.personFees[pid];
-            stbhBase += (pf.mainBase || 0) + (pf.supp || 0);
-        }
+        // Render tất cả
+        renderAll(isMainProductValid) {
+            Object.values(instances).forEach(inst => inst.render(isMainProductValid));
+        },
         
-        // Subtract the non-MDP supplementary premiums of the person being waived
-        if (selectedId && selectedId !== 'other' && window.personFees[selectedId]) {
-            stbhBase -= (window.personFees[selectedId].supp || 0);
-        }
+        // Reset tất cả
+        resetAll() {
+            Object.values(instances).forEach(inst => inst.reset());
+        },
         
-        return Math.max(0, stbhBase);
-    }
-
-    function getPremium() {
-        const feeEl = document.getElementById('mdp3-fee-display');
-        if (!isEnabled() || !selectedId) {
-            if (feeEl) feeEl.textContent = '';
-            return 0;
-        }
-
-        const stbhBase = getStbhBase();
-        const personInfo = getTargetPersonInfo();
-
-        if (!personInfo || !personInfo.age || personInfo.age < 18 || personInfo.age > 60) {
-            if (feeEl) feeEl.textContent = `STBH: ${formatCurrency(stbhBase)} | Phí: — (Người không hợp lệ)`;
-            return 0;
-        }
+        // Update options tất cả
+        updateAllOptions() {
+            Object.values(instances).forEach(inst => inst.updateOptions());
+        },
         
-        const mdpConfig = PRODUCT_CATALOG['mdp3'];
-        const premium = mdpConfig.calculation.calculate({ customer: personInfo, stbhBase });
-        
-        if (feeEl) {
-            feeEl.textContent = premium > 0
-                ? `STBH: ${formatCurrency(stbhBase)} | Phí: ${formatCurrency(premium)}`
-                : `STBH: ${formatCurrency(stbhBase)} | Phí: —`;
+        // Lấy instance cụ thể (backward compatibility)
+        getInstance(id) {
+            return instances[id];
         }
-        return premium;
-    }
-
-    function validate() {
-        if (!isEnabled()) return true;
-        const selEl = document.getElementById('mdp3-person-select');
-        if(!selEl || !selEl.value) {
-            setFieldError(selEl, "Vui lòng chọn người được miễn đóng phí");
-            return false;
-        }
-        clearFieldError(selEl);
-        
-        if (selectedId === 'other') {
-            const dobInput = document.querySelector('#person-container-wop-other .dob-input');
-            if (!validateDobField(dobInput)) return false;
-            const personInfo = getTargetPersonInfo();
-            if (personInfo.age < 18 || personInfo.age > 60) {
-                 setFieldError(dobInput, 'Tuổi phải từ 18-60');
-                 return false;
-            }
-            clearFieldError(dobInput);
-        }
-        return true;
-    }
-
-    function getTargetPersonInfo() {
-        if (!selectedId) return null;
-        if (selectedId === 'other') {
-            const otherForm = document.getElementById('person-container-wop-other');
-            return otherForm ? { ...collectPersonData(otherForm, false, true), id: 'wop_other' } : null;
-        }
-        return appState.persons.find(p => p.id === selectedId) || null;
-    }
-    
-    function generateOtherPersonHtml() {
-        return `<h3 class="text-lg font-bold text-gray-700 mb-2 border-t pt-4">Người được miễn đóng phí</h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div><label class="font-medium text-gray-700 block mb-1">Họ và Tên</label><input type="text" class="form-input name-input"></div>
-            <div><label class="font-medium text-gray-700 block mb-1">Ngày sinh</label><input type="text" class="form-input dob-input" placeholder="DD/MM/YYYY"></div>
-            <div><label class="font-medium text-gray-700 block mb-1">Giới tính</label><select class="form-select gender-select"><option value="Nam">Nam</option><option value="Nữ">Nữ</option></select></div>
-            <div class="flex items-end space-x-4"><p class="text-lg">Tuổi: <span class="font-bold text-aia-red age-span">0</span></p></div>
-          </div>`;
-    }
-
-    return { init, isEnabled, getSelectedId: () => selectedId, getPremium, reset, updateOptions, render, validate, getTargetPersonInfo, getStbhBase };
+    };
 })();
+
+// ===== BACKWARD COMPATIBILITY: Giữ window.MDP3 =====
+window.MDP3 = {
+    init: () => window.WaiverManager.init(),
+    isEnabled: () => window.WaiverManager.getInstance('mdp3')?.isEnabled() || false,
+    getPremium: () => window.WaiverManager.getInstance('mdp3')?.getPremium() || 0,
+    validate: () => window.WaiverManager.getInstance('mdp3')?.validate() || true,
+    render: (isValid) => window.WaiverManager.getInstance('mdp3')?.render(isValid),
+    reset: () => window.WaiverManager.getInstance('mdp3')?.reset(),
+    updateOptions: () => window.WaiverManager.getInstance('mdp3')?.updateOptions(),
+    getTargetPersonInfo: () => window.WaiverManager.getInstance('mdp3')?.getTargetPersonInfo(),
+    getStbhBase: () => window.WaiverManager.getInstance('mdp3')?.getStbhBase() || 0,
+    getSelectedId: () => window.WaiverManager.getInstance('mdp3')?.selectedId
+};
