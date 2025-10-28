@@ -178,13 +178,13 @@ function performCalculations(state) {
         fees.byPerson[mainPerson.id].main = fees.baseMain + fees.extra;
     }
     
-    // PASS 1: Calculate all non-MDP3 fees
+    // PASS 1: Calculate all non-standalone fees
     let totalHospitalSupportStbh = 0;
     allInsuredPersons.forEach(person => {
         let personSuppFee = 0;
         Object.keys(person.supplements).forEach(prodId => {
             const prodConfig = PRODUCT_CATALOG[prodId];
-            if (!prodConfig?.calculation?.calculate) return;
+            if (!prodConfig?.calculation?.calculate || prodConfig.isStandalone) return;
             
             const ageOverride = null;
             const fee = prodConfig.calculation.calculate({
@@ -237,11 +237,10 @@ function performCalculations(state) {
         }
     });
 
-    // ✅ THÊM DÒNG NÀY
     fees.totalMain = fees.baseMain + fees.extra;
     fees.total = fees.totalMain + fees.totalSupp;
     
-    return fees; // ✅ RETURN
+    return fees;
 }
 
 function calculateMainPremium(customer, productInfo) {
@@ -361,7 +360,7 @@ function renderSupplementaryProductsForPerson(customer, isMainProductSectionVali
     const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
 
     Object.entries(PRODUCT_CATALOG).forEach(([prodId, prodConfig]) => {
-        if (prodConfig.type !== 'rider' || prodConfig.category === 'waiver_of_premium') return;
+        if (prodConfig.type !== 'rider' || prodConfig.isStandalone) return;
 
         const section = container.querySelector(`[data-product-key="${prodId}"]`);
         if (!section) return;
@@ -884,7 +883,7 @@ function updateSupplementaryAddButtonState(isMainProductValid) {
 
 function generateSupplementaryProductsHtml() {
     return Object.entries(PRODUCT_CATALOG)
-        .filter(([, config]) => config.type === 'rider' && config.category !== 'waiver_of_premium')
+        .filter(([, config]) => config.type === 'rider' && !config.isStandalone)
         .map(([prodId, prodConfig]) => {
             const controlsHtml = (prodConfig.ui.controls || []).map(cfg => renderControl(cfg, cfg.defaultValue || '', null)).join('');
             return `
@@ -1435,10 +1434,11 @@ function buildPart2ScheduleRows(ctx) {
                 // Tính phí MDP3 cho năm này
                 const mdpConfig = PRODUCT_CATALOG['mdp3'];
                 if (mdpConfig && mdpConfig.calculation.calculate) {
-                    const mdpFeeForYear = mdpConfig.calculation.calculate({ 
-                        customer: { ...p, age: attained }, 
-                        stbhBase: mdpStbhBaseForYear 
-                    });
+                    const mdpFeeForYear = mdpConfig.calculation.calculate(
+                        { ...p, age: attained }, // customer info for the current year
+                        mdpStbhBaseForYear,       // stbhBase for the current year
+                        { data: product_data, roundDownTo1000 } // helpers
+                    );
                     addRider('mdp3', mdpFeeForYear);
                 }
             }
@@ -1760,9 +1760,7 @@ function getProductLabel(key) {
 // ===================================================================================
 // ===== MODULE: MIỄN ĐÓNG PHÍ 3.0 (NEW, RESTRUCTURED & ROBUST)
 // ===================================================================================
-// ===== THAY THẾ TOÀN BỘ window.MDP3 trong logic.js =====
 
-// ===== WAIVER MANAGER - Quản lý TẤT CẢ sản phẩm miễn đóng phí =====
 window.WaiverManager = (function () {
     const instances = {}; // { 'mdp3': {...}, 'mdp4': {...} }
     
@@ -1943,7 +1941,7 @@ window.WaiverManager = (function () {
             }
             
             const productConfig = PRODUCT_CATALOG[config.productKey];
-            const premium = productConfig.calculation.calculate({ customer: personInfo, stbhBase });
+            const premium = productConfig.calculation.calculate(personInfo, stbhBase, { data: product_data, roundDownTo1000 });
             
             if (feeEl) {
                 const msg = premium > 0
@@ -1993,7 +1991,6 @@ window.WaiverManager = (function () {
             return appState.persons.find(p => p.id === selectedId) || null;
         },
         
-        // ✅ THÊM GETTER/SETTER
         getSelectedId() {
             return selectedId;
         },
@@ -2033,14 +2030,14 @@ window.WaiverManager = (function () {
         },
         
         attachListeners() {
-            const self = this; // ✅ LƯU REFERENCE
+            const self = this;
             
             document.body.addEventListener('change', (e) => {
                 if (e.target.id === `${config.id}-enable`) {
                     const optionsContainer = document.getElementById(`${config.id}-options-container`);
                     if (e.target.checked) {
                         optionsContainer.classList.remove('hidden');
-                        self.renderOptions(); // ✅ DÙNG SELF
+                        self.renderOptions();
                         if (lastSelectedId) {
                             const selEl = document.getElementById(`${config.id}-person-select`);
                             if (selEl) {
@@ -2063,7 +2060,6 @@ window.WaiverManager = (function () {
                     selectedId = e.target.value;
                     lastSelectedId = selectedId || null;
                     
-                    // ✅ HIỂN THỊ/ẨN FORM "NGƯỜI KHÁC"
                     const otherForm = document.getElementById(`${config.id}-other-form`);
                     if (otherForm) {
                         otherForm.classList.toggle('hidden', selectedId !== 'other');
@@ -2081,7 +2077,6 @@ window.WaiverManager = (function () {
     return {
         init,
         
-        // Lấy tất cả phí waiver
         getAllPremiums() {
             const result = {};
             Object.keys(instances).forEach(id => {
@@ -2097,27 +2092,22 @@ window.WaiverManager = (function () {
             return result;
         },
         
-        // Validate tất cả
         validateAll() {
             return Object.values(instances).every(inst => inst.validate());
         },
         
-        // Render tất cả
         renderAll(isMainProductValid) {
             Object.values(instances).forEach(inst => inst.render(isMainProductValid));
         },
         
-        // Reset tất cả
         resetAll() {
             Object.values(instances).forEach(inst => inst.reset());
         },
         
-        // Update options tất cả
         updateAllOptions() {
             Object.values(instances).forEach(inst => inst.updateOptions());
         },
         
-        // Lấy instance cụ thể (backward compatibility)
         getInstance(id) {
             return instances[id];
         }
