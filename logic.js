@@ -529,7 +529,7 @@ function runAllValidations() {
         }
     });
     
-    if (window.MDP3 && !MDP3.validate()) result.isValid = false;
+    if (!window.WaiverManager.validateAll()) result.isValid = false;
     if (!validateTargetAge()) result.isValid = false;
 
     result.errors = collectSimpleErrors();
