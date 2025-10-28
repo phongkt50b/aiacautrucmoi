@@ -739,7 +739,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initSupplementaryButton();
     initSummaryAndViewer();
     attachGlobalListeners();
-    window.MDP3.init();
+    window.WaiverManager.init();
     runWorkflow();
 });
 
@@ -748,7 +748,7 @@ function runWorkflow() {
   const validationResult = runAllValidations();
   appState.fees = performCalculations(appState);
   renderUI(validationResult);
-  window.MDP3.render(validationResult.isMainProductSectionValid);
+  window.WaiverManager.renderAll(validationResult.isMainProductSectionValid);
   updateTargetAge();
 }
 
@@ -854,7 +854,7 @@ function initSupplementaryButton() {
         newContainer.querySelector('.remove-supp-btn').addEventListener('click', () => {
             appState.persons = appState.persons.filter(p => p.id !== newPersonState.id);
             newContainer.remove();
-            window.MDP3.updateOptions();
+            window.WaiverManager.updateAllOptions();
             runWorkflow();
         });
         
