@@ -696,6 +696,17 @@ function validateMainProduct() {
             clearFieldError(el);
         }
     });
+
+    const premiumRules = productConfig.rules.premium;
+    if (premiumRules?.min && appState.fees.baseMain > 0 && appState.fees.baseMain < premiumRules.min) {
+        const anyInput = document.getElementById('main-stbh') || document.getElementById('abuv-term');
+        if (anyInput) {
+            const msg = productConfig.ui.validationMessages?.minPremium || `Phí chính tối thiểu ${formatCurrency(premiumRules.min)}`;
+            setFieldError(anyInput, msg);
+        }
+        ok = false;
+    }
+
     return ok;
 }
 
@@ -848,8 +859,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function runWorkflow() {
   updateStateFromUI();
-  const validationResult = runAllValidations();
   appState.fees = performCalculations(appState);
+  const validationResult = runAllValidations();
   renderUI(validationResult);
 }
 
@@ -869,10 +880,16 @@ function attachGlobalListeners() {
         hideGlobalErrors();
         if (e.target.id === 'main-product') {
             lastRenderedProductKey = null;
-            // Clear main product values on change to avoid carrying over old data
             appState.mainProduct.values = {};
+            
+            const newProductConfig = PRODUCT_CATALOG[e.target.value];
+            if (newProductConfig?.rules?.noSupplementaryInsured) {
+                const mainPerson = appState.persons.find(p => p.isMain);
+                if (mainPerson) {
+                    mainPerson.supplements = {}; // Clear riders for main person
+                }
+            }
         }
-        // Use debounced workflow for checkboxes to avoid UI flickering
         if (e.target.matches('input[type="checkbox"]')) {
             runWorkflowDebounced();
         } else {
@@ -978,6 +995,7 @@ function getWopPersonOptions() {
     let optionsHtml = `<option value="">-- Chọn người --</option>`;
     const selected = appState.waiverOfPremium.selectedPersonId;
     appState.persons.forEach(p => {
+        if (p.isMain) return; // Exclude main insured person
         const isEligible = p.age >= 18 && p.age <= 60;
         let label = `${p.name || (p.isMain ? 'NĐBH chính' : 'NĐBH bổ sung')} (tuổi ${p.age || "?"})`;
         if (!isEligible) label += ' - Không đủ điều kiện';
@@ -1537,11 +1555,71 @@ function buildPart1Section(data) {
 }
 
 function buildPart3ScheduleSection(summaryData) {
+    const productConfig = PRODUCT_CATALOG[summaryData.productKey];
+    const isPulMul = ['PUL', 'MUL'].includes(productConfig?.group);
+
     const { schedule, isAnnual, persons } = summaryData;
     const rows = schedule.rows;
     if (!rows.length) return '';
+
     const activePersonIdx = persons.map((p, i) => rows.some(r => (r.perPersonSuppAnnualEq[i] || 0) > 0) ? i : -1).filter(i => i !== -1);
-    const header = ['<th>Năm HĐ</th>', '<th>Tuổi</th>', '<th>Phí chính</th>', (schedule.extraAllZero ? '' : '<th>Phí đóng thêm</th>'), ...activePersonIdx.map(i => `<th>Phí BS (${sanitizeHtml(persons[i].name)})</th>`), (!isAnnual ? '<th>Tổng quy năm</th>' : ''), '<th>Tổng đóng/năm</th>', (!isAnnual ? '<th>Chênh lệch</th>' : '')].filter(Boolean);
+    
+    let header = ['<th>Năm HĐ</th>', '<th>Tuổi</th>', '<th>Phí chính</th>'];
+    if(!schedule.extraAllZero) header.push('<th>Phí đóng thêm</th>');
+    header.push(...activePersonIdx.map(i => `<th>Phí BS (${sanitizeHtml(persons[i].name)})</th>`));
+    if(!isAnnual) header.push('<th>Tổng quy năm</th>');
+    header.push('<th>Tổng đóng/năm</th>');
+    if(!isAnnual) header.push('<th>Chênh lệch</th>');
+    
+    let title = 'Phần 3 · Bảng phí';
+
+    if (isPulMul && productConfig.accountValue?.calculateProjection) {
+        title += ' & Minh họa giá trị tài khoản';
+        const customRateInput = document.getElementById('custom-interest-rate-input')?.value || '4.7';
+        
+        const projection = productConfig.accountValue.calculateProjection(
+            productConfig,
+            {
+                mainPerson: appState.persons.find(p => p.isMain),
+                mainProduct: appState.mainProduct,
+                basePremium: appState.fees.baseMain,
+                extraPremium: appState.mainProduct.values['extra-premium'],
+                targetAge: summaryData.targetAge,
+                customInterestRate: customRateInput,
+                paymentFrequency: summaryData.freq,
+            },
+            { investment_data, roundDownTo1000, GLOBAL_CONFIG }
+        );
+        header.push('<th>Giá trị TK (Lãi suất cam kết)</th>', `<th>Giá trị TK (Lãi suất ${customRateInput}%*)</th>`);
+
+        let sums = { main: 0, extra: 0, supp: activePersonIdx.map(() => 0), totalBase: 0 };
+        const body = rows.map((r, i) => {
+            sums.main += r.mainYearBase; sums.extra += r.extraYearBase; sums.totalBase += r.totalYearBase;
+            activePersonIdx.forEach((pIdx, idx) => sums.supp[idx] += r.perPersonSuppAnnualEq[pIdx]);
+            
+            const gttk_guaranteed = roundDownTo1000(projection.guaranteed[i]);
+            const gttk_custom = roundDownTo1000(projection.customFull[i]);
+
+            return `<tr><td style="text-align: center">${r.year}</td><td style="text-align: center">${r.age}</td>
+                        <td style="text-align: right">${formatCurrency(r.mainYearBase)}</td>
+                        ${schedule.extraAllZero ? '' : `<td style="text-align: right">${formatCurrency(r.extraYearBase)}</td>`}
+                        ${activePersonIdx.map(pIdx => `<td style="text-align: right">${formatCurrency(r.perPersonSuppAnnualEq[pIdx])}</td>`).join('')}
+                        <td style="text-align: right; font-weight:bold;">${formatCurrency(r.totalYearBase)}</td>
+                        <td style="text-align: right">${formatCurrency(gttk_guaranteed)}</td>
+                        <td style="text-align: right">${formatCurrency(gttk_custom)}</td>
+                    </tr>`;
+        }).join('');
+        const footer = `<tr style="font-weight: bold;"><td colspan="2">Tổng</td>
+                        <td style="text-align: right">${formatCurrency(sums.main)}</td>
+                        ${schedule.extraAllZero ? '' : `<td style="text-align: right">${formatCurrency(sums.extra)}</td>`}
+                        ${sums.supp.map(s => `<td style="text-align: right">${formatCurrency(s)}</td>`).join('')}
+                        <td style="text-align: right">${formatCurrency(sums.totalBase)}</td>
+                        <td colspan="2"></td>
+                       </tr>`;
+         return `<h3>${title}</h3><table><thead><tr>${header.join('')}</tr></thead><tbody>${body}${footer}</tbody></table><div style="font-size: 11px; margin-top: 4px;">(*) Lãi suất minh họa cho 20 năm đầu, từ năm 21 trở đi áp dụng lãi suất cam kết.</div>`;
+    }
+
+    // Fallback for non-PUL/MUL
     let sums = { main: 0, extra: 0, supp: activePersonIdx.map(() => 0), totalEq: 0, totalBase: 0, diff: 0 };
     const body = rows.map(r => {
         sums.main += r.mainYearBase; sums.extra += r.extraYearBase; sums.totalEq += r.totalAnnualEq; sums.totalBase += r.totalYearBase; sums.diff += r.diff;
@@ -1550,14 +1628,6 @@ function buildPart3ScheduleSection(summaryData) {
     }).join('');
     const footer = `<tr style="font-weight: bold;"><td colspan="2">Tổng</td><td style="text-align: right">${formatCurrency(sums.main)}</td>${schedule.extraAllZero ? '' : `<td style="text-align: right">${formatCurrency(sums.extra)}</td>`}${sums.supp.map(s => `<td style="text-align: right">${formatCurrency(s)}</td>`).join('')}${!isAnnual ? `<td style="text-align: right">${formatCurrency(sums.totalEq)}</td>` : ''}<td style="text-align: right">${formatCurrency(sums.totalBase)}</td>${!isAnnual ? `<td style="text-align: right">${sums.diff?`<span class="text-red-600 font-bold">${formatCurrency(sums.diff)}</span>`:'0'}</td>` : ''}</tr>`;
     
-    let title = 'Phần 3 · Bảng phí';
-    const isPulMul = ['PUL', 'MUL'].includes(PRODUCT_CATALOG[summaryData.productKey]?.group);
-    if (isPulMul) {
-      // Logic for account value projection
-      title += ' & Minh họa giá trị tài khoản';
-      // ... (Add projection logic here, this part is complex and might need more porting)
-    }
-
     return `<h3>${title}</h3><table><thead><tr>${header.join('')}</tr></thead><tbody>${body}${footer}</tbody></table>`;
 }
 
