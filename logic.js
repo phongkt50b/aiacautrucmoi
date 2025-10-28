@@ -749,6 +749,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function runWorkflow() {
   updateStateFromUI();
+  window.WaiverManager.updateAllOptions();
   const validationResult = runAllValidations();
   appState.fees = performCalculations(appState);
   renderUI(validationResult);
@@ -1276,6 +1277,7 @@ function buildSummaryData() {
                 name: mdpTargetData.name,
                 age: mdpTargetData.age,
                 gender: mdpTargetData.gender,
+                riskGroup: mdpTargetData.riskGroup,
                 supplements: {}
             };
             allPersons.push(mdpTarget);
