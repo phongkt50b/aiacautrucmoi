@@ -1,4 +1,5 @@
 
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, VIEWER_CONFIG } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
@@ -579,8 +580,8 @@ function validatePersonInputs(person) {
     ];
 
     const occupationInput = container.querySelector('.occupation-input');
-    // Only validate occupation if it's not the special "Trẻ em" which has group 1 but is valid for some riders
-    const isChildOccupation = occupationInput && occupationInput.value.toLowerCase().includes('trẻ em');
+    const isChildOccupation = occupationInput?.dataset.isChild === 'true';
+
     if (!isWopOther || (isWopOther && !isChildOccupation)) {
         fields.push({ selector: '.occupation-input', message: 'Chọn nghề nghiệp từ danh sách', test: (el) => (parseInt(el.dataset.group, 10) || 0) > 0 });
     }
@@ -678,34 +679,26 @@ function validateSupplementaryProduct(person, prodId, totalHospitalSupportStbh) 
 }
 
 function validateTargetAge() {
-  const input = document.getElementById('target-age-input');
-  if (!input || input.disabled) return true;
-  
-  const val = parseInt((input.value || '').trim(), 10);
-  const mainPerson = appState.persons.find(p => p.isMain);
-  const productConfig = PRODUCT_CATALOG[appState.mainProduct.key];
-  if (!productConfig) return true;
+    const input = document.getElementById('target-age-input');
+    if (!input || input.disabled) return true;
 
-  let term = 0;
-  if (productConfig.group === 'PACKAGE') {
-      term = productConfig.packageConfig.fixedValues.paymentTerm;
-  } else if (document.getElementById('abuv-term')) {
-      term = parseInt(document.getElementById('abuv-term').value || '0', 10);
-  } else {
-      term = parseInt(document.getElementById('payment-term')?.value || '0', 10);
-  }
+    const val = parseInt((input.value || '').trim(), 10);
+    const mainPerson = appState.persons.find(p => p.isMain);
+    const productConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+    if (!productConfig || !productConfig.getPaymentTerm) return true;
 
-  if (!mainPerson?.age || !term) return true;
+    let term = parseInt(productConfig.getPaymentTerm(appState.mainProduct.values) || '0', 10);
+    if (!mainPerson?.age || !term) return true;
 
-  const minAllowed = mainPerson.age + term - 1;
-  const maxAllowed = 99;
+    const minAllowed = mainPerson.age + term - 1;
+    const maxAllowed = 99;
 
-  if (!val || val < minAllowed || val > maxAllowed) {
-    setFieldError(input, `Tuổi minh họa phải từ ${minAllowed} đến ${maxAllowed}`);
-    return false;
-  }
-  clearFieldError(input);
-  return true;
+    if (isNaN(val) || val < minAllowed || val > maxAllowed) {
+        setFieldError(input, `Tuổi minh họa phải từ ${minAllowed} đến ${maxAllowed}`);
+        return false;
+    }
+    clearFieldError(input);
+    return true;
 }
 
 function validateDobField(input) {
@@ -942,6 +935,7 @@ function initOccupationAutocomplete(input, container) {
   const applyOccupation = (occ) => {
     input.value = occ.name;
     input.dataset.group = occ.group;
+    input.dataset.isChild = !!occ.isChild; // Store the isChild flag
     if (riskGroupSpan) riskGroupSpan.textContent = occ.group;
     clearFieldError(input);
     autocompleteContainer.classList.add('hidden');
@@ -1034,42 +1028,39 @@ function updateTargetAge() {
     const mainPerson = appState.persons.find(p => p.isMain);
     const productConfig = PRODUCT_CATALOG[appState.mainProduct.key];
     const targetAgeInput = document.getElementById('target-age-input');
-
-    if (!targetAgeInput || !mainPerson || !productConfig) {
-        if(targetAgeInput) targetAgeInput.disabled = true;
-        return;
-    };
-
-    let term = 0;
-    if (productConfig.group === 'TRADITIONAL' || productConfig.group === 'PACKAGE') {
-        term = (productConfig.group === 'PACKAGE')
-            ? productConfig.packageConfig.fixedValues.paymentTerm
-            : parseInt(document.getElementById('abuv-term')?.value || '0', 10);
-        targetAgeInput.disabled = true;
-        targetAgeInput.value = term ? mainPerson.age + parseInt(term, 10) - 1 : mainPerson.age;
-        return;
-    }
-    
-    term = parseInt(document.getElementById('payment-term')?.value, 10) || 0;
-
-    targetAgeInput.disabled = false;
-    const paymentTerm = term;
     const hintEl = document.getElementById('target-age-hint');
 
-    if (!paymentTerm || paymentTerm <= 0) {
-        if (hintEl) hintEl.textContent = 'Nhập thời gian đóng phí để xác định tuổi minh họa.';
+    if (!targetAgeInput || !mainPerson || !productConfig?.targetAgeConfig) {
+        if (targetAgeInput) {
+            targetAgeInput.disabled = true;
+            targetAgeInput.value = '';
+        }
+        if (hintEl) hintEl.innerHTML = '';
         return;
     }
 
-    const minAge = mainPerson.age + paymentTerm - 1;
-    const maxAge = 99; 
-    targetAgeInput.min = String(minAge);
-    targetAgeInput.max = String(maxAge);
+    const config = productConfig.targetAgeConfig;
+    const productValues = appState.mainProduct.values;
 
-    if (hintEl) hintEl.innerHTML = `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+    // 1. Update disabled state
+    targetAgeInput.disabled = !config.isEditable;
+
+    // 2. Update value
+    const calculatedValue = config.getValue(mainPerson, productValues);
+    if (!config.isEditable) {
+        targetAgeInput.value = calculatedValue;
+    } else {
+        // For editable fields, only set a default value if the field is empty or invalid
+        const currentValue = parseInt(targetAgeInput.value, 10);
+        if (isNaN(currentValue) || currentValue <= 0) {
+           targetAgeInput.value = calculatedValue;
+        }
+    }
     
-    const curVal = parseInt(targetAgeInput.value || '0', 10);
-    if (!curVal || curVal < minAge) targetAgeInput.value = 99;
+    // 3. Update hint
+    if (hintEl) {
+        hintEl.innerHTML = config.getHint(mainPerson, productValues) || '';
+    }
 }
 
 function updatePaymentFrequencyOptions(baseMainAnnual) {
@@ -1118,9 +1109,9 @@ function renderSuppListSummary() {
         const waiverOtherDetails = Object.values(appState.fees.waiverDetails).find(d => d.targetPerson.id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID);
         if (waiverOtherDetails) {
             const personData = waiverOtherDetails.targetPerson;
-            return (personData.name && personData.name !== 'Người khác') ? personData.name : 'Bên mua bảo hiểm';
+            return (personData.name && personData.name !== 'Người khác') ? personData.name : GLOBAL_CONFIG.LABELS.POLICY_OWNER;
         }
-        return 'Bên mua bảo hiểm'; // Fallback
+        return GLOBAL_CONFIG.LABELS.POLICY_OWNER; // Fallback
     }
     return appState.persons.find(p => p.id === id)?.name || 'Người không xác định';
   };
@@ -1200,7 +1191,7 @@ function buildViewerPayload() {
         riderList.push({
           slug: rid, 
           selected: true,
-          stbh: data.stbh || (riderConfig.getStbh ? riderConfig.getStbh(person.supplements) : 0),
+          stbh: riderConfig.getStbh ? riderConfig.getStbh(person.supplements) : (data.stbh || 0),
           program: data.program, scope: data.scope, outpatient: !!data.outpatient, dental: !!data.dental,
           premium: premiumDetail
         });
@@ -1232,7 +1223,7 @@ function buildViewerPayload() {
     mainPersonGender: mainPerson.gender,
     sumAssured: appState.mainProduct.values['main-stbh'],
     paymentFrequency: appState.paymentFrequency,
-    paymentTerm: appState.mainProduct.values['payment-term'] || appState.mainProduct.values['abuv-term'],
+    paymentTerm: mainProductConfig.getPaymentTerm ? mainProductConfig.getPaymentTerm(appState.mainProduct.values) : 0,
     targetAge: parseInt(document.getElementById('target-age-input')?.value, 10),
     customInterestRate: document.getElementById('custom-interest-rate-input')?.value,
     premiums: { 
@@ -1276,17 +1267,13 @@ function buildSummaryData() {
     const riderFactor = periods === 2 ? 1.02 : (periods === 4 ? 1.04 : 1);
     
     let paymentTerm = 0;
-    if (productConfig) {
-        if (productConfig.group === 'PACKAGE') {
-            paymentTerm = productConfig.packageConfig.fixedValues.paymentTerm;
-        } else {
-            paymentTerm = parseInt(appState.mainProduct.values['payment-term'] || appState.mainProduct.values['abuv-term'] || '0', 10);
-        }
+    if (productConfig && typeof productConfig.getPaymentTerm === 'function') {
+        paymentTerm = parseInt(productConfig.getPaymentTerm(appState.mainProduct.values) || '0', 10);
     }
     
     let targetAge = parseInt(document.getElementById('target-age-input')?.value, 10) || 0;
-    if (!targetAge) {
-      targetAge = mainPerson.age + (paymentTerm || 0) -1;
+    if (!targetAge && mainPerson && paymentTerm > 0) {
+      targetAge = mainPerson.age + paymentTerm -1;
     }
 
     const allPersonsForSummary = JSON.parse(JSON.stringify(appState.persons));
@@ -1319,9 +1306,7 @@ function buildSummaryData() {
     
     const summary = { freq, periods, isAnnual, riderFactor, productKey, paymentTerm, targetAge, mainPerson, persons: allPersonsForSummary, waiverPremiums, part1, schedule, projection: null, sums: {} };
     
-    // Pre-calculate projection if needed
-    const isPulMul = ['PUL', 'MUL'].includes(productConfig?.group);
-    if (isPulMul && productConfig.accountValue?.calculateProjection) {
+    if (productConfig?.accountValue?.calculateProjection) {
         const customRateInput = document.getElementById('custom-interest-rate-input')?.value || '4.7';
         summary.customRate = customRateInput;
         summary.projection = productConfig.accountValue.calculateProjection(
@@ -1359,7 +1344,8 @@ function buildSummaryData() {
 
 function buildPart1RowsData(ctx) {
     const { persons, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, waiverPremiums, freq } = ctx;
-    const mainAge = persons.find(p => p.isMain)?.age || 0;
+    const mainPerson = persons.find(p => p.isMain);
+    const mainAge = mainPerson?.age || 0;
     const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
 
     let rows = [], perPersonTotals = [], grand = { per: 0, eq: 0, base: 0, diff: 0 };
@@ -1393,7 +1379,7 @@ function buildPart1RowsData(ctx) {
             }
         }
         if (p.isMain && (appState.mainProduct.values['extra-premium'] || 0) > 0) {
-            pushRow(acc, p.name, 'Phí đóng thêm', '—', paymentTerm || '—', appState.mainProduct.values['extra-premium'] || 0, false);
+            pushRow(acc, p.name, GLOBAL_CONFIG.LABELS.EXTRA_PREMIUM, '—', paymentTerm || '—', appState.mainProduct.values['extra-premium'] || 0, false);
         }
         
         if (p.supplements) {
@@ -1411,8 +1397,7 @@ function buildPart1RowsData(ctx) {
                     const waiverData = waiverPremiums[rid];
                     stbh = waiverData.stbhBase;
                     prodName = prodConfig.name;
-                    const wEligibility = prodConfig.rules.eligibility.find(r=>r.type==='age');
-                    years = Math.max(0, Math.min(wEligibility.max - p.age, targetAge - mainAge) + 1);
+                    years = prodConfig.getWaiverTerm(p, mainPerson, targetAge);
                 } else {
                     const maxA = riderMaxAge(rid);
                     years = Math.max(0, Math.min(maxA - p.age, targetAge - mainAge) + 1);
@@ -1431,7 +1416,7 @@ function buildPart1RowsData(ctx) {
         }
     });
 
-    return { rows, perPersonTotals, grand, isAnnual, periods, riderFactor, freqLabel: freq === 'half' ? 'nửa năm' : 'quý' };
+    return { rows, perPersonTotals, grand, isAnnual, periods, riderFactor, freqLabel: GLOBAL_CONFIG.PAYMENT_FREQUENCY_LABELS[freq] || freq };
 }
 
 function buildPart2ScheduleRows(ctx) {
@@ -1487,8 +1472,7 @@ function buildPart2ScheduleRows(ctx) {
             if (fixedWaiverPremiums[p.id]) {
                 Object.entries(fixedWaiverPremiums[p.id]).forEach(([waiverId, premium]) => {
                     const wConfig = PRODUCT_CATALOG[waiverId];
-                    const wEligibility = wConfig.rules.eligibility.find(r => r.type === 'age');
-                    if (wEligibility && attained <= wEligibility.max) {
+                    if (wConfig && typeof wConfig.isStillEligible === 'function' && wConfig.isStillEligible(attained)) {
                         addRider(premium);
                     }
                 });
@@ -1671,7 +1655,9 @@ function bm_findSchema(productKey) {
 }
 
 const defaultGetBenefitMatrixColumnData = (rid, suppData, person) => {
-    return { productKey: rid, sumAssured: suppData[rid]?.stbh || 0, persons: [person] };
+    const prodConfig = PRODUCT_CATALOG[rid];
+    const stbh = prodConfig?.getStbh ? prodConfig.getStbh(suppData) : (suppData[rid]?.stbh || 0);
+    return { productKey: rid, sumAssured: stbh, persons: [person] };
 };
 
 function bm_collectColumns(summaryData) {
@@ -1744,9 +1730,9 @@ function bm_renderSchemaTables(schemaKey, columns) {
     schema.benefits.forEach(benef => {
         if (benef.headerCategory) {
             let needed = false;
-            if (benef.headerCategory === 'maternity') needed = columns.some(c => c.flags?.maternity);
-            else if (benef.headerCategory === 'outpatient') needed = columns.some(c => c.flags?.outpatient);
-            else if (benef.headerCategory === 'dental') needed = columns.some(c => c.flags?.dental);
+            if (benef.headerCategory) {
+                needed = columns.some(c => c.flags?.[benef.headerCategory]);
+            }
             if (needed) rows.push({ isHeader: true, benef, colspan: 1 + columns.length });
             return;
         }
