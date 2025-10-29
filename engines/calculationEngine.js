@@ -1,6 +1,6 @@
 
+
 import { PRODUCT_CATALOG, GLOBAL_CONFIG } from '../structure.js';
-import { CALC_REGISTRY } from '../registries/calcRegistry.js';
 import { product_data } from '../data.js';
 
 /**
@@ -28,8 +28,7 @@ export function calculateAll(state) {
 
     // --- BASE MAIN PREMIUM ---
     if (mainPerson && mainProductConfig) {
-        const calcKey = mainProductConfig.calculation.calculateKey;
-        const calcFunc = CALC_REGISTRY[calcKey];
+        const calcFunc = mainProductConfig.calculation.calculate;
         if (calcFunc) {
             fees.baseMain = calcFunc({
                 productInfo: state.mainProduct,
@@ -87,10 +86,9 @@ function pass1Phase(allInsuredPersons, fees, accumulators, context) {
         let personSuppFee = 0;
         Object.keys(person.supplements).forEach(prodId => {
             const prodConfig = PRODUCT_CATALOG[prodId];
-            if (prodConfig?.calculation?.pass !== 1) return;
+            if (prodConfig?.calculation?.pass === 2) return; // Skip waivers
             
-            const calcKey = prodConfig.calculation.calculateKey;
-            const calcFunc = CALC_REGISTRY[calcKey];
+            const calcFunc = prodConfig.calculation.calculate;
             if (!calcFunc) return;
             
             const fee = calcFunc({
@@ -130,23 +128,21 @@ function pass2Phase(fees, feeSnapshot, context) {
     if (!waiverTargetPerson) return;
     
     Object.keys(state.waiver.enabledProducts).forEach(waiverId => {
-        const waiverConfig = PRODUCT_CATALOG[waiverId];
-        if (!waiverConfig || waiverConfig.calculation?.pass !== 2) return;
+        const waiverConfig = Object.values(PRODUCT_CATALOG).find(p => p.slug === waiverId && p.category === 'waiver');
+        if (!waiverConfig) return;
         
         const stbhBase = calculateWaiverStbhBase(waiverConfig, feeSnapshot, waiverTargetPerson);
-        const calcKey = waiverConfig.calculation.calculateKey;
-        const calcFunc = CALC_REGISTRY[calcKey];
+        const calcFunc = waiverConfig.calculation.calculate;
 
         if (stbhBase > 0 && calcFunc) {
             const premium = calcFunc({
                 personInfo: waiverTargetPerson,
-                stbhBase,
-                helpers: context.helpers,
-                params: waiverConfig.calculation.params || {}
+                stbhBase
             });
             
             if (premium > 0) {
-                fees.waiverDetails[waiverId] = { premium, targetPerson: waiverTargetPerson, stbhBase };
+                const waiverProdKey = Object.keys(PRODUCT_CATALOG).find(key => PRODUCT_CATALOG[key].slug === waiverId);
+                fees.waiverDetails[waiverProdKey] = { premium, targetPerson: waiverTargetPerson, stbhBase };
                 fees.totalSupp += premium;
                 const personIdForFee = waiverTargetPerson.id;
                 
@@ -155,7 +151,7 @@ function pass2Phase(fees, feeSnapshot, context) {
                 }
                 
                 fees.byPerson[personIdForFee].supp += premium;
-                fees.byPerson[personIdForFee].suppDetails[waiverId] = premium;
+                fees.byPerson[personIdForFee].suppDetails[waiverProdKey] = premium;
             }
         }
     });
@@ -163,26 +159,23 @@ function pass2Phase(fees, feeSnapshot, context) {
 
 
 function calculateWaiverStbhBase(waiverConfig, feeSnapshot, waiverTargetPerson) {
-    const terms = waiverConfig.calculation.stbhTerms || [];
+    const calcConfig = waiverConfig.stbhCalculation || {};
     let stbhBase = 0;
+
+    const mainPersonId = Object.keys(feeSnapshot).find(id => feeSnapshot[id].mainBase > 0);
     
-    terms.forEach(term => {
-        switch(term.include) {
-            case 'mainBase':
-                stbhBase += feeSnapshot[Object.keys(feeSnapshot).find(id => feeSnapshot[id].mainBase > 0)]?.mainBase || 0;
-                break;
-            case 'riders:ALL':
-                Object.values(feeSnapshot).forEach(personFees => {
-                    stbhBase += personFees.supp;
-                });
-                break;
-            case 'riders:EXCEPT_TARGET':
-                if (waiverTargetPerson && feeSnapshot[waiverTargetPerson.id]) {
-                    stbhBase -= feeSnapshot[waiverTargetPerson.id].supp;
-                }
-                break;
-        }
-    });
+    if (calcConfig.includeMainBasePremium && mainPersonId) {
+        stbhBase += feeSnapshot[mainPersonId].mainBase;
+    }
+
+    if (calcConfig.includeAllRiders) {
+        Object.entries(feeSnapshot).forEach(([personId, personFees]) => {
+            let ridersToExclude = calcConfig.excludeRidersOfWaivedPerson && personId === waiverTargetPerson.id;
+            if (!ridersToExclude) {
+                stbhBase += personFees.supp;
+            }
+        });
+    }
 
     return Math.max(0, stbhBase);
 }
