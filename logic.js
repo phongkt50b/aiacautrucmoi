@@ -465,55 +465,64 @@ function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     set('freq-total-year-equivalent', annualEquivalent);
 }
 
-function renderControl(config, value, customer) {
-    const required = config.required ? '<span class="text-red-600">*</span>' : '';
-    const disabled = config.disabled ? 'disabled' : '';
-    const bg = config.disabled ? 'bg-gray-100' : '';
-    const displayValue = value > 0 ? formatCurrency(value) : (value || '');
-
-    switch (config.type) {
-        case 'currencyInput':
-            return `<div>
-                <label for="${config.id}" class="font-medium text-gray-700 block mb-1">${config.label} ${required}</label>
-                <input type="text" id="${config.id}" class="form-input ${config.customClass || ''} ${bg}" 
-                       value="${displayValue}" placeholder="${config.placeholder || ''}" ${disabled}>
-                <div id="${config.hintId || config.id + '-hint'}" class="text-sm text-gray-500 mt-1">${config.hintText || ''}</div>
-            </div>`;
-        case 'numberInput':
-            const { min, max } = config.getMinMax?.(customer.age) || {};
-            const hintText = config.hintTextFn?.(min, max) || config.hintText || '';
-            return `<div>
-                <label for="${config.id}" class="font-medium text-gray-700 block mb-1">${config.label} ${required}</label>
-                <input type="number" id="${config.id}" class="form-input" value="${value || config.defaultValue || ''}" 
-                       placeholder="${config.placeholder || ''}" min="${min || ''}" max="${max || ''}">
-                ${hintText ? `<div class="text-sm text-gray-500 mt-1">${hintText}</div>` : ''}
-            </div>`;
-        case 'select':
-            let options = (config.options || [])
-                .filter(opt => !opt.condition || opt.condition(customer))
-                .map(opt => `<option value="${opt.value}" ${opt.value == value ? 'selected' : ''}>${opt.label}</option>`)
-                .join('');
-            if (!options) options = '<option value="" disabled selected>Không có kỳ hạn phù hợp</option>';
-            else options = '<option value="">-- Chọn --</option>' + options;
-            return `<div>
-                <label for="${config.id}" class="font-medium text-gray-700 block mb-1">${config.label} ${required}</label>
-                <select id="${config.id}" class="form-select">${options}</select>
-            </div>`;
-        case 'checkboxGroup':
-            const items = config.items.map(item => `
-                <label class="flex items-center space-x-3 cursor-pointer">
-                    <input type="checkbox" id="${item.id}" class="form-checkbox ${item.customClass || ''}" ${value[item.id.replace(`${config.id.replace(/-/g, '_')}_`, '')] ? 'checked' : ''} data-product-key="${item.id.split('-')[0]}">
-                    <span>${item.label}</span>
-                    <span id="${item.hintId}" class="ml-2 text-xs text-gray-600"></span>
-                </label>`).join('');
-            return `<div>
-                <span class="font-medium text-gray-700 block mb-2">${config.label}</span>
-                <div class="space-y-2">${items}</div>
-            </div>`;
-        case 'staticText':
-             return `<div class="${config.customClass || ''}">${config.text}</div>`;
-        default: return '';
+const CONTROL_RENDERERS = {
+    currencyInput: (config, value) => {
+        const required = config.required ? '<span class="text-red-600">*</span>' : '';
+        const disabled = config.disabled ? 'disabled' : '';
+        const bg = config.disabled ? 'bg-gray-100' : '';
+        const displayValue = value > 0 ? formatCurrency(value) : (value || '');
+        return `<div>
+            <label for="${config.id}" class="font-medium text-gray-700 block mb-1">${config.label} ${required}</label>
+            <input type="text" id="${config.id}" class="form-input ${config.customClass || ''} ${bg}" 
+                   value="${displayValue}" placeholder="${config.placeholder || ''}" ${disabled}>
+            <div id="${config.hintId || config.id + '-hint'}" class="text-sm text-gray-500 mt-1">${config.hintText || ''}</div>
+        </div>`;
+    },
+    numberInput: (config, value, customer) => {
+        const required = config.required ? '<span class="text-red-600">*</span>' : '';
+        const { min, max } = config.getMinMax?.(customer.age) || {};
+        const hintText = config.hintTextFn?.(min, max) || config.hintText || '';
+        return `<div>
+            <label for="${config.id}" class="font-medium text-gray-700 block mb-1">${config.label} ${required}</label>
+            <input type="number" id="${config.id}" class="form-input" value="${value || config.defaultValue || ''}" 
+                   placeholder="${config.placeholder || ''}" min="${min || ''}" max="${max || ''}">
+            ${hintText ? `<div class="text-sm text-gray-500 mt-1">${hintText}</div>` : ''}
+        </div>`;
+    },
+    select: (config, value, customer) => {
+        const required = config.required ? '<span class="text-red-600">*</span>' : '';
+        let options = (config.options || [])
+            .filter(opt => !opt.condition || opt.condition(customer))
+            .map(opt => `<option value="${opt.value}" ${opt.value == value ? 'selected' : ''}>${opt.label}</option>`)
+            .join('');
+        if (!options) options = '<option value="" disabled selected>Không có kỳ hạn phù hợp</option>';
+        else options = '<option value="">-- Chọn --</option>' + options;
+        return `<div>
+            <label for="${config.id}" class="font-medium text-gray-700 block mb-1">${config.label} ${required}</label>
+            <select id="${config.id}" class="form-select">${options}</select>
+        </div>`;
+    },
+    checkboxGroup: (config, value) => {
+        const required = config.required ? '<span class="text-red-600">*</span>' : '';
+        const items = config.items.map(item => `
+            <label class="flex items-center space-x-3 cursor-pointer">
+                <input type="checkbox" id="${item.id}" class="form-checkbox ${item.customClass || ''}" ${value[item.id.replace(`${config.id.replace(/-/g, '_')}_`, '')] ? 'checked' : ''} data-product-key="${item.id.split('-')[0]}">
+                <span>${item.label}</span>
+                <span id="${item.hintId}" class="ml-2 text-xs text-gray-600"></span>
+            </label>`).join('');
+        return `<div>
+            <span class="font-medium text-gray-700 block mb-2">${config.label}</span>
+            <div class="space-y-2">${items}</div>
+        </div>`;
+    },
+    staticText: (config) => {
+         return `<div class="${config.customClass || ''}">${config.text}</div>`;
     }
+};
+
+function renderControl(config, value, customer) {
+    const renderer = CONTROL_RENDERERS[config.type];
+    return renderer ? renderer(config, value, customer) : '';
 }
 
 // ===================================================================================
@@ -1105,12 +1114,13 @@ function renderSuppListSummary() {
   if (!box) return;
 
   const getPersonName = (id) => {
-    if (id && id.includes('waiver_other')) {
-        const personData = getWaiverTargetPersonInfo();
-        if (personData && personData.id === 'waiver_other') {
+    if (id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID) {
+        const waiverOtherDetails = Object.values(appState.fees.waiverDetails).find(d => d.targetPerson.id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID);
+        if (waiverOtherDetails) {
+            const personData = waiverOtherDetails.targetPerson;
             return (personData.name && personData.name !== 'Người khác') ? personData.name : 'Bên mua bảo hiểm';
         }
-        return 'Bên mua bảo hiểm';
+        return 'Bên mua bảo hiểm'; // Fallback
     }
     return appState.persons.find(p => p.id === id)?.name || 'Người không xác định';
   };
@@ -1175,9 +1185,6 @@ function openFullViewer() {
         alert('Không tạo được dữ liệu để mở bảng minh họa.\n\nLỗi: ' + e.message);
     }
 }
-function getHealthSclStbhByProgram(program) {
-    return PRODUCT_CATALOG.health_scl.rules.stbhByProgram[program] || 0;
-}
 
 function buildViewerPayload() {
   const mainPerson = appState.persons.find(p => p.isMain);
@@ -1193,7 +1200,7 @@ function buildViewerPayload() {
         riderList.push({
           slug: rid, 
           selected: true,
-          stbh: data.stbh || (rid === 'health_scl' ? getHealthSclStbhByProgram(data.program) : 0),
+          stbh: data.stbh || (riderConfig.getStbh ? riderConfig.getStbh(person.supplements) : 0),
           program: data.program, scope: data.scope, outpatient: !!data.outpatient, dental: !!data.dental,
           premium: premiumDetail
         });
@@ -1291,7 +1298,7 @@ function buildSummaryData() {
         const { premium, targetPerson } = waiverData;
         if (premium > 0 && targetPerson) {
             let personForWaiver = allPersonsForSummary.find(p => p.id === targetPerson.id);
-            if (!personForWaiver && targetPerson.id.includes('waiver_other')) {
+            if (!personForWaiver && targetPerson.id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID) {
                 personForWaiver = {
                     ...targetPerson,
                     isMain: false,
@@ -1391,37 +1398,30 @@ function buildPart1RowsData(ctx) {
         
         if (p.supplements) {
             for (const rid in p.supplements) {
+                const prodConfig = PRODUCT_CATALOG[rid];
+                if (!prodConfig) continue;
+
                 const baseAnnual = appState.fees.byPerson[p.id]?.suppDetails?.[rid] || 0;
                 if (baseAnnual <= 0) continue;
                 
-                let stbh = 0, prodName = '', years = 0;
-                
-                const isWaiver = PRODUCT_CATALOG[rid]?.category === 'waiver';
+                let stbh = 0, prodName = '', years = 0, stbhDisplay = '—';
+                const isWaiver = prodConfig.category === 'waiver';
 
                 if(isWaiver){
                     const waiverData = waiverPremiums[rid];
-                    const wConfig = PRODUCT_CATALOG[rid];
                     stbh = waiverData.stbhBase;
-                    prodName = wConfig.name;
-                    const wEligibility = wConfig.rules.eligibility.find(r=>r.type==='age');
+                    prodName = prodConfig.name;
+                    const wEligibility = prodConfig.rules.eligibility.find(r=>r.type==='age');
                     years = Math.max(0, Math.min(wEligibility.max - p.age, targetAge - mainAge) + 1);
                 } else {
                     const maxA = riderMaxAge(rid);
                     years = Math.max(0, Math.min(maxA - p.age, targetAge - mainAge) + 1);
-                    stbh = p.supplements[rid].stbh;
-                    prodName = getProductLabel(rid);
-
-                    if (rid === 'health_scl') {
-                        const scl = p.supplements.health_scl;
-                        const programMap = { co_ban: 'Cơ bản', nang_cao: 'Nâng cao', toan_dien: 'Toàn diện', hoan_hao: 'Hoàn hảo' };
-                        const programName = programMap[scl.program] || '';
-                        const scopeStr = (scl.scope === 'main_global' ? 'Nước ngoài' : 'Việt Nam') + (scl.outpatient ? ', Ngoại trú' : '') + (scl.dental ? ', Nha khoa' : '');
-                        prodName = `Sức khoẻ Bùng Gia Lực – ${programName} (${scopeStr})`;
-                        stbh = getHealthSclStbhByProgram(scl.program);
-                    }
+                    stbh = prodConfig.getStbh ? prodConfig.getStbh(p.supplements) : (p.supplements[rid].stbh || 0);
+                    prodName = prodConfig.getDisplayName ? prodConfig.getDisplayName(p.supplements) : getProductLabel(rid);
                 }
                 
-                pushRow(acc, p.name, prodName, formatCurrency(stbh), years, baseAnnual, true);
+                stbhDisplay = stbh ? formatCurrency(stbh) : '—';
+                pushRow(acc, p.name, prodName, stbhDisplay, years, baseAnnual, true);
             }
         }
         
@@ -1619,8 +1619,8 @@ function buildPart3ScheduleSection(summaryData) {
     let footerHtml = '<tr style="font-weight: bold;">';
     columns.forEach(col => {
         if (col.type === 'dynamic') {
-            activePersonIdx.forEach(pIdx => {
-                footerHtml += `<td style="${getStyle(col)}">${col.getFooter(summaryData, pIdx)}</td>`;
+            activePersonIdx.forEach((pIdx, idx) => {
+                footerHtml += `<td style="${getStyle(col)}">${col.getFooter(summaryData, idx)}</td>`;
             });
         } else {
             footerHtml += `<td style="${getStyle(col)}">${col.getFooter(summaryData)}</td>`;
@@ -1655,40 +1655,52 @@ function buildPart2BenefitsSection(summaryData) {
 }
 
 function bm_findSchema(productKey) {
-    if (productKey === 'bhn') return BENEFIT_MATRIX_SCHEMAS.find(s => s.key === 'BHN_2_0');
-    const prodGroup = PRODUCT_CATALOG[productKey]?.group;
-    if (prodGroup === 'TRADITIONAL' && productKey === 'AN_BINH_UU_VIET') return BENEFIT_MATRIX_SCHEMAS.find(s => s.key === 'AN_BINH_UU_VIET');
-    if (prodGroup === 'MUL') return BENEFIT_MATRIX_SCHEMAS.find(s => s.key === productKey);
-    if (prodGroup === 'PUL') return BENEFIT_MATRIX_SCHEMAS.find(s => s.key === 'PUL_FAMILY');
-    return BENEFIT_MATRIX_SCHEMAS.find(s => s.key.toLowerCase() === productKey.toLowerCase() || s.productKeys?.includes(productKey));
+    const productConfig = PRODUCT_CATALOG[productKey];
+    if (!productConfig) return null;
+
+    const matrixKey = productConfig.benefitMatrixKey;
+    if (matrixKey) {
+        return BENEFIT_MATRIX_SCHEMAS.find(s => s.key === matrixKey);
+    }
+    
+    // Fallback for products without a direct mapping, e.g., using productKeys array
+    return BENEFIT_MATRIX_SCHEMAS.find(s => 
+        s.key.toLowerCase() === productKey.toLowerCase() || 
+        s.productKeys?.includes(productKey)
+    );
 }
+
+const defaultGetBenefitMatrixColumnData = (rid, suppData, person) => {
+    return { productKey: rid, sumAssured: suppData[rid]?.stbh || 0, persons: [person] };
+};
 
 function bm_collectColumns(summaryData) {
     const colsBySchema = {};
     const persons = summaryData.persons || [];
     const mainKey = summaryData.productKey;
-    const mainSa = appState.mainProduct.values['main-stbh'] || 0;
-    const isFemale = (p) => (p.gender || '').toLowerCase() === 'nữ';
-
-    if (mainKey) {
+    
+    const mainConfig = PRODUCT_CATALOG[mainKey];
+    if (mainConfig?.packageConfig?.addBenefitMatrixFrom) {
+        mainConfig.packageConfig.addBenefitMatrixFrom.forEach(item => {
+            const schema = bm_findSchema(item.productKey);
+            if (schema && schema.getGroupingSignature) {
+                const colDataBase = { productKey: item.productKey, sumAssured: item.sumAssured, persons: [summaryData.mainPerson] };
+                const sig = schema.getGroupingSignature(colDataBase);
+                colsBySchema[schema.key] = colsBySchema[schema.key] || [];
+                colsBySchema[schema.key].push({ ...colDataBase, sig });
+            }
+        });
+    } else if (mainKey) {
         const schema = bm_findSchema(mainKey);
         if (schema && schema.getGroupingSignature) {
+            const mainSa = appState.mainProduct.values['main-stbh'] || 0;
             const colDataBase = { productKey: mainKey, sumAssured: mainSa, persons: [summaryData.mainPerson] };
             const sig = schema.getGroupingSignature(colDataBase);
             colsBySchema[schema.key] = colsBySchema[schema.key] || [];
             colsBySchema[schema.key].push({ ...colDataBase, sig });
         }
     }
-    if (mainKey === 'TRON_TAM_AN') {
-        const schemaABUV = bm_findSchema('AN_BINH_UU_VIET');
-        if (schemaABUV && schemaABUV.getGroupingSignature) {
-            const colDataBase = { productKey: 'AN_BINH_UU_VIET', sumAssured: 100000000, persons: [summaryData.mainPerson] };
-            const sig = schemaABUV.getGroupingSignature(colDataBase);
-            colsBySchema[schemaABUV.key] = colsBySchema[schemaABUV.key] || [];
-            colsBySchema[schemaABUV.key].push({ ...colDataBase, sig });
-        }
-    }
-
+    
     persons.forEach(p => {
         const supp = p.supplements || {};
         for (const rid in supp) {
@@ -1701,21 +1713,11 @@ function bm_collectColumns(summaryData) {
             if (fee <= 0) continue;
 
             colsBySchema[schema.key] = colsBySchema[schema.key] || [];
-            let colDataBase;
             
-            if (rid === 'health_scl') {
-                const { program, outpatient, dental, scope } = supp.health_scl;
-                const maternity = BM_SCL_PROGRAMS[program]?.maternity && isFemale(p);
-                colDataBase = { productKey: rid, program, scope, flags: { outpatient, dental, maternity, scope }, persons: [p] };
-            } else if (rid === 'bhn') {
-                const child = p.age < 21;
-                const elder = p.age >= 55;
-                colDataBase = { productKey: rid, sumAssured: supp[rid].stbh, flags: { child, elder }, persons: [p] };
-            } else if (rid === 'hospital_support') {
-                 colDataBase = { productKey: rid, sumAssured: supp[rid].stbh, daily: supp[rid].stbh, persons: [p] };
-            } else {
-                 colDataBase = { productKey: rid, sumAssured: supp[rid].stbh, persons: [p] };
-            }
+            const prodConfig = PRODUCT_CATALOG[rid];
+            const colDataBase = prodConfig.getBenefitMatrixColumnData 
+                ? prodConfig.getBenefitMatrixColumnData(supp, p) 
+                : defaultGetBenefitMatrixColumnData(rid, supp, p);
 
             const sig = schema.getGroupingSignature(colDataBase);
             let existingCol = colsBySchema[schema.key].find(c => c.sig === sig);
@@ -1878,7 +1880,7 @@ function renderWaiverSection(isMainProductValid) {
         appState.persons.forEach(p => {
             optionsHtml += `<option value="${p.id}">${p.name} (tuổi ${p.age || "?"})</option>`;
         });
-        optionsHtml += `<option value="other">+ Thêm người khác (Bên mua bảo hiểm)</option>`;
+        optionsHtml += `<option value="${GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE}">+ Thêm người khác (Bên mua bảo hiểm)</option>`;
         selEl.innerHTML = optionsHtml;
     
         if (currentSelectedValue && selEl.querySelector(`option[value="${currentSelectedValue}"]`)) {
@@ -1898,7 +1900,7 @@ function renderWaiverProductList() {
     const productListContainer = document.getElementById('waiver-products-list');
     const otherForm = document.getElementById('waiver-other-form');
 
-    const showOtherForm = appState.waiver.selectedPersonId === 'other';
+    const showOtherForm = appState.waiver.selectedPersonId === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE;
     otherForm.classList.toggle('hidden', !showOtherForm);
 
     if (!appState.waiver.selectedPersonId) {
@@ -1913,7 +1915,7 @@ function renderWaiverProductList() {
         return;
     }
     
-    if(personInfo.id.includes('waiver_other')) {
+    if(personInfo.id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID) {
         const otherFormEl = document.getElementById(`person-container-waiver-other-form`);
         if(otherFormEl) otherFormEl.querySelector('.age-span').textContent = personInfo.age;
     }
@@ -1966,7 +1968,7 @@ function calculateWaiverStbhBase(waiverConfig) {
         });
     }
     
-    if (rules.excludeRidersOfWaivedPerson && appState.waiver.selectedPersonId && appState.waiver.selectedPersonId !== 'other') {
+    if (rules.excludeRidersOfWaivedPerson && appState.waiver.selectedPersonId && appState.waiver.selectedPersonId !== GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE) {
         stbhBase -= window.personFees[appState.waiver.selectedPersonId]?.supp || 0;
     }
     
@@ -1976,9 +1978,9 @@ function calculateWaiverStbhBase(waiverConfig) {
 function getWaiverTargetPersonInfo() {
     const selectedId = appState.waiver.selectedPersonId;
     if (!selectedId) return null;
-    if (selectedId === 'other') {
+    if (selectedId === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE) {
         const otherForm = document.getElementById(`person-container-waiver-other-form`);
-        return otherForm ? { ...collectPersonData(otherForm, false, true), id: `waiver_other` } : null;
+        return otherForm ? { ...collectPersonData(otherForm, false, true), id: GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID } : null;
     }
     return appState.persons.find(p => p.id === selectedId) || null;
 }
@@ -2011,7 +2013,7 @@ function validateWaiverSection() {
     const selectedId = appState.waiver.selectedPersonId;
     if (!selectedId) return true;
     
-    if (selectedId === 'other') {
+    if (selectedId === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE) {
         const otherForm = document.getElementById(`person-container-waiver-other-form`);
         if (!otherForm || !validatePersonInputs({ container: otherForm }, false, true)) {
             return false;
