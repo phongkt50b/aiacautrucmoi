@@ -1,6 +1,3 @@
-
-
-
 import { GLOBAL_CONFIG, PRODUCT_CATALOG } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
@@ -1608,8 +1605,17 @@ function buildFooterSection() {
 
 function buildPart2BenefitsSection(summaryData) {
     const colsBySchema = bm_collectColumns(summaryData);
-    const order = ['AN_BINH_UU_VIET', 'KHOE_BINH_AN', 'VUNG_TUONG_LAI', 'PUL_FAMILY', 'HEALTH_SCL', 'BHN_2_0', 'HOSPITAL_SUPPORT', 'ACCIDENT'];
-    const blocks = order.map(sk => colsBySchema[sk] ? bm_renderSchemaTables(sk, colsBySchema[sk], summaryData) : '').filter(Boolean);
+    
+    const sortedSchemaKeys = Object.keys(colsBySchema).sort((keyA, keyB) => {
+        const schemaA = BENEFIT_MATRIX_SCHEMAS.find(s => s.key === keyA);
+        const schemaB = BENEFIT_MATRIX_SCHEMAS.find(s => s.key === keyB);
+        return (schemaA?.displayOrder || 999) - (schemaB?.displayOrder || 999);
+    });
+
+    const blocks = sortedSchemaKeys
+        .map(sk => bm_renderSchemaTables(sk, colsBySchema[sk], summaryData))
+        .filter(Boolean);
+
     if (!blocks.length) return `<h3>Phần 2 · Tóm tắt quyền lợi sản phẩm</h3><div>Không có quyền lợi nào để hiển thị.</div>`;
     return `<h3>Phần 2 · Tóm tắt quyền lợi sản phẩm</h3>${blocks.join('')}`;
 }
@@ -1632,16 +1638,20 @@ function bm_collectColumns(summaryData) {
 
     if (mainKey) {
         const schema = bm_findSchema(mainKey);
-        if (schema) {
+        if (schema && schema.getGroupingSignature) {
+            const colDataBase = { productKey: mainKey, sumAssured: mainSa, persons: [summaryData.mainPerson] };
+            const sig = schema.getGroupingSignature(colDataBase);
             colsBySchema[schema.key] = colsBySchema[schema.key] || [];
-            colsBySchema[schema.key].push({ productKey: mainKey, sumAssured: mainSa, persons: [summaryData.mainPerson] });
+            colsBySchema[schema.key].push({ ...colDataBase, sig });
         }
     }
     if (mainKey === 'TRON_TAM_AN') {
         const schemaABUV = bm_findSchema('AN_BINH_UU_VIET');
-        if (schemaABUV) {
+        if (schemaABUV && schemaABUV.getGroupingSignature) {
+            const colDataBase = { productKey: 'AN_BINH_UU_VIET', sumAssured: 100000000, persons: [summaryData.mainPerson] };
+            const sig = schemaABUV.getGroupingSignature(colDataBase);
             colsBySchema[schemaABUV.key] = colsBySchema[schemaABUV.key] || [];
-            colsBySchema[schemaABUV.key].push({ productKey: 'AN_BINH_UU_VIET', sumAssured: 100000000, persons: [summaryData.mainPerson] });
+            colsBySchema[schemaABUV.key].push({ ...colDataBase, sig });
         }
     }
 
@@ -1651,54 +1661,38 @@ function bm_collectColumns(summaryData) {
             if(PRODUCT_CATALOG[rid]?.category === 'waiver') continue;
 
             const schema = bm_findSchema(rid);
-            if (!schema) continue;
+            if (!schema || !schema.getGroupingSignature) continue;
 
             const fee = appState.fees.byPerson[p.id]?.suppDetails?.[rid] || 0;
             if (fee <= 0) continue;
 
             colsBySchema[schema.key] = colsBySchema[schema.key] || [];
-            let sig = rid, sa = supp[rid].stbh;
-            let colData;
+            let colDataBase;
             
             if (rid === 'health_scl') {
-                const { program, outpatient, dental } = supp.health_scl;
+                const { program, outpatient, dental, scope } = supp.health_scl;
                 const maternity = BM_SCL_PROGRAMS[program]?.maternity && isFemale(p);
-                sig += `|${program}|${outpatient ? 1:0}|${dental ? 1:0}|${maternity ? 1:0}`;
-                colData = { productKey: rid, program, flags: { outpatient, dental, maternity }, persons: [p] };
+                colDataBase = { productKey: rid, program, scope, flags: { outpatient, dental, maternity, scope }, persons: [p] };
             } else if (rid === 'bhn') {
                 const child = p.age < 21;
                 const elder = p.age >= 55;
-                sig += `|${sa}|${child ? 1:0}|${elder ? 1:0}`;
-                colData = { productKey: rid, sumAssured: sa, flags: { child, elder }, persons: [p] };
+                colDataBase = { productKey: rid, sumAssured: supp[rid].stbh, flags: { child, elder }, persons: [p] };
             } else if (rid === 'hospital_support') {
-                 sig += `|${sa}`;
-                 colData = { productKey: rid, sumAssured: sa, daily: sa, persons: [p] };
+                 colDataBase = { productKey: rid, sumAssured: supp[rid].stbh, daily: supp[rid].stbh, persons: [p] };
             } else {
-                 sig += `|${sa}`;
-                 colData = { productKey: rid, sumAssured: sa, persons: [p] };
+                 colDataBase = { productKey: rid, sumAssured: supp[rid].stbh, persons: [p] };
             }
 
+            const sig = schema.getGroupingSignature(colDataBase);
             let existingCol = colsBySchema[schema.key].find(c => c.sig === sig);
             if (existingCol) {
                 existingCol.persons.push(p);
             } else {
-                colData.sig = sig;
-                colsBySchema[schema.key].push(colData);
+                colDataBase.sig = sig;
+                colsBySchema[schema.key].push(colDataBase);
             }
         }
     });
-
-    Object.values(colsBySchema).forEach(arr => arr.forEach(col => {
-        const names = (col.persons || []).map(p => p.name || p.id).join(', ');
-        let label = names;
-        if (col.productKey === 'health_scl') {
-            label += ` - ${BM_SCL_PROGRAMS[col.program]?.label || ''}`;
-        }
-        if (col.sumAssured) {
-            label += ` - STBH: ${formatCurrency(col.sumAssured)}`;
-        }
-        col.label = label;
-    }));
     
     return colsBySchema;
 }
@@ -1707,9 +1701,8 @@ function bm_renderSchemaTables(schemaKey, columns) {
     const schema = BENEFIT_MATRIX_SCHEMAS.find(s => s.key === schemaKey);
     if (!schema || !columns.length) return '';
 
-    const titleMap = { 'AN_BINH_UU_VIET': 'An Bình Ưu Việt', 'KHOE_BINH_AN': 'Khoẻ Bình An', 'VUNG_TUONG_LAI': 'Vững Tương Lai', 'PUL_FAMILY': 'Khoẻ Trọn Vẹn', 'HEALTH_SCL': 'Sức khỏe Bùng Gia Lực', 'BHN_2_0': 'Bệnh hiểm nghèo 2.0', 'HOSPITAL_SUPPORT': 'Hỗ trợ Chi phí Nằm viện', 'ACCIDENT': 'Tai nạn' };
-    const title = titleMap[schema.key] || schema.key;
-    const headCols = columns.map(c => `<th>${sanitizeHtml(c.label)}</th>`).join('');
+    const title = schema.displayName || schema.key;
+    const headCols = columns.map(c => `<th>${sanitizeHtml(schema.getColumnLabel(c))}</th>`).join('');
     
     let rows = [];
     schema.benefits.forEach(benef => {
