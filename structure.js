@@ -1,5 +1,6 @@
 
 
+
 /**
  * @file structure.js
  * @description
@@ -652,13 +653,22 @@ export const PRODUCT_CATALOG = {
     'mdp3': {
         type: 'rider',
         name: 'Miễn đóng phí 3.0',
-        slug: 'mien-dong-phi-3',
-        isStandalone: true,
+        slug: 'mdp3',
+        category: 'waiver', // Đánh dấu đây là sản phẩm Miễn đóng phí
         ui: {
-            controls: []
+            controls: [] // Không cần control riêng vì được quản lý bởi UI chung của waiver
         },
         rules: {
-            eligibility: [ { type: 'age', min: 18, max: 60, renewalMax: 64 }, { type: 'riskGroup', required: true } ],
+            eligibility: [
+                { type: 'age', min: 18, max: 60 },
+                { type: 'riskGroup', required: true },
+                { type: 'isNotMain' } // Không áp dụng cho NĐBH chính
+            ]
+        },
+        stbhCalculation: {
+            includeMainBasePremium: true,
+            includeAllRiders: true,
+            excludeRidersOfWaivedPerson: true,
         },
         calculation: {
             calculate: (personInfo, stbhBase, helpers) => {
@@ -850,84 +860,4 @@ function calculateGenericAccountValueProjection(productConfig, args, helpers) {
         customCapped: scenarios.customCapped.yearEndValues,
         customFull: scenarios.customFull.yearEndValues,
     };
-}
-// ===== THÊM VÀO CUỐI FILE structure.js =====
-
-// Danh sách TẤT CẢ các sản phẩm Waiver of Premium
-export const WAIVER_PRODUCTS = {
-    'mdp3': {
-        id: 'mdp3',
-        name: 'Miễn đóng phí 3.0',
-        productKey: 'mdp3', // Link to PRODUCT_CATALOG
-        enabled: true,
-        
-        ui: {
-            enableCheckboxLabel: 'Bật Miễn đóng phí 3.0',
-            personSelectLabel: 'Áp dụng cho',
-            personSelectPlaceholder: '-- Chọn người --',
-            otherPersonOption: { value: 'other', label: '+ Thêm người khác' },
-            otherPersonForm: { title: 'Thông tin người được miễn đóng phí' },
-            feeDisplayTemplate: 'STBH Cơ sở: {stbhBase} | Phí: {premium}',
-            noEligibleMessage: 'STBH Cơ sở: {stbhBase} | Phí: — (Người không hợp lệ)'
-        },
-        
-        rules: {
-            eligibility: {
-                minAge: 18,
-                maxAge: 60,
-                excludeMainPerson: true,
-            },
-        },
-
-        stbhCalculation: {
-            includeMainBasePremium: true,
-            includeAllRiders: true,
-            excludeRidersOfWaivedPerson: true,
-        },
-        
-        validationMessages: {
-            noPersonSelected: 'Vui lòng chọn người được miễn đóng phí',
-            invalidAge: 'Tuổi phải từ {minAge}-{maxAge}',
-        }
-    },
-    
-    // Ví dụ về sản phẩm Miễn đóng phí trong tương lai
-    'mdp4': {
-        id: 'mdp4',
-        name: 'Miễn đóng phí 4.0',
-        productKey: 'mdp4', // Cần tạo mdp4 trong PRODUCT_CATALOG
-        enabled: false, 
-        
-        ui: {
-            enableCheckboxLabel: 'Bật Miễn đóng phí 4.0 (Mới!)',
-            personSelectLabel: 'Chọn người được miễn',
-            personSelectPlaceholder: '-- Chọn --',
-            otherPersonOption: { value: 'other', label: '+ Thêm người khác' },
-            otherPersonForm: { title: 'Thông tin người được miễn' },
-            feeDisplayTemplate: 'Cơ sở: {stbhBase} | Phí MDP4: {premium}',
-            noEligibleMessage: 'Cơ sở: {stbhBase} | Không đủ điều kiện'
-        },
-        
-        rules: {
-            eligibility: {
-                minAge: 20,
-                maxAge: 65,
-                excludeMainPerson: false, // NĐBH chính được mua
-            },
-        },
-        stbhCalculation: {
-            includeMainBasePremium: true,
-            includeAllRiders: true,
-            excludeRidersOfWaivedPerson: false, // Không trừ rider của chính người đó
-        },
-        validationMessages: {
-            noPersonSelected: 'Vui lòng chọn người',
-            invalidAge: 'Tuổi từ {minAge}-{maxAge}',
-        }
-    }
-};
-
-// Helper: Lấy danh sách sản phẩm đang enabled
-export function getEnabledWaiverProducts() {
-    return Object.values(WAIVER_PRODUCTS).filter(p => p.enabled);
 }
