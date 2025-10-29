@@ -1,6 +1,6 @@
 
 import { product_data } from '../data.js';
-import { roundDownTo1000, formatCurrency } from '../logic.js'; // Import shared utils
+import { roundDownTo1000, formatCurrency } from '../utils.js'; // Import shared utils
 import { GLOBAL_CONFIG } from '../structure.js';
 
 export const UI_FUNCTIONS = {
