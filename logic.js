@@ -1,6 +1,7 @@
 
 
-import { GLOBAL_CONFIG, PRODUCT_CATALOG, WAIVER_PRODUCTS, getEnabledWaiverProducts } from './structure.js';
+
+import { GLOBAL_CONFIG, PRODUCT_CATALOG } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
 // ===================================================================================
@@ -45,6 +46,10 @@ function initState() {
         },
         paymentFrequency: 'year',
         persons: [],
+        waiver: {
+            selectedPersonId: '',
+            enabledProducts: {}
+        },
         fees: {
             baseMain: 0,
             extra: 0,
@@ -52,6 +57,7 @@ function initState() {
             totalSupp: 0,
             total: 0,
             byPerson: {},
+            waiverDetails: {}
         }
     };
     // Add main person
@@ -87,6 +93,13 @@ function updateStateFromUI() {
     
     appState.persons.forEach(person => {
         Object.assign(person, collectPersonData(person.container, person.isMain));
+    });
+
+    // Update waiver state
+    appState.waiver.selectedPersonId = document.getElementById('waiver-person-select')?.value || '';
+    appState.waiver.enabledProducts = {};
+    document.querySelectorAll('.waiver-prod-checkbox:checked').forEach(cb => {
+        appState.waiver.enabledProducts[cb.dataset.prodId] = true;
     });
 }
 
@@ -158,7 +171,7 @@ function collectPersonData(container, isMain, isWopOther = false) {
 // ===== CALCULATIONS ENGINE
 // ===================================================================================
 function performCalculations(state) {
-    const fees = { baseMain: 0, extra: 0, totalSupp: 0, byPerson: {} };
+    const fees = { baseMain: 0, extra: 0, totalSupp: 0, byPerson: {}, waiverDetails: {} };
     const mainPerson = state.persons.find(p => p.isMain);
     const mainProductConfig = PRODUCT_CATALOG[state.mainProduct.key];
 
@@ -179,13 +192,13 @@ function performCalculations(state) {
         fees.byPerson[mainPerson.id].main = fees.baseMain + fees.extra;
     }
     
-    // PASS 1: Calculate all non-standalone fees
+    // PASS 1: Calculate all non-waiver fees
     let totalHospitalSupportStbh = 0;
     allInsuredPersons.forEach(person => {
         let personSuppFee = 0;
         Object.keys(person.supplements).forEach(prodId => {
             const prodConfig = PRODUCT_CATALOG[prodId];
-            if (!prodConfig?.calculation?.calculate || prodConfig.isStandalone) return;
+            if (!prodConfig?.calculation?.calculate || prodConfig.category === 'waiver') return;
             
             const ageOverride = null;
             const fee = prodConfig.calculation.calculate({
@@ -218,25 +231,28 @@ function performCalculations(state) {
         };
     });
 
-    // PASS 2: Calculate ALL Waiver of Premium fees
-    const waiverPremiums = window.WaiverManager.getAllPremiums();
-    
+    // PASS 2: Calculate all Waiver of Premium fees
+    const waiverPremiums = getAllWaiverPremiums();
+    fees.waiverDetails = waiverPremiums;
+
     Object.entries(waiverPremiums).forEach(([waiverProductId, waiverData]) => {
         const { premium, targetPerson } = waiverData;
         
         if (premium > 0 && targetPerson) {
             fees.totalSupp += premium;
-            
-            const personIdForFee = targetPerson.id; // Use the unique ID from getTargetPersonInfo
+            const personIdForFee = targetPerson.id;
             
             if (!fees.byPerson[personIdForFee]) {
                 fees.byPerson[personIdForFee] = { main: 0, supp: 0, total: 0, suppDetails: {} };
+                // Also add this 'other' person to the snapshot for summary display
+                window.personFees[personIdForFee] = { main: 0, mainBase: 0, supp: 0, total: 0 };
             }
             
             fees.byPerson[personIdForFee].supp += premium;
             fees.byPerson[personIdForFee].suppDetails[waiverProductId] = premium;
         }
     });
+
 
     fees.totalMain = fees.baseMain + fees.extra;
     fees.total = fees.totalMain + fees.totalSupp;
@@ -295,6 +311,7 @@ function renderUI(validationResult) {
     
     renderMainProductSection();
     appState.persons.forEach(p => renderSupplementaryProductsForPerson(p, isMainProductSectionValid));
+    renderWaiverSection(isMainProductSectionValid);
     renderSummary(isMainProductSectionValid);
     updateSupplementaryAddButtonState(isMainProductSectionValid);
     updatePaymentFrequencyOptions(appState.fees.baseMain);
@@ -361,7 +378,7 @@ function renderSupplementaryProductsForPerson(customer, isMainProductSectionVali
     const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
 
     Object.entries(PRODUCT_CATALOG).forEach(([prodId, prodConfig]) => {
-        if (prodConfig.type !== 'rider' || prodConfig.isStandalone) return;
+        if (prodConfig.type !== 'rider' || prodConfig.category === 'waiver') return;
 
         const section = container.querySelector(`[data-product-key="${prodId}"]`);
         if (!section) return;
@@ -533,7 +550,7 @@ function runAllValidations() {
         }
     });
     
-    if (!window.WaiverManager.validateAll()) result.isValid = false;
+    if (!validateWaiverSection()) result.isValid = false;
     if (!validateTargetAge()) result.isValid = false;
 
     result.errors = collectSimpleErrors();
@@ -732,6 +749,9 @@ function checkEligibility(person, eligibilityRules = []) {
                 if (rule.exclude && person.riskGroup > 0 && rule.exclude.includes(person.riskGroup)) return false;
                 if (rule.required && person.riskGroup === 0) return false;
                 break;
+            case 'isNotMain':
+                if (person.isMain) return false;
+                break;
         }
     }
     return true;
@@ -746,8 +766,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initPerson(appState.persons.find(p => p.isMain));
     initSupplementaryButton();
     initSummaryAndViewer();
+    initWaiverSection();
     attachGlobalListeners();
-    window.WaiverManager.init();
     runWorkflow();
 });
 
@@ -756,7 +776,6 @@ function runWorkflow() {
   const validationResult = runAllValidations();
   appState.fees = performCalculations(appState);
   renderUI(validationResult);
-  window.WaiverManager.renderAll(validationResult.isMainProductSectionValid);
   updateTargetAge();
 }
 
@@ -774,10 +793,6 @@ function initMainProductSelect() {
 function attachGlobalListeners() {
     document.body.addEventListener('change', (e) => {
         hideGlobalErrors();
-        
-        if (e.target.classList.contains('dob-input')) {
-             window.WaiverManager.updateAllOptions();
-        }
         
         if (e.target.id === 'main-product') {
             const oldStbh = appState.mainProduct.values['main-stbh'] || 0;
@@ -800,8 +815,7 @@ function attachGlobalListeners() {
                 // Immediately clear UI to prevent stale data reading
                 document.getElementById('supplementary-insured-container').innerHTML = '';
                 document.querySelectorAll('#main-supp-container .supplementary-products-container input[type=checkbox]').forEach(cb => cb.checked = false);
-                window.WaiverManager.resetAll();
-
+                
                 const mainPerson = appState.persons.find(p => p.isMain);
                 if (mainPerson) mainPerson.supplements = {};
             }
@@ -867,12 +881,10 @@ function initSupplementaryButton() {
         newContainer.querySelector('.remove-supp-btn').addEventListener('click', () => {
             appState.persons = appState.persons.filter(p => p.id !== newPersonState.id);
             newContainer.remove();
-            window.WaiverManager.updateAllOptions();
             runWorkflow();
         });
         
         initPerson(newPersonState);
-        window.WaiverManager.updateAllOptions();
         runWorkflow();
     });
 }
@@ -893,7 +905,7 @@ function updateSupplementaryAddButtonState(isMainProductValid) {
 
 function generateSupplementaryProductsHtml() {
     return Object.entries(PRODUCT_CATALOG)
-        .filter(([, config]) => config.type === 'rider' && !config.isStandalone)
+        .filter(([, config]) => config.type === 'rider' && config.category !== 'waiver')
         .map(([prodId, prodConfig]) => {
             const controlsHtml = (prodConfig.ui.controls || []).map(cfg => renderControl(cfg, cfg.defaultValue || '', null)).join('');
             return `
@@ -1096,7 +1108,7 @@ function renderSuppListSummary() {
 
   const getPersonName = (id) => {
     if (id && id.includes('waiver_other')) {
-        const personData = window.WaiverManager.getTargetPersonInfo();
+        const personData = getWaiverTargetPersonInfo();
         if (personData && personData.id === 'waiver_other') {
             return (personData.name && personData.name !== 'Người khác') ? personData.name : 'Bên mua bảo hiểm';
         }
@@ -1191,11 +1203,10 @@ function buildViewerPayload() {
     });
   });
 
-  // Handle WOP products for the payload
-  const waiverPremiums = window.WaiverManager.getAllPremiums();
-  Object.entries(waiverPremiums).forEach(([waiverProductId, waiverData]) => {
-      const { premium, targetPerson } = waiverData;
-      if (premium > 0 && targetPerson) {
+  // Handle WOP products for the payload from the new central location
+  Object.entries(appState.fees.waiverDetails || {}).forEach(([waiverProductId, waiverData]) => {
+      const { premium } = waiverData;
+      if (premium > 0) {
           riderList.push({ 
               slug: waiverProductId, 
               selected: true, 
@@ -1274,7 +1285,7 @@ function buildSummaryData() {
     }
 
     const allPersonsForSummary = JSON.parse(JSON.stringify(appState.persons));
-    const waiverPremiums = window.WaiverManager.getAllPremiums();
+    const waiverPremiums = appState.fees.waiverDetails || {};
 
     // Augment person data with selected waivers for unified processing
     const waiverOtherPersons = [];
@@ -1282,7 +1293,7 @@ function buildSummaryData() {
         const { premium, targetPerson } = waiverData;
         if (premium > 0 && targetPerson) {
             let personForWaiver = allPersonsForSummary.find(p => p.id === targetPerson.id);
-            if (!personForWaiver && targetPerson.id.includes('_other')) {
+            if (!personForWaiver && targetPerson.id.includes('waiver_other')) {
                 personForWaiver = {
                     ...targetPerson,
                     isMain: false,
@@ -1350,14 +1361,15 @@ function buildPart1RowsData(ctx) {
                 
                 let stbh = 0, prodName = '', years = 0;
                 
-                const isWaiver = WAIVER_PRODUCTS[rid];
+                const isWaiver = PRODUCT_CATALOG[rid]?.category === 'waiver';
 
                 if(isWaiver){
                     const waiverData = waiverPremiums[rid];
-                    const wConfig = WAIVER_PRODUCTS[rid];
+                    const wConfig = PRODUCT_CATALOG[rid];
                     stbh = waiverData.stbhBase;
-                    prodName = PRODUCT_CATALOG[wConfig.productKey].name;
-                    years = Math.max(0, Math.min(wConfig.rules.eligibility.maxAge - p.age, targetAge - mainAge) + 1);
+                    prodName = wConfig.name;
+                    const wEligibility = wConfig.rules.eligibility.find(r=>r.type==='age');
+                    years = Math.max(0, Math.min(wEligibility.max - p.age, targetAge - mainAge) + 1);
                 } else {
                     const maxA = riderMaxAge(rid);
                     years = Math.max(0, Math.min(maxA - p.age, targetAge - mainAge) + 1);
@@ -1394,7 +1406,6 @@ function buildPart2ScheduleRows(ctx) {
     const baseMainAnnual = appState?.fees?.baseMain || 0;
     const extraAnnual = appState.mainProduct.values['extra-premium'] || 0;
     
-    // Pre-calculate fixed waiver premiums
     const fixedWaiverPremiums = {};
     Object.entries(waiverPremiums).forEach(([waiverId, waiverData]) => {
         if (waiverData.premium > 0 && waiverData.targetPerson) {
@@ -1423,7 +1434,7 @@ function buildPart2ScheduleRows(ctx) {
             if (p.supplements) {
                 for(const rid in p.supplements) {
                      const prodConfig = PRODUCT_CATALOG[rid];
-                     if (!prodConfig || !prodConfig.calculation.calculate || prodConfig.isStandalone) continue;
+                     if (!prodConfig || !prodConfig.calculation.calculate || prodConfig.category === 'waiver') continue;
                      
                      if (attained > riderMaxAge(rid)) continue;
 
@@ -1438,11 +1449,11 @@ function buildPart2ScheduleRows(ctx) {
                 }
             }
             
-            // Add fixed waiver premiums for this person
             if (fixedWaiverPremiums[p.id]) {
                 Object.entries(fixedWaiverPremiums[p.id]).forEach(([waiverId, premium]) => {
-                    const wConfig = WAIVER_PRODUCTS[waiverId];
-                    if (attained <= wConfig.rules.eligibility.maxAge) {
+                    const wConfig = PRODUCT_CATALOG[waiverId];
+                    const wEligibility = wConfig.rules.eligibility.find(r => r.type === 'age');
+                    if (wEligibility && attained <= wEligibility.max) {
                         addRider(premium);
                     }
                 });
@@ -1637,7 +1648,7 @@ function bm_collectColumns(summaryData) {
     persons.forEach(p => {
         const supp = p.supplements || {};
         for (const rid in supp) {
-            if(PRODUCT_CATALOG[rid]?.isStandalone) continue;
+            if(PRODUCT_CATALOG[rid]?.category === 'waiver') continue;
 
             const schema = bm_findSchema(rid);
             if (!schema) continue;
@@ -1765,254 +1776,219 @@ function getProductLabel(key) {
 }
 
 // ===================================================================================
-// ===== MODULE: MIỄN ĐÓNG PHÍ (DATA-DRIVEN)
+// ===== LOGIC MIỄN ĐÓNG PHÍ (DATA-DRIVEN)
 // ===================================================================================
 
-window.WaiverManager = (function () {
-    const state = {
-        selectedPersonId: '',
-        enabledProducts: {}, // { mdp3: true, mdp4: false }
-    };
+function initWaiverSection() {
+    renderInitialWaiverContainer();
+    attachWaiverListeners();
+}
+
+function renderInitialWaiverContainer() {
+    const container = document.getElementById('waiver-of-premium-container');
+    if (!container) return;
     
-    function init() {
-        renderInitialContainer();
-        attachListeners();
+    container.innerHTML = `
+        <div>
+            <label for="waiver-person-select" class="font-medium text-gray-700 block mb-1">Áp dụng cho</label>
+            <select id="waiver-person-select" class="form-select w-full"></select>
+        </div>
+        <div id="waiver-other-form" class="hidden mt-4 p-3 border rounded bg-gray-50"></div>
+        <div id="waiver-products-list" class="hidden mt-4 space-y-4"></div>
+        <div id="waiver-fee-display" class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2"></div>
+    `;
+
+    const otherFormWrapper = document.getElementById('waiver-other-form');
+    const template = document.getElementById('supplementary-person-template');
+    if (!otherFormWrapper || !template) return;
+    
+    const clone = template.content.cloneNode(true);
+    clone.querySelector('.remove-supp-btn')?.remove();
+    clone.querySelector('.supplementary-products-container')?.parentElement.remove();
+
+    const newContainer = clone.querySelector('.person-container');
+    newContainer.id = `person-container-waiver-other-form`;
+    newContainer.classList.remove('bg-gray-100', 'p-4', 'mt-4');
+    newContainer.querySelector('h3').textContent = 'Thông tin Bên mua bảo hiểm';
+    otherFormWrapper.appendChild(clone);
+    
+    const newFormEl = document.getElementById(newContainer.id);
+    if (newFormEl) {
+        initDateFormatter(newFormEl.querySelector('.dob-input'));
+        initOccupationAutocomplete(newFormEl.querySelector('.occupation-input'), newFormEl);
     }
+}
 
-    function renderInitialContainer() {
-        const container = document.getElementById('waiver-of-premium-container');
-        if (!container) return;
-        
-        container.innerHTML = `
-            <div>
-                <label for="waiver-person-select" class="font-medium text-gray-700 block mb-1">Áp dụng cho</label>
-                <select id="waiver-person-select" class="form-select w-full"></select>
-            </div>
-            <div id="waiver-other-form" class="hidden mt-4 p-3 border rounded bg-gray-50"></div>
-            <div id="waiver-products-list" class="hidden mt-4 space-y-4"></div>
-            <div id="waiver-fee-display" class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2"></div>
-        `;
-
-        const otherFormWrapper = document.getElementById('waiver-other-form');
-        const template = document.getElementById('supplementary-person-template');
-        if (!otherFormWrapper || !template) return;
-        
-        const clone = template.content.cloneNode(true);
-        clone.querySelector('.remove-supp-btn')?.remove();
-        clone.querySelector('.supplementary-products-container')?.parentElement.remove();
-
-        const newContainer = clone.querySelector('.person-container');
-        newContainer.id = `person-container-waiver-other-form`;
-        newContainer.classList.remove('bg-gray-100', 'p-4', 'mt-4');
-        newContainer.querySelector('h3').textContent = 'Thông tin Bên mua bảo hiểm';
-        otherFormWrapper.appendChild(clone);
-        
-        const newFormEl = document.getElementById(newContainer.id);
-        if (newFormEl) {
-            initDateFormatter(newFormEl.querySelector('.dob-input'));
-            initOccupationAutocomplete(newFormEl.querySelector('.occupation-input'), newFormEl);
+function attachWaiverListeners() {
+    document.body.addEventListener('change', (e) => {
+        const target = e.target;
+        if (target.id === `waiver-person-select`) {
+            appState.waiver.enabledProducts = {}; // Reset product selection when person changes
+            runWorkflow();
         }
-    }
-    
-    function updateAllOptions(isMainProductValid) {
-        const selEl = document.getElementById(`waiver-person-select`);
-        if (!selEl) return;
-    
-        const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
-        const noWaiverAllowed = mainProductConfig?.rules?.noSupplementaryInsured;
-        selEl.disabled = !isMainProductValid || noWaiverAllowed;
-        
-        if (noWaiverAllowed) {
-            selEl.innerHTML = `<option value="">-- Không áp dụng cho sản phẩm này --</option>`;
-            resetAll();
-            return;
+        if (target.classList.contains('waiver-prod-checkbox')) {
+            runWorkflow();
         }
+    });
+}
 
-        const currentSelectedValue = selEl.value;
+function renderWaiverSection(isMainProductValid) {
+    const selEl = document.getElementById(`waiver-person-select`);
+    if (!selEl) return;
+
+    // Update dropdown options
+    const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
+    const noWaiverAllowed = mainProductConfig?.rules?.noSupplementaryInsured;
+    selEl.disabled = !isMainProductValid || noWaiverAllowed;
     
+    if (noWaiverAllowed) {
+        selEl.innerHTML = `<option value="">-- Không áp dụng cho sản phẩm này --</option>`;
+        appState.waiver.selectedPersonId = '';
+        appState.waiver.enabledProducts = {};
+    } else {
+        const currentSelectedValue = appState.waiver.selectedPersonId;
         let optionsHtml = `<option value="">-- Chọn người --</option>`;
-        
         appState.persons.forEach(p => {
             optionsHtml += `<option value="${p.id}">${p.name} (tuổi ${p.age || "?"})</option>`;
         });
-        
         optionsHtml += `<option value="other">+ Thêm người khác (Bên mua bảo hiểm)</option>`;
         selEl.innerHTML = optionsHtml;
     
         if (currentSelectedValue && selEl.querySelector(`option[value="${currentSelectedValue}"]`)) {
             selEl.value = currentSelectedValue;
         } else {
-            state.selectedPersonId = '';
+            appState.waiver.selectedPersonId = '';
             selEl.value = '';
         }
     }
-    
-    function renderProductList() {
-        const productListContainer = document.getElementById('waiver-products-list');
-        const otherForm = document.getElementById('waiver-other-form');
 
-        const showOtherForm = state.selectedPersonId === 'other';
-        otherForm.classList.toggle('hidden', !showOtherForm);
+    // Render product list and fees
+    renderWaiverProductList();
+    renderWaiverFeeDisplay();
+}
 
-        if (!state.selectedPersonId) {
-            productListContainer.classList.add('hidden');
-            return;
-        }
-        productListContainer.classList.remove('hidden');
+function renderWaiverProductList() {
+    const productListContainer = document.getElementById('waiver-products-list');
+    const otherForm = document.getElementById('waiver-other-form');
 
-        const personInfo = getTargetPersonInfo();
-        if (!personInfo) {
-            productListContainer.innerHTML = '';
-            return;
-        }
-        
-        if(personInfo.id.includes('_other')) {
-            const otherFormEl = document.getElementById(`person-container-waiver-other-form`);
-            if(otherFormEl) otherFormEl.querySelector('.age-span').textContent = personInfo.age;
-        }
+    const showOtherForm = appState.waiver.selectedPersonId === 'other';
+    otherForm.classList.toggle('hidden', !showOtherForm);
 
-        const enabledProducts = getEnabledWaiverProducts();
-        productListContainer.innerHTML = enabledProducts.map(prod => {
-            const prodConfig = PRODUCT_CATALOG[prod.productKey];
-            const eligibilityRules = WAIVER_PRODUCTS[prod.id].rules.eligibility;
-            
-            let isEligible = true;
-            if (personInfo.isMain && eligibilityRules.excludeMainPerson) isEligible = false;
-            if (personInfo.age < eligibilityRules.minAge || personInfo.age > eligibilityRules.maxAge) isEligible = false;
-
-            const isChecked = state.enabledProducts[prod.id] || false;
-
-            return `
-                <div class="waiver-product-item ${!isEligible ? 'opacity-50' : ''}">
-                    <label class="flex items-center space-x-3 cursor-pointer">
-                        <input type="checkbox" id="waiver-cb-${prod.id}" class="form-checkbox waiver-prod-checkbox" data-prod-id="${prod.id}" 
-                               ${isChecked ? 'checked' : ''} ${!isEligible ? 'disabled' : ''}>
-                        <span class="font-medium text-gray-800">${prodConfig.name}</span>
-                    </label>
-                    ${!isEligible ? `<div class="text-xs text-red-600 pl-8">Không đủ điều kiện (tuổi ${eligibilityRules.minAge}-${eligibilityRules.maxAge}${eligibilityRules.excludeMainPerson ? ', không áp dụng cho NĐBH chính' : ''})</div>` : ''}
-                </div>
-            `;
-        }).join('');
+    if (!appState.waiver.selectedPersonId) {
+        productListContainer.classList.add('hidden');
+        return;
     }
+    productListContainer.classList.remove('hidden');
 
-    function renderFeeDisplay() {
-        const feeEl = document.getElementById(`waiver-fee-display`);
-        if (!feeEl) return;
-        
-        if (!state.selectedPersonId) { feeEl.textContent = ''; return; }
-
-        const premiums = getAllPremiums();
-        const feeText = Object.entries(premiums).map(([prodId, data]) => {
-            const config = WAIVER_PRODUCTS[prodId];
-            return config.ui.feeDisplayTemplate.replace('{stbhBase}', formatCurrency(data.stbhBase)).replace('{premium}', formatCurrency(data.premium));
-        }).join(' | ');
-
-        feeEl.textContent = feeText;
-    }
-
-    function getStbhBase(waiverConfig) {
-        if (!window.personFees) return 0;
-        let stbhBase = 0;
-        const rules = waiverConfig.stbhCalculation;
-        
-        if (rules.includeMainBasePremium) {
-            stbhBase += appState.fees.baseMain || 0;
-        }
-        
-        if (rules.includeAllRiders) {
-            Object.values(window.personFees).forEach(feeData => {
-                stbhBase += feeData.supp || 0;
-            });
-        }
-        
-        if (rules.excludeRidersOfWaivedPerson && state.selectedPersonId && state.selectedPersonId !== 'other') {
-            stbhBase -= window.personFees[state.selectedPersonId]?.supp || 0;
-        }
-        
-        return Math.max(0, stbhBase);
-    }
-            
-    function getTargetPersonInfo() {
-        if (!state.selectedPersonId) return null;
-        if (state.selectedPersonId === 'other') {
-            const otherForm = document.getElementById(`person-container-waiver-other-form`);
-            return otherForm ? { ...collectPersonData(otherForm, false, true), id: `waiver_other` } : null;
-        }
-        return appState.persons.find(p => p.id === state.selectedPersonId) || null;
-    }
-
-    function getAllPremiums() {
-        const result = {};
-        const personInfo = getTargetPersonInfo();
-        if (!personInfo) return result;
-
-        Object.entries(state.enabledProducts).forEach(([prodId, isEnabled]) => {
-            if (!isEnabled) return;
-
-            const waiverConfig = WAIVER_PRODUCTS[prodId];
-            const productConfig = PRODUCT_CATALOG[waiverConfig.productKey];
-            const stbhBase = getStbhBase(waiverConfig);
-
-            const premium = productConfig.calculation.calculate(personInfo, stbhBase, { data: product_data, roundDownTo1000 });
-            if (premium > 0) {
-                 result[prodId] = {
-                    premium,
-                    targetPerson: personInfo,
-                    stbhBase: stbhBase
-                };
-            }
-        });
-        return result;
+    const personInfo = getWaiverTargetPersonInfo();
+    if (!personInfo) {
+        productListContainer.innerHTML = '';
+        return;
     }
     
-    function validateAll() {
-        if (!state.selectedPersonId) return true;
-        
-        if (state.selectedPersonId === 'other') {
-            const otherForm = document.getElementById(`person-container-waiver-other-form`);
-            if (!otherForm || !validatePersonInputs({ container: otherForm }, false, true)) {
-                return false;
-            }
-        }
-        return true;
+    if(personInfo.id.includes('waiver_other')) {
+        const otherFormEl = document.getElementById(`person-container-waiver-other-form`);
+        if(otherFormEl) otherFormEl.querySelector('.age-span').textContent = personInfo.age;
     }
 
-    function resetAll() {
-        state.selectedPersonId = '';
-        state.enabledProducts = {};
-        const selEl = document.getElementById('waiver-person-select');
-        if(selEl) selEl.value = '';
-        renderProductList();
-        renderFeeDisplay();
+    const waiverProducts = Object.values(PRODUCT_CATALOG).filter(p => p.category === 'waiver');
+    productListContainer.innerHTML = waiverProducts.map(prodConfig => {
+        const isEligible = checkEligibility(personInfo, prodConfig.rules.eligibility);
+        const isChecked = appState.waiver.enabledProducts[prodConfig.slug] || false;
+
+        return `
+            <div class="waiver-product-item ${!isEligible ? 'opacity-50' : ''}">
+                <label class="flex items-center space-x-3 cursor-pointer">
+                    <input type="checkbox" id="waiver-cb-${prodConfig.slug}" class="form-checkbox waiver-prod-checkbox" data-prod-id="${prodConfig.slug}" 
+                           ${isChecked ? 'checked' : ''} ${!isEligible ? 'disabled' : ''}>
+                    <span class="font-medium text-gray-800">${prodConfig.name}</span>
+                </label>
+                ${!isEligible ? `<div class="text-xs text-red-600 pl-8">Không đủ điều kiện (tuổi, giới tính, hoặc vai trò không phù hợp)</div>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function renderWaiverFeeDisplay() {
+    const feeEl = document.getElementById(`waiver-fee-display`);
+    if (!feeEl) return;
+    
+    if (!appState.waiver.selectedPersonId) { feeEl.textContent = ''; return; }
+
+    const premiums = getAllWaiverPremiums();
+    const feeText = Object.entries(premiums).map(([prodId, data]) => {
+        const { stbhBase, premium } = data;
+        return `STBH Cơ sở: ${formatCurrency(stbhBase)} | Phí: ${formatCurrency(premium)}`;
+    }).join(' | ');
+
+    feeEl.textContent = feeText;
+}
+
+function calculateWaiverStbhBase(waiverConfig) {
+    if (!window.personFees) return 0;
+    let stbhBase = 0;
+    const rules = waiverConfig.stbhCalculation;
+    
+    if (rules.includeMainBasePremium) {
+        stbhBase += appState.fees.baseMain || 0;
     }
-            
-    function attachListeners() {
-        document.body.addEventListener('change', (e) => {
-            const target = e.target;
-            if (target.id === `waiver-person-select`) {
-                state.selectedPersonId = target.value;
-                state.enabledProducts = {}; // Reset product selection when person changes
-                runWorkflow();
-            }
-            if (target.classList.contains('waiver-prod-checkbox')) {
-                const prodId = target.dataset.prodId;
-                state.enabledProducts[prodId] = target.checked;
-                runWorkflow();
-            }
+    
+    if (rules.includeAllRiders) {
+        Object.values(window.personFees).forEach(feeData => {
+            stbhBase += feeData.supp || 0;
         });
     }
+    
+    if (rules.excludeRidersOfWaivedPerson && appState.waiver.selectedPersonId && appState.waiver.selectedPersonId !== 'other') {
+        stbhBase -= window.personFees[appState.waiver.selectedPersonId]?.supp || 0;
+    }
+    
+    return Math.max(0, stbhBase);
+}
+        
+function getWaiverTargetPersonInfo() {
+    const selectedId = appState.waiver.selectedPersonId;
+    if (!selectedId) return null;
+    if (selectedId === 'other') {
+        const otherForm = document.getElementById(`person-container-waiver-other-form`);
+        return otherForm ? { ...collectPersonData(otherForm, false, true), id: `waiver_other` } : null;
+    }
+    return appState.persons.find(p => p.id === selectedId) || null;
+}
 
-    return {
-        init,
-        getAllPremiums,
-        validateAll,
-        renderAll(isMainProductValid) {
-            updateAllOptions(isMainProductValid);
-            renderProductList();
-            renderFeeDisplay();
-        },
-        resetAll,
-        updateAllOptions,
-        getTargetPersonInfo
-    };
-})();
+function getAllWaiverPremiums() {
+    const result = {};
+    const personInfo = getWaiverTargetPersonInfo();
+    if (!personInfo) return result;
+
+    Object.entries(appState.waiver.enabledProducts).forEach(([prodId, isEnabled]) => {
+        if (!isEnabled) return;
+
+        const waiverConfig = PRODUCT_CATALOG[prodId];
+        if (!waiverConfig) return;
+
+        const stbhBase = calculateWaiverStbhBase(waiverConfig);
+        const premium = waiverConfig.calculation.calculate(personInfo, stbhBase, { data: product_data, roundDownTo1000 });
+        if (premium > 0) {
+             result[prodId] = {
+                premium,
+                targetPerson: personInfo,
+                stbhBase: stbhBase
+            };
+        }
+    });
+    return result;
+}
+
+function validateWaiverSection() {
+    const selectedId = appState.waiver.selectedPersonId;
+    if (!selectedId) return true;
+    
+    if (selectedId === 'other') {
+        const otherForm = document.getElementById(`person-container-waiver-other-form`);
+        if (!otherForm || !validatePersonInputs({ container: otherForm }, false, true)) {
+            return false;
+        }
+    }
+    return true;
+}
