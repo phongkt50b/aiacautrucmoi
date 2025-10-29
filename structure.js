@@ -1,4 +1,3 @@
-
 /**
  * @file structure.js
  * @description
@@ -77,13 +76,11 @@ export const PRODUCT_CATALOG = {
         getPaymentTerm: (values) => values['payment-term'],
         targetAgeConfig: {
             isEditable: true,
-            getValue: (mainPerson, values) => 99,
-            getHint: (mainPerson, values) => {
-                const term = parseInt(values['payment-term'] || '0', 10);
-                if (!term) return 'Nhập thời gian đóng phí để xác định tuổi minh họa.';
-                const minAge = mainPerson.age + term - 1;
-                const maxAge = 99;
-                return `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+            valueKey: 'fixed_99',
+            hintKey: 'pul_mul',
+            constraints: {
+                minKey: 'min_agePlusTerm',
+                maxKey: 'max_fixed_99'
             }
         },
         ui: {
@@ -148,13 +145,11 @@ export const PRODUCT_CATALOG = {
         getPaymentTerm: (values) => values['payment-term'],
         targetAgeConfig: {
             isEditable: true,
-            getValue: (mainPerson, values) => 99,
-            getHint: (mainPerson, values) => {
-                const term = parseInt(values['payment-term'] || '0', 10);
-                if (!term) return 'Nhập thời gian đóng phí để xác định tuổi minh họa.';
-                const minAge = mainPerson.age + term - 1;
-                const maxAge = 99;
-                return `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+            valueKey: 'fixed_99',
+            hintKey: 'pul_mul',
+            constraints: {
+                minKey: 'min_agePlusTerm',
+                maxKey: 'max_fixed_99'
             }
         },
         ui: {
@@ -219,13 +214,11 @@ export const PRODUCT_CATALOG = {
         getPaymentTerm: (values) => values['payment-term'],
         targetAgeConfig: {
             isEditable: true,
-            getValue: (mainPerson, values) => 99,
-            getHint: (mainPerson, values) => {
-                const term = parseInt(values['payment-term'] || '0', 10);
-                if (!term) return 'Nhập thời gian đóng phí để xác định tuổi minh họa.';
-                const minAge = mainPerson.age + term - 1;
-                const maxAge = 99;
-                return `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+            valueKey: 'fixed_99',
+            hintKey: 'pul_mul',
+            constraints: {
+                minKey: 'min_agePlusTerm',
+                maxKey: 'max_fixed_99'
             }
         },
         ui: {
@@ -290,13 +283,11 @@ export const PRODUCT_CATALOG = {
         getPaymentTerm: (values) => values['payment-term'],
         targetAgeConfig: {
             isEditable: true,
-            getValue: (mainPerson, values) => 99,
-            getHint: (mainPerson, values) => {
-                const term = parseInt(values['payment-term'] || '0', 10);
-                if (!term) return 'Nhập thời gian đóng phí để xác định tuổi minh họa.';
-                const minAge = mainPerson.age + term - 1;
-                const maxAge = 99;
-                return `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+            valueKey: 'fixed_99',
+            hintKey: 'pul_mul',
+            constraints: {
+                minKey: 'min_agePlusTerm',
+                maxKey: 'max_fixed_99'
             }
         },
         ui: {
@@ -376,13 +367,11 @@ export const PRODUCT_CATALOG = {
         getPaymentTerm: (values) => values['payment-term'],
         targetAgeConfig: {
             isEditable: true,
-            getValue: (mainPerson, values) => 99,
-            getHint: (mainPerson, values) => {
-                const term = parseInt(values['payment-term'] || '0', 10);
-                if (!term) return 'Nhập thời gian đóng phí để xác định tuổi minh họa.';
-                const minAge = mainPerson.age + term - 1;
-                const maxAge = 99;
-                return `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+            valueKey: 'fixed_99',
+            hintKey: 'pul_mul',
+            constraints: {
+                minKey: 'min_agePlusTerm',
+                maxKey: 'max_fixed_99'
             }
         },
         ui: {
@@ -462,11 +451,9 @@ export const PRODUCT_CATALOG = {
         getPaymentTerm: (values) => values['abuv-term'],
         targetAgeConfig: {
             isEditable: false,
-            getValue: (mainPerson, values) => {
-                const term = parseInt(values['abuv-term'] || '0', 10);
-                return term ? mainPerson.age + term - 1 : mainPerson.age;
-            },
-            getHint: () => 'Tuổi kết thúc được tính tự động theo Thời hạn đóng phí.'
+            valueKey: 'agePlusTerm',
+            hintKey: 'abuv',
+            constraints: {}
         },
         ui: {
             controls: [
@@ -519,11 +506,10 @@ export const PRODUCT_CATALOG = {
         getPaymentTerm: (values) => PRODUCT_CATALOG['TRON_TAM_AN'].packageConfig.fixedValues.paymentTerm,
         targetAgeConfig: {
             isEditable: false,
-            getValue: (mainPerson, values) => {
-                const term = PRODUCT_CATALOG['TRON_TAM_AN'].packageConfig.fixedValues.paymentTerm;
-                return mainPerson.age + parseInt(term, 10) - 1;
-            },
-            getHint: () => 'Sản phẩm có thời hạn hợp đồng cố định.'
+            valueKey: 'agePlusFixedTerm',
+            valueParams: { term: '10' },
+            hintKey: 'tta',
+            constraints: {}
         },
         packageConfig: {
             underlyingMainProduct: 'AN_BINH_UU_VIET', 

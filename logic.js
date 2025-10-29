@@ -1,7 +1,8 @@
 
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG } from './structure.js';
 import { product_data } from './data.js';
-import { debounce, parseFormattedNumber, formatCurrency, sanitizeHtml, roundDownTo1000 } from './utils.js';
+import { debounce, parseFormattedNumber, formatCurrency, sanitizeHtml, roundDownTo1000, clearFieldError } from './utils.js';
 
 // Import Engines
 import { calculateAll } from './engines/calculationEngine.js';
@@ -501,7 +502,9 @@ function updateTargetAge() {
     const config = productConfig.targetAgeConfig;
     const ctx = { mainPerson, values: appState.mainProduct.values, state: appState };
     targetAgeInput.disabled = !config.isEditable;
-    const calculatedValue = TARGET_AGE_REGISTRY.resolveValue(config.valueKey, ctx);
+    
+    const calculatedValue = TARGET_AGE_REGISTRY.resolveValue(config.valueKey, { ...ctx, params: config.valueParams });
+
     if (!config.isEditable) {
         targetAgeInput.value = calculatedValue;
     } else {

@@ -57,10 +57,54 @@ export function debounce(func, delay) {
  */
 export function sanitizeHtml(str) {
     if (typeof document === 'undefined') {
-        // Basic fallback for non-browser environments if needed
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
     const temp = document.createElement('div');
     temp.textContent = str;
     return temp.innerHTML;
+}
+
+// ===================================================================================
+// ===== UI FIELD ERROR HELPERS
+// ===================================================================================
+
+let errorMap = new Map();
+
+export function setFieldError(input, message) { 
+    if (!input) return;
+    let parent = input.closest('div');
+    if (!parent) {
+        parent = input.parentElement;
+    }
+    let err = parent?.querySelector('.field-error');
+    if (!err && parent) {
+      err = document.createElement('p');
+      err.className = 'field-error';
+      parent.appendChild(err);
+    }
+    if (err) {
+        err.textContent = message || '';
+        if(message) {
+            errorMap.set(input, message);
+        } else {
+            errorMap.delete(input);
+        }
+    }
+    input.classList.toggle('border-red-500', !!message);
+}
+
+export function clearFieldError(input) { setFieldError(input, ''); }
+
+export function clearAllErrors() { 
+    errorMap.forEach((_, input) => {
+        let parent = input.closest('div') || input.parentElement;
+        let err = parent?.querySelector('.field-error');
+        if (err) err.textContent = '';
+        input.classList.remove('border-red-500');
+    });
+    errorMap.clear();
+}
+
+export function collectAllErrors() {
+  return [...new Set(Array.from(errorMap.values()).filter(Boolean))];
 }
