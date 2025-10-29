@@ -1,7 +1,7 @@
 
+
 import { PRODUCT_CATALOG, GLOBAL_CONFIG } from '../structure.js';
 import { RULE_ENGINE } from '../registries/ruleEngine.js';
-import { UI_FUNCTIONS } from '../registries/uiFunctions.js';
 
 let lastRenderedProductKey = null;
 
@@ -38,7 +38,7 @@ export function renderMainProductSection(state) {
     const productConfig = PRODUCT_CATALOG[mainProductKey];
     if (productConfig?.ui?.controls) {
         productConfig.ui.controls.forEach(controlConfig => {
-            const onRenderFunc = UI_FUNCTIONS.onRender[controlConfig.onRenderKey];
+            const onRenderFunc = controlConfig.onRender;
             if (onRenderFunc) {
                 const el = document.getElementById(controlConfig.id);
                 if (el) {
@@ -92,7 +92,7 @@ export function renderSupplementaryProductsForPerson(customer, state, isMainProd
             feeDisplay.textContent = fee > 0 ? `Phí: ${state.context.helpers.formatCurrency(fee)}` : '';
         }
 
-        const onRenderFunc = UI_FUNCTIONS.onRender[prodConfig.ui.onRenderKey];
+        const onRenderFunc = prodConfig.ui.onRender;
         if (onRenderFunc) {
             onRenderFunc({
                 section,
@@ -145,6 +145,7 @@ function renderControl(config, value, customer, state) {
                 <input type="text" id="${config.id}" class="form-input ${config.customClass || ''} ${bg}" 
                        value="${displayValue}" placeholder="${config.placeholder || ''}" ${disabled}>
                 <div id="${config.hintId || config.id + '-hint'}" class="text-sm text-gray-500 mt-1">${config.hintText || ''}</div>
+                <div class="field-error"></div>
             </div>`;
             break;
         case 'numberInput':
@@ -153,11 +154,12 @@ function renderControl(config, value, customer, state) {
                 <input type="number" id="${config.id}" class="form-input" value="${value || config.defaultValue || ''}" 
                        placeholder="${config.placeholder || ''}">
                 <div id="${config.id}-hint" class="text-sm text-gray-500 mt-1"></div>
+                <div class="field-error"></div>
             </div>`;
             break;
         case 'select':
             let optionsHtml = (config.options || [])
-                .filter(opt => !opt.conditionKey || RULE_ENGINE.evaluate({ type: 'condition', key: opt.conditionKey }, { customer }))
+                .filter(opt => !opt.condition || opt.condition(customer))
                 .map(opt => `<option value="${opt.value}" ${opt.value == value ? 'selected' : ''}>${opt.label}</option>`)
                 .join('');
             if (!optionsHtml) optionsHtml = '<option value="" disabled selected>Không có kỳ hạn phù hợp</option>';
@@ -165,6 +167,7 @@ function renderControl(config, value, customer, state) {
             html = `<div>
                 <label for="${config.id}" class="font-medium text-gray-700 block mb-1">${config.label} ${required}</label>
                 <select id="${config.id}" class="form-select">${optionsHtml}</select>
+                <div class="field-error"></div>
             </div>`;
             break;
         case 'checkboxGroup':
