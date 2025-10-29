@@ -1,4 +1,5 @@
 
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, WAIVER_PRODUCTS, getEnabledWaiverProducts } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
@@ -1787,8 +1788,8 @@ window.WaiverManager = (function () {
                 <label for="waiver-person-select" class="font-medium text-gray-700 block mb-1">Áp dụng cho</label>
                 <select id="waiver-person-select" class="form-select w-full"></select>
             </div>
-            <div id="waiver-products-list" class="hidden mt-4 space-y-4"></div>
             <div id="waiver-other-form" class="hidden mt-4 p-3 border rounded bg-gray-50"></div>
+            <div id="waiver-products-list" class="hidden mt-4 space-y-4"></div>
             <div id="waiver-fee-display" class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2"></div>
         `;
 
