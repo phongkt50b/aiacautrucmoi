@@ -1,3 +1,4 @@
+
 // =======================================================================
 // ===== CÁC BẢNG DỮ LIỆU THÔ (RAW DATA TABLES)
 // =======================================================================
@@ -174,7 +175,7 @@ export const product_data = {
         { name: "Thuyền trưởng (đường sông)", group: 3 },
         { name: "Tiếp viên hàng không", group: 3 },
         { name: "Tín dụng tín chấp, thế chấp (Nhân viên văn phòng/ Cán bộ)", group: 2 },
-        { name: "Trẻ em", group: 1 },
+        { name: "Trẻ em", group: 1, isChild: true },
         { name: "Trên tàu/nước ngoài/khu vực không có chiến tranh (Nhà sản xuất/ Đạo diễn/ Biên tập/ Tác giả/ Quay phim/ Thợ chụp hình)", group: 3 },
         { name: "Trinh sát, điều tra hình sự (Công An/ Cảnh sát/ An ninh)", group: 4 },
         { name: "Trồng rừng, cao su (Công nhân)", group: 4 },
