@@ -1,10 +1,10 @@
 
+
 import { PRODUCT_CATALOG, GLOBAL_CONFIG } from '../structure.js';
 import { UI_FUNCTIONS } from '../registries/uiFunctions.js';
 import { TARGET_AGE_REGISTRY } from '../registries/targetAge.js';
 import { RULE_ENGINE } from '../registries/ruleEngine.js';
-
-let errorMap = new Map();
+import { clearAllErrors, setFieldError, clearFieldError, collectAllErrors } from '../utils.js';
 
 export function runAllValidations(state) {
     clearAllErrors();
@@ -157,7 +157,10 @@ function validateSupplementaryProduct(person, prodId, state) {
 
 function validateTargetAge(state) {
     const input = document.getElementById('target-age-input');
-    if (!input || input.disabled) return true;
+    if (!input || input.disabled) {
+        if(input) clearFieldError(input);
+        return true;
+    }
 
     const val = parseInt((input.value || '').trim(), 10);
     const mainPerson = state.persons.find(p => p.isMain);
@@ -165,14 +168,24 @@ function validateTargetAge(state) {
     if (!productConfig || !productConfig.targetAgeConfig) return true;
     
     const { constraints } = productConfig.targetAgeConfig;
+    if (!constraints) { // No constraints to validate against
+        clearFieldError(input);
+        return true;
+    }
+
     const ctx = { mainPerson, values: state.mainProduct.values, state };
     const minAllowed = TARGET_AGE_REGISTRY.resolveConstraint(constraints.minKey, ctx);
     const maxAllowed = TARGET_AGE_REGISTRY.resolveConstraint(constraints.maxKey, ctx) || 99;
 
-    if (isNaN(val) || val < minAllowed || val > maxAllowed) {
+    if (constraints.minKey && (isNaN(val) || val < minAllowed)) {
         setFieldError(input, `Tuổi minh họa phải từ ${minAllowed} đến ${maxAllowed}`);
         return false;
     }
+    if (constraints.maxKey && val > maxAllowed) {
+        setFieldError(input, `Tuổi minh họa phải từ ${minAllowed} đến ${maxAllowed}`);
+        return false;
+    }
+    
     clearFieldError(input);
     return true;
 }
@@ -203,37 +216,4 @@ function validateWaiverSection(state) {
         }
     }
     return true;
-}
-
-// Error Message Management
-function setFieldError(input, message) { 
-    if (!input) return;
-    let parent = input.closest('div');
-    let err = parent?.querySelector('.field-error');
-    if (!err && parent) {
-      err = document.createElement('p');
-      err.className = 'field-error text-sm text-red-600 mt-1';
-      parent.appendChild(err);
-    }
-    if (err) {
-        err.textContent = message || '';
-        errorMap.set(input, message || '');
-    }
-    input.classList.toggle('border-red-500', !!message);
-}
-
-function clearFieldError(input) { setFieldError(input, ''); }
-
-function clearAllErrors() { 
-    errorMap.forEach((_, input) => {
-        let parent = input.closest('div');
-        let err = parent?.querySelector('.field-error');
-        if (err) err.textContent = '';
-        input.classList.remove('border-red-500');
-    });
-    errorMap.clear();
-}
-
-function collectAllErrors() {
-  return [...new Set(Array.from(errorMap.values()).filter(Boolean))];
 }
