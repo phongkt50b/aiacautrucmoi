@@ -1,34 +1,66 @@
-
 /**
  * @file utils.js
  * @description
- * This file contains shared utility functions used across the application to avoid circular dependencies.
+ * This file contains shared utility functions used across different modules
+ * to avoid circular dependencies and promote code reuse.
  */
 
-export function debounce(fn, wait = 40) {
-    let t = null;
+/**
+ * Formats a number into a Vietnamese currency string (e.g., 1000000 -> "1.000.000").
+ * @param {number|string} value The number to format.
+ * @returns {string} The formatted currency string.
+ */
+export function formatCurrency(value) {
+    const num = Number(value) || 0;
+    return num.toLocaleString('vi-VN');
+}
+
+/**
+ * Rounds a number down to the nearest thousand.
+ * @param {number|string} n The number to round.
+ * @returns {number} The rounded number.
+ */
+export function roundDownTo1000(n) {
+    return Math.floor(Number(n || 0) / 1000) * 1000;
+}
+
+/**
+ * Parses a formatted currency string (e.g., "1.000.000") back into a number.
+ * @param {string} str The formatted string.
+ * @returns {number} The parsed number.
+ */
+export function parseFormattedNumber(str) {
+    if (!str) return 0;
+    return Number(String(str).replace(/[.,]/g, ''));
+}
+
+/**
+ * Creates a debounced function that delays invoking `func` until after `delay` milliseconds
+ * have elapsed since the last time the debounced function was invoked.
+ * @param {Function} func The function to debounce.
+ * @param {number} delay The number of milliseconds to delay.
+ * @returns {Function} The new debounced function.
+ */
+export function debounce(func, delay) {
+    let timeout;
     return function(...args) {
-        clearTimeout(t);
-        t = setTimeout(() => fn.apply(this, args), wait);
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
     };
 }
 
-export function parseFormattedNumber(formattedString) {
-    if (formattedString == null) return 0;
-    let v = String(formattedString).replace(/[\s.,]/g, '');
-    const m = v.match(/-?\d+/);
-    return m ? parseInt(m[0], 10) : 0;
-}
-
-export function formatCurrency(value, suffix = '') {
-    const num = Number(value) || 0;
-    return num.toLocaleString('vi-VN') + (suffix || '');
-}
-
+/**
+ * Sanitizes a string to prevent XSS by converting it to text content.
+ * @param {string} str The string to sanitize.
+ * @returns {string} The sanitized HTML string.
+ */
 export function sanitizeHtml(str) {
-    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&#39;');
-}
-
-export function roundDownTo1000(n) {
-    return Math.floor(Number(n || 0) / 1000) * 1000;
+    if (typeof document === 'undefined') {
+        // Basic fallback for non-browser environments if needed
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+    const temp = document.createElement('div');
+    temp.textContent = str;
+    return temp.innerHTML;
 }
