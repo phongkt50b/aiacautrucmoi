@@ -350,6 +350,10 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     key:'AN_BINH_UU_VIET',
     type:'main',
     hasTotal:false,
+    displayName: 'An Bình Ưu Việt',
+    displayOrder: 10,
+    getGroupingSignature: (col) => `abuv|${col.sumAssured}`,
+    getColumnLabel: (col) => col.persons.map(p => p.name).join(', '),
     benefits:[
       { id:'abuv_death',
         labelBase:'Quyền lợi bảo hiểm tử vong',
@@ -369,6 +373,10 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     key:'KHOE_BINH_AN',
     type:'main',
     hasTotal:true,
+    displayName: 'Khoẻ Bình An',
+    displayOrder: 11,
+    getGroupingSignature: (col) => `kba|${col.sumAssured}`,
+    getColumnLabel: (col) => col.persons.map(p => p.name).join(', '),
     benefits:[
       { id:'kba_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
       { id:'kba_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
@@ -381,6 +389,10 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     key:'VUNG_TUONG_LAI',
     type:'main',
     hasTotal:true,
+    displayName: 'Vững Tương Lai',
+    displayOrder: 12,
+    getGroupingSignature: (col) => `vtl|${col.sumAssured}`,
+    getColumnLabel: (col) => col.persons.map(p => p.name).join(', '),
     benefits:[
       { id:'vtl_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
       { id:'vtl_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
@@ -392,6 +404,10 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     key:'PUL_FAMILY',
     type:'main',
     hasTotal:true,
+    displayName: 'Khoẻ Trọn Vẹn',
+    displayOrder: 13,
+    getGroupingSignature: (col) => `pul|${col.productKey}|${col.sumAssured}`,
+    getColumnLabel: (col) => col.persons.map(p => p.name).join(', '),
     productKeys:['PUL_TRON_DOI','PUL_5NAM','PUL_15NAM'],
     benefits:[
       { id:'pul_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
@@ -406,6 +422,22 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     key:'HEALTH_SCL',
     type:'rider',
     hasTotal:false,
+    displayName: 'Sức khỏe Bùng Gia Lực',
+    displayOrder: 50,
+    getGroupingSignature: (col) => {
+        const { program, flags } = col;
+        return `scl|${program}|${flags.outpatient}|${flags.dental}|${flags.scope}|${flags.maternity}`;
+    },
+    getColumnLabel: (col) => {
+        const names = col.persons.map(p => p.name).join(', ');
+        const programLabel = BM_SCL_PROGRAMS[col.program]?.label || '';
+        const scopeLabel = col.flags.scope === 'main_global' ? ' (Toàn cầu)' : '';
+        const options = [];
+        if (col.flags.outpatient) options.push('Ngoại trú');
+        if (col.flags.dental) options.push('Nha khoa');
+        const optionsLabel = options.length ? ` (${options.join(', ')})` : '';
+        return `${names} - ${programLabel}${scopeLabel}${optionsLabel}`;
+    },
     benefits:[
       { id:'scl_core', labelBase:'Quyền lợi chính - STBH năm', formulaLabel:'', valueType:'number', computeProg:(m)=>m.core },
       { id:'scl_double', labelBase:'Nhân đôi bảo vệ khi điều trị tại Cơ sở y tế công lập', formulaLabel:'', valueType:'number', computeProg:(m)=>m.double },
@@ -450,12 +482,19 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     key:'BHN_2_0',
     type:'rider',
     hasTotal:true,
+    displayName: 'Bệnh Hiểm Nghèo 2.0',
+    displayOrder: 60,
+    getGroupingSignature: (col) => `bhn|${col.sumAssured}|${col.flags.child}|${col.flags.elder}`,
+    getColumnLabel: (col) => {
+        const names = col.persons.map(p => p.name).join(', ');
+        return `${names} - ${bm_fmt(col.sumAssured)}`;
+    },
     benefits:[
       { id:'bhn_early', labelBase:'BHN giai đoạn sớm', formulaLabel:'30% STBH (tối đa 4 lần, tối đa 500 tr/ lần)', valueType:'number', compute:(sa)=>sa*0.30, cap:500000000, multiClaim: 4 },
       { id:'bhn_mid', labelBase:'BHN giai đoạn giữa', formulaLabel:'60% STBH (tối đa 2 lần, tối đa 1 tỷ/ lần)', valueType:'number', compute:(sa)=>sa*0.60, cap:1000000000, multiClaim: 2 },
       { id:'bhn_late', labelBase:'BHN giai đoạn cuối', formulaLabel:'100% STBH (1 lần)', valueType:'number', compute:(sa)=>sa },
       { id:'bhn_child', labelBase:'BHN ở trẻ em', formulaLabel:'60% STBH (1 lần, tối đa 500 tr, dưới 21 tuổi)', valueType:'number', compute:(sa)=>sa*0.60, cap:500000000, childOnly:true },
-      { id:'bhn_elder', labelBase:'BHN người lớn tuổi', formulaLabel:'20% STBH (1 lần, tối đa 500 tr, từ 55 tuổi)', valueType:'number', compute:(sa)=>sa*0.20, cap:500000000},
+      { id:'bhn_elder', labelBase:'BHN người lớn tuổi', formulaLabel:'20% STBH (1 lần, tối đa 500 tr, từ 55 tuổi)', valueType:'number', compute:(sa)=>sa*0.20, cap:500000000, elderOnly: true},
       { id:'bhn_special', labelBase:'Quyền lợi đặc biệt', formulaLabel:'30% STBH (1 lần, tối đa 500tr)', valueType:'number', compute:(sa)=>sa*0.30, cap:500000000 },
       { id:'bhn_wellness', labelBase:'Quyền lợi sống khoẻ AIA Vitality', formulaLabel:'', valueType:'text', minAge:18, text:'Tối đa 30% trung bình phí 5 năm' }
     ]
@@ -464,6 +503,13 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     key:'HOSPITAL_SUPPORT',
     type:'rider',
     hasTotal:false,
+    displayName: 'Hỗ trợ Chi phí Nằm viện',
+    displayOrder: 70,
+    getGroupingSignature: (col) => `hs|${col.sumAssured}`,
+    getColumnLabel: (col) => {
+        const names = col.persons.map(p => p.name).join(', ');
+        return `${names} - ${bm_fmt(col.sumAssured)}/ngày`;
+    },
     benefits:[
       { id:'hs_daily', labelBase:'Trợ cấp nằm viện (tối đa 365 ngày/ đợt nằm viện)', formulaLabel:'', valueType:'number', computeDaily:(d)=>d },
       { id:'hs_icu', labelBase:'Trợ cấp ICU (tối đa 25 ngày/ đợt nằm viện)', formulaLabel:'', valueType:'number', computeDaily:(d)=>d*2 }
@@ -473,6 +519,13 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     key:'ACCIDENT',
     type:'rider',
     hasTotal:false,
+    displayName: 'Tai nạn',
+    displayOrder: 80,
+    getGroupingSignature: (col) => `acc|${col.sumAssured}`,
+    getColumnLabel: (col) => {
+        const names = col.persons.map(p => p.name).join(', ');
+        return `${names} - ${bm_fmt(col.sumAssured)}`;
+    },
     benefits:[
       { id:'acc_injury', labelBase:'Tổn thương do tai nạn', formulaLabel:'', valueType:'text',
         computeRange:(sa)=>{
