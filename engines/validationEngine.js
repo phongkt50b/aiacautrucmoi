@@ -1,9 +1,8 @@
 
 
+
 import { PRODUCT_CATALOG, GLOBAL_CONFIG } from '../structure.js';
-import { UI_FUNCTIONS } from '../registries/uiFunctions.js';
 import { TARGET_AGE_REGISTRY } from '../registries/targetAge.js';
-import { RULE_ENGINE } from '../registries/ruleEngine.js';
 import { clearAllErrors, setFieldError, clearFieldError, collectAllErrors } from '../utils.js';
 
 export function runAllValidations(state) {
@@ -87,7 +86,7 @@ function validateMainProduct(state) {
     let ok = true;
     productConfig.ui.controls.forEach(controlConfig => {
         const el = document.getElementById(controlConfig.id);
-        const validateFunc = UI_FUNCTIONS.validate[controlConfig.validateKey];
+        const validateFunc = controlConfig.validate;
         if (!el || !validateFunc) return;
         
         const errorMessage = validateFunc({
@@ -110,7 +109,7 @@ function validateMainProduct(state) {
 
     const premiumRules = productConfig.rules.premium;
     if (premiumRules?.min && state.fees.baseMain > 0 && state.fees.baseMain < premiumRules.min) {
-        const anyInput = document.getElementById('main-stbh') || document.getElementById('abuv-term');
+        const anyInput = document.getElementById('main-stbh') || document.getElementById('abuv-term') || document.getElementById('main-premium');
         if (anyInput) {
             const msg = productConfig.ui.validationMessages?.minPremium || `Phí chính tối thiểu ${state.context.helpers.formatCurrency(premiumRules.min)}`;
             setFieldError(anyInput, msg);
@@ -132,7 +131,7 @@ function validateSupplementaryProduct(person, prodId, state) {
     let ok = true;
     prodConfig.ui.controls.forEach(controlConfig => {
         const el = section.querySelector(`#${controlConfig.id}`);
-        const validateFunc = UI_FUNCTIONS.validate[controlConfig.validateKey];
+        const validateFunc = controlConfig.validate;
         if (!el || !validateFunc) return;
         
         const errorMessage = validateFunc({
