@@ -638,7 +638,7 @@ export const PRODUCT_CATALOG = {
                  }
             }
         },
-        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 55, renewalMax: 64 } ] },
+        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 55, renewalMax: 59 } ] },
         calculation: {
             calculate: ({ customer, ageOverride }) => {
                 const ageToUse = ageOverride ?? customer.age;
