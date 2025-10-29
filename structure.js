@@ -1,6 +1,3 @@
-
-
-
 /**
  * @file structure.js
  * @description
@@ -12,7 +9,8 @@
 import { product_data, investment_data } from './data.js';
 
 function formatCurrency(value) {
-    return Number(value || 0).toLocaleString('vi-VN');
+    const num = Number(value) || 0;
+    return num.toLocaleString('vi-VN');
 }
 function roundDownTo1000(n) {
     return Math.floor(Number(n || 0) / 1000) * 1000;
@@ -861,3 +859,100 @@ function calculateGenericAccountValueProjection(productConfig, args, helpers) {
         customFull: scenarios.customFull.yearEndValues,
     };
 }
+
+
+// ===================================================================================
+// ===== CẤU HÌNH CHO TRANG VIEWER (BẢNG 1 & 3)
+// ===================================================================================
+export const VIEWER_CONFIG = {
+    part1_summary: {
+        title: 'Phần 1 · Tóm tắt sản phẩm',
+        columns: [
+            { id: 'personName', header: 'Tên NĐBH', getValue: (row) => row.personName },
+            { id: 'productName', header: 'Sản phẩm', getValue: (row) => row.prodName },
+            { id: 'stbh', header: 'STBH', align: 'right', getValue: (row) => row.stbhDisplay },
+            { id: 'term', header: 'Số năm đóng phí', align: 'center', getValue: (row) => row.years },
+            { 
+                id: 'periodicFee', 
+                header: (data) => `Phí (${data.freqLabel})`, 
+                align: 'right', 
+                condition: (data) => !data.isAnnual, 
+                getValue: (row) => formatCurrency(row.perPeriod) 
+            },
+            { 
+                id: 'annualEquivalent', 
+                header: 'Phí quy năm', 
+                align: 'right', 
+                condition: (data) => !data.isAnnual, 
+                getValue: (row) => formatCurrency(row.annualEq) 
+            },
+            { 
+                id: 'annualFee', 
+                header: 'Phí theo năm', 
+                align: 'right', 
+                getValue: (row) => formatCurrency(row.annualBase) 
+            },
+            { 
+                id: 'diff', 
+                header: 'Chênh lệch', 
+                align: 'right', 
+                condition: (data) => !data.isAnnual, 
+                getValue: (row) => row.diff === 0 ? '0' : `<span class="text-red-600 font-bold">${formatCurrency(row.diff)}</span>`
+            }
+        ],
+        summaryRows: [
+            { type: 'perPerson', label: 'Tổng theo người' },
+            { type: 'grandTotal', label: 'Tổng tất cả' }
+        ]
+    },
+    part3_schedule: {
+        titleTemplate: (summaryData) => {
+            const hasAccountValue = summaryData.projection?.guaranteed?.length > 0;
+            return `Phần 3 · Bảng phí ${hasAccountValue ? '& Minh họa giá trị tài khoản' : ''}`;
+        },
+        columns: [
+            { id: 'policyYear', header: 'Năm HĐ', align: 'center', getValue: (row) => row.year, getFooter: () => 'Tổng' },
+            { id: 'age', header: 'Tuổi', align: 'center', getValue: (row) => row.age, getFooter: () => '' },
+            { id: 'mainPremium', header: 'Phí chính', align: 'right', getValue: (row) => formatCurrency(row.mainYearBase), getFooter: (summary) => formatCurrency(summary.sums.main) },
+            { id: 'extraPremium', header: 'Phí đóng thêm', align: 'right', condition: (summary) => !summary.schedule.extraAllZero, getValue: (row) => formatCurrency(row.extraYearBase), getFooter: (summary) => formatCurrency(summary.sums.extra) },
+            {
+                id: 'riderPremium', type: 'dynamic',
+                headerTemplate: (person) => `Phí BS (${person.name})`,
+                align: 'right',
+                getValue: (row, personIndex) => formatCurrency(row.perPersonSuppAnnualEq[personIndex]),
+                getFooter: (summary, personIndex) => formatCurrency(summary.sums.supp[personIndex])
+            },
+            { id: 'totalPremium', header: 'Tổng đóng/năm', align: 'right', isBold: true, getValue: (row) => formatCurrency(row.totalYearBase), getFooter: (summary) => formatCurrency(summary.sums.totalBase) },
+            { 
+                id: 'totalPremiumEq', header: 'Tổng quy năm', align: 'right', isBold: false, 
+                condition: (summary) => !summary.isAnnual, 
+                getValue: (row) => formatCurrency(row.totalAnnualEq), 
+                getFooter: (summary) => formatCurrency(summary.sums.totalEq) 
+            },
+            { 
+                id: 'diff', header: 'Chênh lệch', align: 'right', isBold: false, 
+                condition: (summary) => !summary.isAnnual, 
+                getValue: (row) => row.diff === 0 ? '0' : `<span class="text-red-600 font-bold">${formatCurrency(row.diff)}</span>`,
+                getFooter: (summary) => summary.sums.diff === 0 ? '0' : `<span class="text-red-600 font-bold">${formatCurrency(summary.sums.diff)}</span>`
+            },
+            {
+                id: 'gttk_guaranteed', header: 'GTTK (Lãi suất cam kết)', align: 'right',
+                condition: (summary) => !!summary.projection?.guaranteed,
+                getValue: (row, summary) => formatCurrency(roundDownTo1000(summary.projection.guaranteed[row.year - 1])),
+                getFooter: () => ''
+            },
+            {
+                id: 'gttk_customCapped', header: (summary) => `GTTK (LS ${summary.customRate}%-20 năm)`, align: 'right',
+                condition: (summary) => !!summary.projection?.customCapped,
+                getValue: (row, summary) => formatCurrency(roundDownTo1000(summary.projection.customCapped[row.year - 1])),
+                getFooter: () => ''
+            },
+            {
+                id: 'gttk_customFull', header: (summary) => `GTTK (LS ${summary.customRate}%-Toàn thời gian)`, align: 'right',
+                condition: (summary) => !!summary.projection?.customFull,
+                getValue: (row, summary) => formatCurrency(roundDownTo1000(summary.projection.customFull[row.year - 1])),
+                getFooter: () => ''
+            }
+        ]
+    }
+};
