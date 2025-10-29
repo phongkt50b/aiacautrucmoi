@@ -1771,8 +1771,8 @@ window.WaiverManager = (function () {
     };
     
     function init() {
-        this.renderInitialContainer();
-        this.attachListeners();
+        renderInitialContainer();
+        attachListeners();
     }
 
     function renderInitialContainer() {
