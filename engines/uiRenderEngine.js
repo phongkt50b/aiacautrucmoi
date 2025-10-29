@@ -1,5 +1,5 @@
 
-import { PRODUCT_CATALOG } from '../structure.js';
+import { PRODUCT_CATALOG, GLOBAL_CONFIG } from '../structure.js';
 import { RULE_ENGINE } from '../registries/ruleEngine.js';
 import { UI_FUNCTIONS } from '../registries/uiFunctions.js';
 
@@ -28,7 +28,7 @@ export function renderMainProductSection(state) {
                 if (productConfig.group === 'PACKAGE' && cfg.disabled) {
                     value = cfg.defaultValue;
                 }
-                return renderControl(cfg, value, mainPerson);
+                return renderControl(cfg, value, mainPerson, state);
             }).join('');
             container.innerHTML = controlsHtml;
         }
