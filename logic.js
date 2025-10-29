@@ -1,3 +1,4 @@
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, WAIVER_PRODUCTS, getEnabledWaiverProducts } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
@@ -1093,10 +1094,12 @@ function renderSuppListSummary() {
   if (!box) return;
 
   const getPersonName = (id) => {
-    if (id && id.includes('_other')) {
-        const waiverInstance = window.WaiverManager.getInstance(id.split('_')[0]);
-        const personData = waiverInstance?.getTargetPersonInfo();
-        return (personData && personData.name && personData.name !== 'Người khác') ? personData.name : 'Bên mua bảo hiểm';
+    if (id && id.includes('waiver_other')) {
+        const personData = window.WaiverManager.getTargetPersonInfo();
+        if (personData && personData.id === 'waiver_other') {
+            return (personData.name && personData.name !== 'Người khác') ? personData.name : 'Bên mua bảo hiểm';
+        }
+        return 'Bên mua bảo hiểm';
     }
     return appState.persons.find(p => p.id === id)?.name || 'Người không xác định';
   };
@@ -2008,6 +2011,7 @@ window.WaiverManager = (function () {
             renderFeeDisplay();
         },
         resetAll,
-        updateAllOptions
+        updateAllOptions,
+        getTargetPersonInfo
     };
 })();
