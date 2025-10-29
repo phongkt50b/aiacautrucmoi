@@ -1,3 +1,4 @@
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, VIEWER_CONFIG } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
@@ -1306,7 +1307,7 @@ function buildSummaryData() {
 
     allPersonsForSummary.push(...waiverOtherPersons);
 
-    const part1 = buildPart1RowsData({ persons: allPersonsForSummary, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, waiverPremiums });
+    const part1 = buildPart1RowsData({ persons: allPersonsForSummary, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, waiverPremiums, freq });
     const schedule = buildPart2ScheduleRows({ persons: allPersonsForSummary, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, waiverPremiums });
     
     const summary = { freq, periods, isAnnual, riderFactor, productKey, paymentTerm, targetAge, mainPerson, persons: allPersonsForSummary, waiverPremiums, part1, schedule, projection: null, sums: {} };
@@ -1350,7 +1351,7 @@ function buildSummaryData() {
 }
 
 function buildPart1RowsData(ctx) {
-    const { persons, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, waiverPremiums } = ctx;
+    const { persons, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, waiverPremiums, freq } = ctx;
     const mainAge = persons.find(p => p.isMain)?.age || 0;
     const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
 
@@ -1430,7 +1431,7 @@ function buildPart1RowsData(ctx) {
         }
     });
 
-    return { rows, perPersonTotals, grand, isAnnual, periods, riderFactor, freqLabel: data.freq === 'half' ? 'nửa năm' : 'quý' };
+    return { rows, perPersonTotals, grand, isAnnual, periods, riderFactor, freqLabel: freq === 'half' ? 'nửa năm' : 'quý' };
 }
 
 function buildPart2ScheduleRows(ctx) {
