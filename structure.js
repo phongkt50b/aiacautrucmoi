@@ -1,3 +1,4 @@
+
 /**
  * @file structure.js
  * @description
@@ -27,7 +28,16 @@ export const GLOBAL_CONFIG = {
         quarter: 8000000,
     },
     WAIVER_OTHER_PERSON_SELECT_VALUE: 'other',
-    WAIVER_OTHER_PERSON_ID: 'waiver_other'
+    WAIVER_OTHER_PERSON_ID: 'waiver_other',
+    LABELS: {
+        EXTRA_PREMIUM: 'Phí đóng thêm',
+        POLICY_OWNER: 'Bên mua bảo hiểm'
+    },
+    PAYMENT_FREQUENCY_LABELS: {
+        year: 'Năm',
+        half: 'Nửa năm',
+        quarter: 'Quý'
+    }
 };
 
 // ===================================================================================
@@ -64,6 +74,18 @@ export const PRODUCT_CATALOG = {
         slug: 'khoe-tron-ven',
         group: 'PUL',
         benefitMatrixKey: 'PUL_FAMILY',
+        getPaymentTerm: (values) => values['payment-term'],
+        targetAgeConfig: {
+            isEditable: true,
+            getValue: (mainPerson, values) => 99,
+            getHint: (mainPerson, values) => {
+                const term = parseInt(values['payment-term'] || '0', 10);
+                if (!term) return 'Nhập thời gian đóng phí để xác định tuổi minh họa.';
+                const minAge = mainPerson.age + term - 1;
+                const maxAge = 99;
+                return `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+            }
+        },
         ui: {
             controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
@@ -123,6 +145,18 @@ export const PRODUCT_CATALOG = {
         slug: 'khoe-tron-ven',
         group: 'PUL',
         benefitMatrixKey: 'PUL_FAMILY',
+        getPaymentTerm: (values) => values['payment-term'],
+        targetAgeConfig: {
+            isEditable: true,
+            getValue: (mainPerson, values) => 99,
+            getHint: (mainPerson, values) => {
+                const term = parseInt(values['payment-term'] || '0', 10);
+                if (!term) return 'Nhập thời gian đóng phí để xác định tuổi minh họa.';
+                const minAge = mainPerson.age + term - 1;
+                const maxAge = 99;
+                return `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+            }
+        },
         ui: {
              controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
@@ -182,6 +216,18 @@ export const PRODUCT_CATALOG = {
         slug: 'khoe-tron-ven',
         group: 'PUL',
         benefitMatrixKey: 'PUL_FAMILY',
+        getPaymentTerm: (values) => values['payment-term'],
+        targetAgeConfig: {
+            isEditable: true,
+            getValue: (mainPerson, values) => 99,
+            getHint: (mainPerson, values) => {
+                const term = parseInt(values['payment-term'] || '0', 10);
+                if (!term) return 'Nhập thời gian đóng phí để xác định tuổi minh họa.';
+                const minAge = mainPerson.age + term - 1;
+                const maxAge = 99;
+                return `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+            }
+        },
         ui: {
              controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
@@ -241,6 +287,18 @@ export const PRODUCT_CATALOG = {
         slug: 'khoe-binh-an',
         group: 'MUL',
         benefitMatrixKey: 'KHOE_BINH_AN',
+        getPaymentTerm: (values) => values['payment-term'],
+        targetAgeConfig: {
+            isEditable: true,
+            getValue: (mainPerson, values) => 99,
+            getHint: (mainPerson, values) => {
+                const term = parseInt(values['payment-term'] || '0', 10);
+                if (!term) return 'Nhập thời gian đóng phí để xác định tuổi minh họa.';
+                const minAge = mainPerson.age + term - 1;
+                const maxAge = 99;
+                return `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+            }
+        },
         ui: {
             controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
@@ -315,6 +373,18 @@ export const PRODUCT_CATALOG = {
         slug: 'vung-tuong-lai',
         group: 'MUL',
         benefitMatrixKey: 'VUNG_TUONG_LAI',
+        getPaymentTerm: (values) => values['payment-term'],
+        targetAgeConfig: {
+            isEditable: true,
+            getValue: (mainPerson, values) => 99,
+            getHint: (mainPerson, values) => {
+                const term = parseInt(values['payment-term'] || '0', 10);
+                if (!term) return 'Nhập thời gian đóng phí để xác định tuổi minh họa.';
+                const minAge = mainPerson.age + term - 1;
+                const maxAge = 99;
+                return `Khoảng hợp lệ: <strong>${minAge}</strong> – <strong>${maxAge}</strong>.`;
+            }
+        },
         ui: {
              controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
@@ -389,6 +459,15 @@ export const PRODUCT_CATALOG = {
         slug: 'an-binh-uu-viet',
         group: 'TRADITIONAL',
         benefitMatrixKey: 'AN_BINH_UU_VIET',
+        getPaymentTerm: (values) => values['abuv-term'],
+        targetAgeConfig: {
+            isEditable: false,
+            getValue: (mainPerson, values) => {
+                const term = parseInt(values['abuv-term'] || '0', 10);
+                return term ? mainPerson.age + term - 1 : mainPerson.age;
+            },
+            getHint: () => 'Tuổi kết thúc được tính tự động theo Thời hạn đóng phí.'
+        },
         ui: {
             controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 100.000.000', required: true, 
@@ -437,6 +516,15 @@ export const PRODUCT_CATALOG = {
         name: 'Trọn tâm an',
         slug: 'tron-tam-an',
         group: 'PACKAGE',
+        getPaymentTerm: (values) => PRODUCT_CATALOG['TRON_TAM_AN'].packageConfig.fixedValues.paymentTerm,
+        targetAgeConfig: {
+            isEditable: false,
+            getValue: (mainPerson, values) => {
+                const term = PRODUCT_CATALOG['TRON_TAM_AN'].packageConfig.fixedValues.paymentTerm;
+                return mainPerson.age + parseInt(term, 10) - 1;
+            },
+            getHint: () => 'Sản phẩm có thời hạn hợp đồng cố định.'
+        },
         packageConfig: {
             underlyingMainProduct: 'AN_BINH_UU_VIET', 
             fixedValues: { stbh: 100000000, paymentTerm: '10' },
@@ -580,6 +668,7 @@ export const PRODUCT_CATALOG = {
         name: 'Bệnh Hiểm Nghèo 2.0',
         slug: 'bhn',
         benefitMatrixKey: 'BHN_2_0',
+        getStbh: (supplementsData) => supplementsData?.bhn?.stbh || 0,
         getBenefitMatrixColumnData: (suppData, person) => {
             const child = person.age < 21;
             const elder = person.age >= 55;
@@ -612,6 +701,7 @@ export const PRODUCT_CATALOG = {
         name: 'Bảo hiểm Tai nạn',
         slug: 'accident',
         benefitMatrixKey: 'ACCIDENT',
+        getStbh: (supplementsData) => supplementsData?.accident?.stbh || 0,
         ui: {
             controls: [ { id: 'accident-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 500.000.000', hintText: 'STBH từ 10 triệu đến 8 tỷ.',
                          validate: ({ value }) => {
@@ -638,6 +728,7 @@ export const PRODUCT_CATALOG = {
         slug: 'hospital_support',
         category: 'hospital_support',
         benefitMatrixKey: 'HOSPITAL_SUPPORT',
+        getStbh: (supplementsData) => supplementsData?.hospital_support?.stbh || 0,
         getBenefitMatrixColumnData: (suppData, person) => {
             return { productKey: 'hospital_support', sumAssured: suppData.hospital_support.stbh, daily: suppData.hospital_support.stbh, persons: [person] };
         },
@@ -712,6 +803,17 @@ export const PRODUCT_CATALOG = {
             includeAllRiders: true,
             excludeRidersOfWaivedPerson: true,
         },
+        getWaiverTerm: (waiverHolder, mainInsured, illustrationTargetAge) => {
+            const eligibilityRule = PRODUCT_CATALOG.mdp3.rules.eligibility.find(r => r.type === 'age');
+            if (!eligibilityRule) return 0;
+            const yearsLeftForWaiverHolder = eligibilityRule.max - waiverHolder.age + 1;
+            const yearsLeftForIllustration = illustrationTargetAge - mainInsured.age + 1;
+            return Math.max(0, Math.min(yearsLeftForWaiverHolder, yearsLeftForIllustration));
+        },
+        isStillEligible: (age) => {
+            const eligibilityRule = PRODUCT_CATALOG.mdp3.rules.eligibility.find(r => r.type === 'age');
+            return eligibilityRule && age <= eligibilityRule.max;
+        },
         calculation: {
             calculate: (personInfo, stbhBase, helpers) => {
                  if(!personInfo || !stbhBase || personInfo.age < 18 || personInfo.age > 60 || !personInfo.riskGroup) return 0;
@@ -747,7 +849,7 @@ function calculateGenericAccountValueProjection(productConfig, args, helpers) {
     const { gender, age: initialAge } = mainPerson;
     const { key: productKey, values } = mainProduct;
     const stbhInitial = values['main-stbh'] || 0;
-    const paymentTerm = values['payment-term'] || 0;
+    const paymentTerm = productConfig.getPaymentTerm(values) || 0;
     
     const { initial_fees, guaranteed_interest_rates, admin_fees } = investment_data;
 
