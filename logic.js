@@ -1,6 +1,7 @@
 
 import { GLOBAL_CONFIG, PRODUCT_CATALOG } from './structure.js';
 import { product_data } from './data.js';
+import { debounce, parseFormattedNumber, formatCurrency, sanitizeHtml, roundDownTo1000 } from './utils.js';
 
 // Import Engines
 import { calculateAll } from './engines/calculationEngine.js';
@@ -14,37 +15,9 @@ import { CALC_REGISTRY } from './registries/calcRegistry.js';
 import { RULE_ENGINE } from './registries/ruleEngine.js';
 
 // ===================================================================================
-// ===== UTILS
+// ===== STATE MANAGEMENT & WORKFLOW
 // ===================================================================================
 let productJustChanged = false; 
-
-function debounce(fn, wait = 40) {
-  let t = null;
-  return function(...args) {
-    clearTimeout(t);
-    t = setTimeout(() => fn.apply(this, args), wait);
-  };
-}
-function parseFormattedNumber(formattedString) {
-  if (formattedString == null) return 0;
-  let v = String(formattedString).replace(/[\s.,]/g, '');
-  const m = v.match(/-?\d+/);
-  return m ? parseInt(m[0], 10) : 0;
-}
-function formatCurrency(value, suffix = '') {
-    const num = Number(value) || 0;
-    return num.toLocaleString('vi-VN') + (suffix || '');
-}
-function sanitizeHtml(str) {
-    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&#39;');
-}
-function roundDownTo1000(n) {
-    return Math.floor(Number(n || 0) / 1000) * 1000;
-}
-
-// ===================================================================================
-// ===== STATE MANAGEMENT
-// ===================================================================================
 let appState = {};
 
 function initState() {
