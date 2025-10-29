@@ -851,8 +851,7 @@ function calculateGenericAccountValueProjection(productConfig, args, helpers) {
         customFull: scenarios.customFull.yearEndValues,
     };
 }
-// ===== THÊM VÀO structure.js =====
-// ===== THÊM VÀO structure.js =====
+// ===== THÊM VÀO CUỐI FILE structure.js =====
 
 // Danh sách TẤT CẢ các sản phẩm Waiver of Premium
 export const WAIVER_PRODUCTS = {
@@ -860,20 +859,16 @@ export const WAIVER_PRODUCTS = {
         id: 'mdp3',
         name: 'Miễn đóng phí 3.0',
         productKey: 'mdp3', // Link to PRODUCT_CATALOG
-        enabled: true, // Bật/tắt sản phẩm này
+        enabled: true,
         
         ui: {
             enableCheckboxLabel: 'Bật Miễn đóng phí 3.0',
             personSelectLabel: 'Áp dụng cho',
             personSelectPlaceholder: '-- Chọn người --',
-            otherPersonOption: { value: 'other', label: 'Người khác' },
-            
-            otherPersonForm: {
-                title: 'Người được miễn đóng phí',
-            },
-            
-            feeDisplayTemplate: 'STBH: {stbhBase} | Phí: {premium}',
-            noEligibleMessage: 'STBH: {stbhBase} | Phí: — (Người không hợp lệ)'
+            otherPersonOption: { value: 'other', label: '+ Thêm người khác' },
+            otherPersonForm: { title: 'Thông tin người được miễn đóng phí' },
+            feeDisplayTemplate: 'STBH Cơ sở: {stbhBase} | Phí: {premium}',
+            noEligibleMessage: 'STBH Cơ sở: {stbhBase} | Phí: — (Người không hợp lệ)'
         },
         
         rules: {
@@ -881,77 +876,53 @@ export const WAIVER_PRODUCTS = {
                 minAge: 18,
                 maxAge: 60,
                 excludeMainPerson: true,
-                message: 'Tuổi phải từ 18-60'
             },
-            
-            stbhCalculation: {
-                includeMainBasePremium: true,
-                includeAllRiders: true,
-                excludeRidersOfWaivedPerson: true,
-                excludeRiderCategories: ['waiver_of_premium']
-            }
+        },
+
+        stbhCalculation: {
+            includeMainBasePremium: true,
+            includeAllRiders: true,
+            excludeRidersOfWaivedPerson: true,
         },
         
         validationMessages: {
             noPersonSelected: 'Vui lòng chọn người được miễn đóng phí',
             invalidAge: 'Tuổi phải từ {minAge}-{maxAge}',
-            invalidDob: 'Ngày sinh không hợp lệ'
         }
     },
     
-    // ===== THÊM MDP4 (ví dụ) =====
+    // Ví dụ về sản phẩm Miễn đóng phí trong tương lai
     'mdp4': {
         id: 'mdp4',
         name: 'Miễn đóng phí 4.0',
-        productKey: 'mdp4',
-        enabled: false, // Tắt tạm thời, bật khi ra mắt
+        productKey: 'mdp4', // Cần tạo mdp4 trong PRODUCT_CATALOG
+        enabled: false, 
         
         ui: {
             enableCheckboxLabel: 'Bật Miễn đóng phí 4.0 (Mới!)',
             personSelectLabel: 'Chọn người được miễn',
             personSelectPlaceholder: '-- Chọn --',
-            otherPersonOption: { value: 'other', label: 'Người khác' },
-            
-            otherPersonForm: {
-                title: 'Thông tin người được miễn',
-                fields: [
-                    { id: 'name', type: 'text', label: 'Họ và Tên', required: true },
-                    { id: 'dob', type: 'date', label: 'Ngày sinh', placeholder: 'DD/MM/YYYY', required: true },
-                    { id: 'gender', type: 'select', label: 'Giới tính', options: [
-                        { value: 'Nam', label: 'Nam' },
-                        { value: 'Nữ', label: 'Nữ' }
-                    ]},
-                    // MDP4 có thêm trường mới
-                    { id: 'occupation', type: 'text', label: 'Nghề nghiệp', required: true }
-                ]
-            },
-            
+            otherPersonOption: { value: 'other', label: '+ Thêm người khác' },
+            otherPersonForm: { title: 'Thông tin người được miễn' },
             feeDisplayTemplate: 'Cơ sở: {stbhBase} | Phí MDP4: {premium}',
             noEligibleMessage: 'Cơ sở: {stbhBase} | Không đủ điều kiện'
         },
         
         rules: {
             eligibility: {
-                minAge: 20, // MDP4 khác: 20-65 tuổi
+                minAge: 20,
                 maxAge: 65,
-                excludeMainPerson: false, // MDP4 cho phép NĐBH chính
-                message: 'Tuổi phải từ 20-65'
+                excludeMainPerson: false, // NĐBH chính được mua
             },
-            
-            stbhCalculation: {
-                includeMainBasePremium: true,
-                includeAllRiders: true,
-                excludeRidersOfWaivedPerson: false, // MDP4 không trừ
-                excludeRiderCategories: ['waiver_of_premium'],
-                multiplier: 1.2 // MDP4 có hệ số nhân khác
-            }
         },
-        
+        stbhCalculation: {
+            includeMainBasePremium: true,
+            includeAllRiders: true,
+            excludeRidersOfWaivedPerson: false, // Không trừ rider của chính người đó
+        },
         validationMessages: {
             noPersonSelected: 'Vui lòng chọn người',
             invalidAge: 'Tuổi từ {minAge}-{maxAge}',
-            invalidDob: 'Ngày sinh không hợp lệ',
-            invalidOccupation: 'Vui lòng nhập nghề nghiệp'
         }
     }
 };
