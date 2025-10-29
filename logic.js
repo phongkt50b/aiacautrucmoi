@@ -1,5 +1,6 @@
 
 
+
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, WAIVER_PRODUCTS, getEnabledWaiverProducts } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
@@ -749,7 +750,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function runWorkflow() {
   updateStateFromUI();
-  window.WaiverManager.updateAllOptions();
   const validationResult = runAllValidations();
   appState.fees = performCalculations(appState);
   renderUI(validationResult);
@@ -771,6 +771,11 @@ function initMainProductSelect() {
 function attachGlobalListeners() {
     document.body.addEventListener('change', (e) => {
         hideGlobalErrors();
+        
+        if (e.target.classList.contains('dob-input')) {
+            window.WaiverManager.updateAllOptions();
+        }
+        
         if (e.target.id === 'main-product') {
             const oldStbh = appState.mainProduct.values['main-stbh'] || 0;
 
@@ -1286,8 +1291,14 @@ function buildSummaryData() {
         }
     }
     
+    let initialMdpPremium = 0;
+    if (mdpEnabled && mdpTarget) {
+        const personIdForFee = mdpTarget.id;
+        initialMdpPremium = appState.fees.byPerson[personIdForFee]?.suppDetails?.['mdp3'] || 0;
+    }
+    
     const part1 = buildPart1RowsData({ persons: allPersons, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, mdpEnabled, mdpTarget });
-    const schedule = buildPart2ScheduleRows({ persons: allPersons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, mdpEnabled, mdpTarget });
+    const schedule = buildPart2ScheduleRows({ persons: allPersons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, mdpEnabled, mdpTarget, initialMdpPremium });
 
     return { freq, periods, isAnnual, riderFactor, productKey, paymentTerm, targetAge, mainPerson, persons: allPersons, mdpEnabled, mdpTarget, part1, schedule };
 }
@@ -1379,7 +1390,7 @@ function buildPart1RowsData(ctx) {
 }
 
 function buildPart2ScheduleRows(ctx) {
-    const { persons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, mdpEnabled, mdpTarget } = ctx;
+    const { persons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, mdpEnabled, mdpTarget, initialMdpPremium } = ctx;
     const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
     const rows = [];
     const baseMainAnnual = appState?.fees?.baseMain || 0;
@@ -1416,43 +1427,9 @@ function buildPart2ScheduleRows(ctx) {
                      addRider(rid, premiumForYear);
                 }
             }
-
+            
             if (mdpEnabled && mdpTarget && p.id === mdpTarget.id && attained <= 60) {
-                let mdpStbhBaseForYear = 0;
-                
-                if (inTerm) {
-                    mdpStbhBaseForYear += baseMainAnnual;
-                }
-                
-                persons.forEach(otherP => {
-                    if (otherP.id === p.id || !otherP.supplements) return;
-                    const otherAttained = otherP.age + year - 1;
-                    
-                    for(const rid in otherP.supplements) {
-                        const prodConfig = PRODUCT_CATALOG[rid];
-                        if (!prodConfig || !prodConfig.calculation.calculate) continue;
-                        if (otherAttained > riderMaxAge(rid)) continue;
-                        
-                        const otherPremium = prodConfig.calculation.calculate({ 
-                            config: prodConfig, 
-                            customer: otherP, 
-                            ageOverride: otherAttained, 
-                            mainPremium: baseMainAnnual, 
-                            totalHospitalSupportStbh: 0 
-                        });
-                        mdpStbhBaseForYear += otherPremium;
-                    }
-                });
-                
-                const mdpConfig = PRODUCT_CATALOG['mdp3'];
-                if (mdpConfig && mdpConfig.calculation.calculate) {
-                    const mdpFeeForYear = mdpConfig.calculation.calculate(
-                        { ...p, age: attained }, 
-                        mdpStbhBaseForYear,
-                        { data: product_data, roundDownTo1000 }
-                    );
-                    addRider('mdp3', mdpFeeForYear);
-                }
+                addRider('mdp3', initialMdpPremium);
             }
             
             perPersonSuppBase.push(sumBase);
@@ -1926,13 +1903,22 @@ window.WaiverManager = (function () {
         
         getPremium() {
             const feeEl = document.getElementById(`${config.id}-fee-display`);
+            const personInfo = this.getTargetPersonInfo();
+            
+            if(personInfo && personInfo.id && personInfo.id.includes('_other')) {
+                const otherForm = document.getElementById(`person-container-${config.id}-other`);
+                if(otherForm) {
+                    const ageSpan = otherForm.querySelector('.age-span');
+                    if (ageSpan) ageSpan.textContent = personInfo.age;
+                }
+            }
+
             if (!this.isEnabled() || !selectedId) {
                 if (feeEl) feeEl.textContent = '';
                 return 0;
             }
 
             const stbhBase = this.getStbhBase();
-            const personInfo = this.getTargetPersonInfo();
 
             if (!personInfo || !personInfo.age || 
                 personInfo.age < config.rules.eligibility.minAge || 
