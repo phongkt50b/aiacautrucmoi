@@ -801,7 +801,7 @@ export const PRODUCT_CATALOG = {
             return eligibilityRule && age <= eligibilityRule.max;
         },
         calculation: {
-            calculate: (personInfo, stbhBase, helpers) => {
+            calculate: ({ personInfo, stbhBase }) => {
                  if(!personInfo || !stbhBase || personInfo.age < 18 || personInfo.age > 60 || !personInfo.riskGroup) return 0;
                  
                  const riskGroup = personInfo.riskGroup;
@@ -813,11 +813,11 @@ export const PRODUCT_CATALOG = {
                  }
                  
                  const genderKey = personInfo.gender === 'Nữ' ? 'nu' : 'nam';
-                 const rate = helpers.data.mdp3_rates.find(r => personInfo.age >= r.ageMin && personInfo.age <= r.ageMax)?.[genderKey] || 0;
+                 const rate = HELPERS.data.mdp3_rates.find(r => personInfo.age >= r.ageMin && personInfo.age <= r.ageMax)?.[genderKey] || 0;
                  
                  const premium = (stbhBase / 1000) * rate * riskFactor;
                  
-                 return helpers.roundDownTo1000(premium);
+                 return HELPERS.roundDownTo1000(premium);
             }
         }
     }
