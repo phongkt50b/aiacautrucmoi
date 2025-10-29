@@ -6,7 +6,7 @@
  * - PRODUCT_CATALOG: Định nghĩa tất cả sản phẩm. Mỗi sản phẩm là một "bản thiết kế" chi tiết 
  *   mà logic.js sẽ đọc để tự động render UI, áp dụng quy tắc và tính phí.
  */
-import { product_data, investment_data } from './data.js';
+import { product_data, investment_data, BM_SCL_PROGRAMS } from './data.js';
 
 function formatCurrency(value) {
     const num = Number(value) || 0;
@@ -26,6 +26,8 @@ export const GLOBAL_CONFIG = {
         half: 7000000,
         quarter: 8000000,
     },
+    WAIVER_OTHER_PERSON_SELECT_VALUE: 'other',
+    WAIVER_OTHER_PERSON_ID: 'waiver_other'
 };
 
 // ===================================================================================
@@ -61,6 +63,7 @@ export const PRODUCT_CATALOG = {
         name: 'Khoẻ trọn vẹn - Trọn đời',
         slug: 'khoe-tron-ven',
         group: 'PUL',
+        benefitMatrixKey: 'PUL_FAMILY',
         ui: {
             controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
@@ -119,6 +122,7 @@ export const PRODUCT_CATALOG = {
         name: 'Khoẻ trọn vẹn - 15 năm',
         slug: 'khoe-tron-ven',
         group: 'PUL',
+        benefitMatrixKey: 'PUL_FAMILY',
         ui: {
              controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
@@ -177,6 +181,7 @@ export const PRODUCT_CATALOG = {
         name: 'Khoẻ trọn vẹn - 5 năm',
         slug: 'khoe-tron-ven',
         group: 'PUL',
+        benefitMatrixKey: 'PUL_FAMILY',
         ui: {
              controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
@@ -235,6 +240,7 @@ export const PRODUCT_CATALOG = {
         name: 'MUL - Khoẻ Bình An',
         slug: 'khoe-binh-an',
         group: 'MUL',
+        benefitMatrixKey: 'KHOE_BINH_AN',
         ui: {
             controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
@@ -308,6 +314,7 @@ export const PRODUCT_CATALOG = {
         name: 'MUL - Vững Tương Lai',
         slug: 'vung-tuong-lai',
         group: 'MUL',
+        benefitMatrixKey: 'VUNG_TUONG_LAI',
         ui: {
              controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 1.000.000.000', required: true,
@@ -381,6 +388,7 @@ export const PRODUCT_CATALOG = {
         name: 'An Bình Ưu Việt',
         slug: 'an-binh-uu-viet',
         group: 'TRADITIONAL',
+        benefitMatrixKey: 'AN_BINH_UU_VIET',
         ui: {
             controls: [
                 { id: 'main-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 100.000.000', required: true, 
@@ -432,7 +440,10 @@ export const PRODUCT_CATALOG = {
         packageConfig: {
             underlyingMainProduct: 'AN_BINH_UU_VIET', 
             fixedValues: { stbh: 100000000, paymentTerm: '10' },
-            mandatoryRiders: ['health_scl'] 
+            mandatoryRiders: ['health_scl'],
+            addBenefitMatrixFrom: [
+                { productKey: 'AN_BINH_UU_VIET', sumAssured: 100000000 }
+            ]
         },
         ui: {
             controls: [
@@ -459,6 +470,28 @@ export const PRODUCT_CATALOG = {
         type: 'rider',
         name: 'Sức khỏe Bùng Gia Lực',
         slug: 'bung-gia-luc',
+        benefitMatrixKey: 'HEALTH_SCL',
+        getDisplayName: (supplementsData) => {
+            const scl = supplementsData.health_scl;
+            if (!scl) return 'Sức khỏe Bùng Gia Lực';
+            const programMap = { co_ban: 'Cơ bản', nang_cao: 'Nâng cao', toan_dien: 'Toàn diện', hoan_hao: 'Hoàn hảo' };
+            const programName = programMap[scl.program] || '';
+            const scopeStr = (scl.scope === 'main_global' ? 'Nước ngoài' : 'Việt Nam') 
+                           + (scl.outpatient ? ', Ngoại trú' : '') 
+                           + (scl.dental ? ', Nha khoa' : '');
+            return `Sức khoẻ Bùng Gia Lực – ${programName} (${scopeStr})`;
+        },
+        getStbh: (supplementsData) => {
+            const scl = supplementsData?.health_scl;
+            if (!scl || !scl.program) return 0;
+            return PRODUCT_CATALOG.health_scl.rules.stbhByProgram[scl.program] || 0;
+        },
+        getBenefitMatrixColumnData: (suppData, person) => {
+            const { program, outpatient, dental, scope } = suppData.health_scl;
+            const isFemale = (p) => (p.gender || '').toLowerCase() === 'nữ';
+            const maternity = BM_SCL_PROGRAMS[program]?.maternity && isFemale(person);
+            return { productKey: 'health_scl', program, scope, flags: { outpatient, dental, maternity, scope }, persons: [person] };
+        },
         ui: {
             controls: [
                 { id: 'health_scl-program', type: 'select', label: 'Quyền lợi chính',
@@ -546,6 +579,12 @@ export const PRODUCT_CATALOG = {
         type: 'rider',
         name: 'Bệnh Hiểm Nghèo 2.0',
         slug: 'bhn',
+        benefitMatrixKey: 'BHN_2_0',
+        getBenefitMatrixColumnData: (suppData, person) => {
+            const child = person.age < 21;
+            const elder = person.age >= 55;
+            return { productKey: 'bhn', sumAssured: suppData.bhn.stbh, flags: { child, elder }, persons: [person] };
+        },
         ui: {
             controls: [ { id: 'bhn-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 200.000.000', hintText: 'STBH từ 200 triệu đến 5 tỷ.',
                           validate: ({ value }) => {
@@ -572,6 +611,7 @@ export const PRODUCT_CATALOG = {
         type: 'rider',
         name: 'Bảo hiểm Tai nạn',
         slug: 'accident',
+        benefitMatrixKey: 'ACCIDENT',
         ui: {
             controls: [ { id: 'accident-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 500.000.000', hintText: 'STBH từ 10 triệu đến 8 tỷ.',
                          validate: ({ value }) => {
@@ -597,6 +637,10 @@ export const PRODUCT_CATALOG = {
         name: 'Hỗ trợ chi phí nằm viện',
         slug: 'hospital_support',
         category: 'hospital_support',
+        benefitMatrixKey: 'HOSPITAL_SUPPORT',
+        getBenefitMatrixColumnData: (suppData, person) => {
+            return { productKey: 'hospital_support', sumAssured: suppData.hospital_support.stbh, daily: suppData.hospital_support.stbh, persons: [person] };
+        },
         ui: {
             controls: [
                 { id: 'hospital_support-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'Bội số 100.000 (đ/ngày)',
