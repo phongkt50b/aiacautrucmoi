@@ -1,4 +1,4 @@
-import { GLOBAL_CONFIG, PRODUCT_CATALOG } from './structure.js';
+import { GLOBAL_CONFIG, PRODUCT_CATALOG, VIEWER_CONFIG } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
 
 // ===================================================================================
@@ -1308,8 +1308,45 @@ function buildSummaryData() {
 
     const part1 = buildPart1RowsData({ persons: allPersonsForSummary, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, waiverPremiums });
     const schedule = buildPart2ScheduleRows({ persons: allPersonsForSummary, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, waiverPremiums });
+    
+    const summary = { freq, periods, isAnnual, riderFactor, productKey, paymentTerm, targetAge, mainPerson, persons: allPersonsForSummary, waiverPremiums, part1, schedule, projection: null, sums: {} };
+    
+    // Pre-calculate projection if needed
+    const isPulMul = ['PUL', 'MUL'].includes(productConfig?.group);
+    if (isPulMul && productConfig.accountValue?.calculateProjection) {
+        const customRateInput = document.getElementById('custom-interest-rate-input')?.value || '4.7';
+        summary.customRate = customRateInput;
+        summary.projection = productConfig.accountValue.calculateProjection(
+            productConfig,
+            {
+                mainPerson: appState.persons.find(p => p.isMain),
+                mainProduct: appState.mainProduct,
+                basePremium: appState.fees.baseMain,
+                extraPremium: appState.mainProduct.values['extra-premium'],
+                targetAge: summary.targetAge,
+                customInterestRate: customRateInput,
+                paymentFrequency: summary.freq,
+            },
+            { investment_data, roundDownTo1000, GLOBAL_CONFIG }
+        );
+    }
+    
+    // Pre-calculate sums for footer
+    const activePersonIdx = summary.persons.map((p, i) => summary.schedule.rows.some(r => (r.perPersonSuppAnnualEq[i] || 0) > 0) ? i : -1).filter(i => i !== -1);
+    summary.schedule.activePersonIdx = activePersonIdx;
 
-    return { freq, periods, isAnnual, riderFactor, productKey, paymentTerm, targetAge, mainPerson, persons: allPersonsForSummary, waiverPremiums, part1, schedule };
+    const sums = { main: 0, extra: 0, supp: activePersonIdx.map(() => 0), totalBase: 0, totalEq: 0, diff: 0 };
+    summary.schedule.rows.forEach(r => {
+        sums.main += r.mainYearBase;
+        sums.extra += r.extraYearBase;
+        sums.totalBase += r.totalYearBase;
+        sums.totalEq += r.totalAnnualEq;
+        sums.diff += r.diff;
+        activePersonIdx.forEach((pIdx, idx) => sums.supp[idx] += r.perPersonSuppAnnualEq[pIdx]);
+    });
+    summary.sums = sums;
+
+    return summary;
 }
 
 function buildPart1RowsData(ctx) {
@@ -1393,7 +1430,7 @@ function buildPart1RowsData(ctx) {
         }
     });
 
-    return { rows, perPersonTotals, grand, isAnnual, periods, riderFactor };
+    return { rows, perPersonTotals, grand, isAnnual, periods, riderFactor, freqLabel: data.freq === 'half' ? 'nửa năm' : 'quý' };
 }
 
 function buildPart2ScheduleRows(ctx) {
@@ -1478,125 +1515,121 @@ function buildIntroSection(data) {
     return `<div class="mb-4"><h3>BẢNG MINH HỌA PHÍ & QUYỀN LỢI</h3><div>Sản phẩm chính: <strong>${sanitizeHtml(getProductLabel(data.productKey) || '—')}</strong>&nbsp;|&nbsp; Kỳ đóng: <strong>${sanitizeHtml(freqLabel)}</strong>&nbsp;|&nbsp; Minh họa đến tuổi: <strong>${sanitizeHtml(data.targetAge)}</strong></div></div>`;
 }
 
-function buildPart1Section(data) {
-    const { part1, isAnnual, periods } = data;
-    const { rows, perPersonTotals, grand } = part1;
-    const r1000 = n => Math.round((n || 0) / 1000) * 1000;
-    const formatDiffCell = n => !n ? '0' : `<span class="text-red-600 font-bold">${formatCurrency(r1000(n))}</span>`;
+function buildPart1Section(summaryData) {
+    const config = VIEWER_CONFIG.part1_summary;
+    const data = summaryData.part1;
+    const { rows, perPersonTotals, grand } = data;
     
-    const headerHtml = isAnnual ? `<tr><th>Tên NĐBH</th><th>Sản phẩm</th><th>STBH</th><th>Số năm đóng phí</th><th>Phí theo năm</th></tr>`
-        : `<tr><th>Tên NĐBH</th><th>Sản phẩm</th><th>STBH</th><th>Số năm đóng phí</th><th>Phí (${periods === 2 ? 'nửa năm' : 'theo quý'})</th><th>Phí năm đầu</th><th>Phí theo năm</th><th>Chênh lệch</th></tr>`;
+    const columns = config.columns.filter(c => !c.condition || c.condition(data));
+    const getHeader = (col) => typeof col.header === 'function' ? col.header(data) : col.header;
+    const getAlignment = (col) => col.align ? `text-align: ${col.align};` : '';
+
+    const headerHtml = `<tr>${columns.map(c => `<th>${sanitizeHtml(getHeader(c))}</th>`).join('')}</tr>`;
     
-    let body = [];
-    perPersonTotals.forEach(agg => {
-        if (agg.base <= 0) return;
-        body.push(isAnnual ? `<tr style="font-weight: bold;"><td >${sanitizeHtml(agg.personName)}</td><td>Tổng theo người</td><td style="text-align: right">—</td><td style="text-align: center">—</td><td style="text-align: right">${formatCurrency(r1000(agg.base))}</td></tr>`
-            : `<tr style="font-weight: bold;"><td>${sanitizeHtml(agg.personName)}</td><td>Tổng theo người</td><td style="text-align: right">—</td><td style="text-align: center">—</td><td style="text-align: right">${formatCurrency(r1000(agg.per))}</td><td style="text-align: right">${formatCurrency(r1000(agg.eq))}</td><td style="text-align: right">${formatCurrency(r1000(agg.base))}</td><td style="text-align: right">${formatDiffCell(agg.diff)}</td></tr>`);
+    let bodyHtml = '';
+    perPersonTotals.forEach(personTotal => {
+        // Render summary row for the person
+        bodyHtml += `<tr style="font-weight: bold;">`;
+        columns.forEach((col, i) => {
+            let content = '';
+            if (i === 0) content = sanitizeHtml(personTotal.personName);
+            else if (i === 1) content = 'Tổng theo người';
+            else if (col.id === 'periodicFee') content = formatCurrency(personTotal.per);
+            else if (col.id === 'annualEquivalent') content = formatCurrency(personTotal.eq);
+            else if (col.id === 'annualFee') content = formatCurrency(personTotal.base);
+            else if (col.id === 'diff') content = personTotal.diff === 0 ? '0' : `<span class="text-red-600 font-bold">${formatCurrency(personTotal.diff)}</span>`;
+            else content = '—';
+            bodyHtml += `<td style="${getAlignment(col)}">${content}</td>`;
+        });
+        bodyHtml += `</tr>`;
         
-        rows.filter(r => r.personName === agg.personName).forEach(r => {
-            body.push(isAnnual ? `<tr><td></td><td>${sanitizeHtml(r.prodName)}</td><td style="text-align: right">${r.stbhDisplay}</td><td style="text-align: center">${r.years}</td><td style="text-align: right">${formatCurrency(r.annualBase)}</td></tr>`
-                : `<tr><td></td><td>${sanitizeHtml(r.prodName)}</td><td style="text-align: right">${r.stbhDisplay}</td><td style="text-align: center">${r.years}</td><td style="text-align: right">${formatCurrency(r.perPeriod)}</td><td style="text-align: right">${formatCurrency(r.annualEq)}</td><td style="text-align: right">${formatCurrency(r.annualBase)}</td><td style="text-align: right">${formatDiffCell(r.diff)}</td></tr>`);
+        // Render individual product rows for the person
+        rows.filter(r => r.personName === personTotal.personName).forEach(row => {
+            bodyHtml += `<tr>`;
+            columns.forEach(col => {
+                const value = col.id === 'personName' ? '' : (col.getValue(row, data) || '');
+                bodyHtml += `<td style="${getAlignment(col)}">${value}</td>`;
+            });
+            bodyHtml += `</tr>`;
         });
     });
     
-    body.push(isAnnual ? `<tr style="font-weight: bold;"><td colspan="4">Tổng tất cả</td><td style="text-align: right">${formatCurrency(r1000(grand.base))}</td></tr>`
-        : `<tr style="font-weight: bold;"><td colspan="4">Tổng tất cả</td><td style="text-align: right">${formatCurrency(r1000(grand.per))}</td><td style="text-align: right">${formatCurrency(r1000(grand.eq))}</td><td style="text-align: right">${formatCurrency(r1000(grand.base))}</td><td style="text-align: right">${formatDiffCell(grand.diff)}</td></tr>`);
-    
-    return `<h3>Phần 1 · Tóm tắt sản phẩm</h3><table><thead>${headerHtml}</thead><tbody>${body.join('')}</tbody></table>`;
+    // Render grand total row
+    bodyHtml += `<tr style="font-weight: bold;">`;
+    columns.forEach((col, i) => {
+        let content = '';
+        if (i === 0) content = 'Tổng tất cả';
+        else if (col.id === 'periodicFee') content = formatCurrency(grand.per);
+        else if (col.id === 'annualEquivalent') content = formatCurrency(grand.eq);
+        else if (col.id === 'annualFee') content = formatCurrency(grand.base);
+        else if (col.id === 'diff') content = grand.diff === 0 ? '0' : `<span class="text-red-600 font-bold">${formatCurrency(grand.diff)}</span>`;
+        else if (i < 4) content = ''; // colspan would be better, but this works
+        bodyHtml += `<td style="${getAlignment(col)}">${content}</td>`;
+    });
+    bodyHtml += `</tr>`;
+
+    const titleHtml = `<h3>${sanitizeHtml(config.title)}</h3>`;
+    return `${titleHtml}<table><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
 }
 
 function buildPart3ScheduleSection(summaryData) {
-    const productConfig = PRODUCT_CATALOG[summaryData.productKey];
-    const isPulMul = ['PUL', 'MUL'].includes(productConfig?.group);
-    const { schedule, isAnnual, persons } = summaryData;
-    const rows = schedule.rows;
-    let tableHtml = '';
+    const config = VIEWER_CONFIG.part3_schedule;
+    if (!config || !summaryData.schedule.rows.length) return '';
 
-    if (!rows.length) return '';
-
-    const activePersonIdx = persons.map((p, i) => rows.some(r => (r.perPersonSuppAnnualEq[i] || 0) > 0) ? i : -1).filter(i => i !== -1);
-    let title = 'Phần 3 · Bảng phí';
-
-    if (isPulMul && productConfig.accountValue?.calculateProjection) {
-        title += ' & Minh họa giá trị tài khoản';
-        const customRateInput = document.getElementById('custom-interest-rate-input')?.value || '4.7';
-        
-        const projection = productConfig.accountValue.calculateProjection(
-            productConfig,
-            {
-                mainPerson: appState.persons.find(p => p.isMain),
-                mainProduct: appState.mainProduct,
-                basePremium: appState.fees.baseMain,
-                extraPremium: appState.mainProduct.values['extra-premium'],
-                targetAge: summaryData.targetAge,
-                customInterestRate: customRateInput,
-                paymentFrequency: summaryData.freq,
-            },
-            { investment_data, roundDownTo1000, GLOBAL_CONFIG }
-        );
-
-        let header = ['<th>Năm HĐ</th>', '<th>Tuổi</th>', '<th>Phí chính</th>'];
-        if (!schedule.extraAllZero) header.push('<th>Phí đóng thêm</th>');
-        header.push(...activePersonIdx.map(i => `<th>Phí BS (${sanitizeHtml(persons[i].name)})</th>`));
-        header.push('<th>Tổng đóng/năm</th>');
-        header.push('<th>Giá trị TK (Lãi suất cam kết)</th>');
-        header.push(`<th>Giá trị TK (Lãi suất ${customRateInput}% trong 20 năm đầu, từ năm 21 là lãi suất cam kết)</th>`);
-        header.push(`<th>Giá trị TK (Lãi suất ${customRateInput}% xuyên suốt hợp đồng)</th>`);
-
-        let sums = { main: 0, extra: 0, supp: activePersonIdx.map(() => 0), totalBase: 0 };
-        const body = rows.map((r, i) => {
-            sums.main += r.mainYearBase;
-            sums.extra += r.extraYearBase;
-            sums.totalBase += r.totalYearBase;
-            activePersonIdx.forEach((pIdx, idx) => sums.supp[idx] += r.perPersonSuppAnnualEq[pIdx]);
-            
-            const gttk_guaranteed = roundDownTo1000(projection.guaranteed[i]);
-            const gttk_capped = roundDownTo1000(projection.customCapped[i]);
-            const gttk_full = roundDownTo1000(projection.customFull[i]);
-
-            return `<tr><td style="text-align: center">${r.year}</td><td style="text-align: center">${r.age}</td>
-                        <td style="text-align: right">${formatCurrency(r.mainYearBase)}</td>
-                        ${schedule.extraAllZero ? '' : `<td style="text-align: right">${formatCurrency(r.extraYearBase)}</td>`}
-                        ${activePersonIdx.map(pIdx => `<td style="text-align: right">${formatCurrency(r.perPersonSuppAnnualEq[pIdx])}</td>`).join('')}
-                        <td style="text-align: right; font-weight:bold;">${formatCurrency(r.totalYearBase)}</td>
-                        <td style="text-align: right">${formatCurrency(gttk_guaranteed)}</td>
-                        <td style="text-align: right">${formatCurrency(gttk_capped)}</td>
-                        <td style="text-align: right">${formatCurrency(gttk_full)}</td>
-                    </tr>`;
-        }).join('');
-        
-        const footerCols = [
-            '<td colspan="2">Tổng</td>',
-            `<td style="text-align: right">${formatCurrency(sums.main)}</td>`,
-            (schedule.extraAllZero ? '' : `<td style="text-align: right">${formatCurrency(sums.extra)}</td>`),
-            ...sums.supp.map(s => `<td style="text-align: right">${formatCurrency(s)}</td>`),
-            `<td style="text-align: right">${formatCurrency(sums.totalBase)}</td>`,
-            '<td colspan="3"></td>'
-        ];
-        const footer = `<tr style="font-weight: bold;">${footerCols.join('')}</tr>`;
-
-        tableHtml = `<table><thead><tr>${header.join('')}</tr></thead><tbody>${body}${footer}</tbody></table>`;
-    } else {
-        // Fallback for non-PUL/MUL
-        let header = ['<th>Năm HĐ</th>', '<th>Tuổi</th>', '<th>Phí chính</th>'];
-        if(!schedule.extraAllZero) header.push('<th>Phí đóng thêm</th>');
-        header.push(...activePersonIdx.map(i => `<th>Phí BS (${sanitizeHtml(persons[i].name)})</th>`));
-        if(!isAnnual) header.push('<th>Tổng quy năm</th>');
-        header.push('<th>Tổng đóng/năm</th>');
-        if(!isAnnual) header.push('<th>Chênh lệch</th>');
-        
-        let sums = { main: 0, extra: 0, supp: activePersonIdx.map(() => 0), totalEq: 0, totalBase: 0, diff: 0 };
-        const body = rows.map(r => {
-            sums.main += r.mainYearBase; sums.extra += r.extraYearBase; sums.totalEq += r.totalAnnualEq; sums.totalBase += r.totalYearBase; sums.diff += r.diff;
-            activePersonIdx.forEach((pIdx, i) => sums.supp[i] += r.perPersonSuppAnnualEq[pIdx]);
-            return `<tr><td style="text-align: center">${r.year}</td><td style="text-align: center">${r.age}</td><td style="text-align: right">${formatCurrency(r.mainYearBase)}</td>${schedule.extraAllZero ? '' : `<td style="text-align: right">${formatCurrency(r.extraYearBase)}</td>`}${activePersonIdx.map(i => `<td style="text-align: right">${formatCurrency(r.perPersonSuppAnnualEq[i])}</td>`).join('')}${!isAnnual ? `<td style="text-align: right">${formatCurrency(r.totalAnnualEq)}</td>` : ''}<td style="text-align: right">${formatCurrency(r.totalYearBase)}</td>${!isAnnual ? `<td style="text-align: right">${r.diff ? `<span class="text-red-600 font-bold">${formatCurrency(r.diff)}</span>` : '0'}</td>` : ''}</tr>`;
-        }).join('');
-        const footer = `<tr style="font-weight: bold;"><td colspan="2">Tổng</td><td style="text-align: right">${formatCurrency(sums.main)}</td>${schedule.extraAllZero ? '' : `<td style="text-align: right">${formatCurrency(sums.extra)}</td>`}${sums.supp.map(s => `<td style="text-align: right">${formatCurrency(s)}</td>`).join('')}${!isAnnual ? `<td style="text-align: right">${formatCurrency(sums.totalEq)}</td>` : ''}<td style="text-align: right">${formatCurrency(sums.totalBase)}</td>${!isAnnual ? `<td style="text-align: right">${sums.diff?`<span class="text-red-600 font-bold">${formatCurrency(sums.diff)}</span>`:'0'}</td>` : ''}</tr>`;
-        tableHtml = `<table><thead><tr>${header.join('')}</tr></thead><tbody>${body}${footer}</tbody></table>`;
-    }
+    const { persons } = summaryData;
+    const { rows, activePersonIdx } = summaryData.schedule;
     
-    // Append footer to the table block
-    return `<h3>${title}</h3>${tableHtml}${buildFooterSection()}`;
+    // Filter columns based on condition
+    const columns = config.columns.filter(c => !c.condition || c.condition(summaryData));
+    const getAlignment = (col) => col.align ? `text-align: ${col.align};` : '';
+    const getStyle = (col) => `${getAlignment(col)}${col.isBold ? 'font-weight:bold;' : ''}`;
+
+    // Build Header
+    let headerHtml = '<tr>';
+    columns.forEach(col => {
+        if (col.type === 'dynamic') {
+            activePersonIdx.forEach(pIdx => {
+                headerHtml += `<th>${sanitizeHtml(col.headerTemplate(persons[pIdx]))}</th>`;
+            });
+        } else {
+            const headerText = typeof col.header === 'function' ? col.header(summaryData) : col.header;
+            headerHtml += `<th>${sanitizeHtml(headerText)}</th>`;
+        }
+    });
+    headerHtml += '</tr>';
+
+    // Build Body
+    let bodyHtml = rows.map(row => {
+        let rowHtml = '<tr>';
+        columns.forEach(col => {
+            if (col.type === 'dynamic') {
+                activePersonIdx.forEach(pIdx => {
+                    rowHtml += `<td style="${getStyle(col)}">${col.getValue(row, pIdx, summaryData)}</td>`;
+                });
+            } else {
+                rowHtml += `<td style="${getStyle(col)}">${col.getValue(row, summaryData)}</td>`;
+            }
+        });
+        rowHtml += '</tr>';
+        return rowHtml;
+    }).join('');
+
+    // Build Footer
+    let footerHtml = '<tr style="font-weight: bold;">';
+    columns.forEach(col => {
+        if (col.type === 'dynamic') {
+            activePersonIdx.forEach(pIdx => {
+                footerHtml += `<td style="${getStyle(col)}">${col.getFooter(summaryData, pIdx)}</td>`;
+            });
+        } else {
+            footerHtml += `<td style="${getStyle(col)}">${col.getFooter(summaryData)}</td>`;
+        }
+    });
+    footerHtml += '</tr>';
+    
+    const titleHtml = `<h3>${sanitizeHtml(config.titleTemplate(summaryData))}</h3>`;
+    const tableHtml = `<table><thead>${headerHtml}</thead><tbody>${bodyHtml}${footerHtml}</tbody></table>`;
+    return `${titleHtml}${tableHtml}${buildFooterSection()}`;
 }
 
 function buildFooterSection() {
