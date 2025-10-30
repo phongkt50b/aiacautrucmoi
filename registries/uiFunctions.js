@@ -92,8 +92,6 @@ export const UI_FUNCTIONS = {
         const dentalCb = section.querySelector('#health_scl-dental');
         const msgEl = section.querySelector('.dynamic-validation-msg');
         
-        const calcFunc = state.context.registries.CALC_REGISTRY['scl_calc'];
-
         dentalCb.disabled = !outpatientCb.checked;
         if (!outpatientCb.checked && dentalCb.checked) dentalCb.checked = false;
 
@@ -107,14 +105,16 @@ export const UI_FUNCTIONS = {
         
         programSelect.querySelectorAll('option').forEach(opt => {
             const isAllowed = highestAllowed.includes(opt.value);
-            opt.style.display = isAllowed ? '' : 'none';
-            opt.disabled = !isAllowed;
+            opt.style.display = isAllowed ? '' : 'none'; // Hide instead of disabling
         });
         
         if (!highestAllowed.includes(programSelect.value)) {
             msgEl.textContent = `Phí chính không đủ điều kiện cho chương trình này.`;
             msgEl.classList.remove('hidden');
-            programSelect.value = 'nang_cao';
+            // Attempt to select the highest available option instead of a fixed default
+            const bestAllowed = highestAllowed.slice().reverse().find(p => programSelect.querySelector(`option[value="${p}"]`));
+            if(bestAllowed) programSelect.value = bestAllowed;
+
         } else {
             msgEl.classList.add('hidden');
         }
