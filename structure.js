@@ -646,15 +646,16 @@ export const VIEWER_CONFIG = {
                 getValue: (row, personIndex) => formatCurrency(row.perPersonSuppAnnualEq[personIndex]),
                 getFooter: (summary, personIndex) => formatCurrency(summary.sums.supp[personIndex])
             },
-            { id: 'totalPremium', header: 'Tổng đóng/năm', align: 'right', isBold: true, 
-              getValue: (row) => formatCurrency(row.totalYearBase), 
-              getFooter: (summary) => formatCurrency(summary.sums.totalBase) 
-            },
             { 
-                id: 'totalPremiumEq', header: 'Tổng quy năm', align: 'right', isBold: false, 
+                id: 'totalPremiumEq', header: 'Tổng đóng/năm', align: 'right', isBold: false, 
                 condition: (summary) => !summary.isAnnual, 
                 getValue: (row) => formatCurrency(row.totalAnnualEq), 
                 getFooter: (summary) => formatCurrency(summary.sums.totalEq) 
+            },
+            { 
+                id: 'totalPremium', header: 'Tổng nếu đóng theo năm', align: 'right', isBold: true, 
+                getValue: (row) => formatCurrency(row.totalYearBase), 
+                getFooter: (summary) => formatCurrency(summary.sums.totalBase) 
             },
             { 
                 id: 'diff', header: 'Chênh lệch', align: 'right', isBold: false, 
