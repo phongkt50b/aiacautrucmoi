@@ -41,20 +41,26 @@ export const CALC_REGISTRY = {
     package_main_proxy: ({ customer, params, helpers, state }) => {
         const underlyingConfig = PRODUCT_CATALOG[params.underlyingKey];
         if (!underlyingConfig) return 0;
-
+    
         const calcFunc = CALC_REGISTRY[underlyingConfig.calculation.calculateKey];
-        
-        const mappedValues = { ...params.fixedValues };
-        if (params.underlyingKey === 'AN_BINH_UU_VIET') {
-            mappedValues['abuv-term'] = params.fixedValues.paymentTerm;
-        }
-        mappedValues['main-stbh'] = params.fixedValues.stbh;
-
+        if (!calcFunc) return 0;
+    
+        // Construct a temporary productInfo object for the underlying product
         const packageInfo = {
             key: params.underlyingKey,
-            values: mappedValues
+            values: {
+                'main-stbh': params.fixedValues.stbh,
+                // Explicitly map keys needed by the underlying calculation function
+                'abuv-term': params.fixedValues.paymentTerm
+            }
         };
-        return calcFunc({ productInfo: packageInfo, customer, helpers, params: underlyingConfig.calculation.params });
+    
+        return calcFunc({
+            productInfo: packageInfo,
+            customer,
+            helpers,
+            params: underlyingConfig.calculation.params || {}
+        });
     },
 
     // ================== Riders ==================
