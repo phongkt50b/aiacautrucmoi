@@ -1,6 +1,7 @@
 
+
 import { product_data } from '../data.js';
-import { GLOBAL_CONFIG } from '../structure.js';
+import { GLOBAL_CONFIG, PRODUCT_CATALOG } from '../structure.js';
 
 const HELPERS_INTERNAL = {
     findRate: (tablePath, age, genderKey, ageField = 'age') => {
@@ -37,13 +38,21 @@ export const CALC_REGISTRY = {
         const premium = Math.round((stbh / 1000) * rate);
         return helpers.roundDownTo1000(premium);
     },
-    package_main_proxy: ({ customer, params }) => {
+    package_main_proxy: ({ customer, params, helpers, state }) => {
         const underlyingConfig = PRODUCT_CATALOG[params.underlyingKey];
         if (!underlyingConfig) return 0;
+
         const calcFunc = CALC_REGISTRY[underlyingConfig.calculation.calculateKey];
+        
+        const mappedValues = { ...params.fixedValues };
+        if (params.underlyingKey === 'AN_BINH_UU_VIET') {
+            mappedValues['abuv-term'] = params.fixedValues.paymentTerm;
+        }
+        mappedValues['main-stbh'] = params.fixedValues.stbh;
+
         const packageInfo = {
             key: params.underlyingKey,
-            values: { ...params.fixedValues }
+            values: mappedValues
         };
         return calcFunc({ productInfo: packageInfo, customer, helpers, params: underlyingConfig.calculation.params });
     },
@@ -52,14 +61,14 @@ export const CALC_REGISTRY = {
     scl_calc: ({ customer, helpers }) => {
         const ageToUse = customer.age;
         const renewalMax = 65 + 9; // Placeholder, better to read from config
-        if (ageToUse > renewalMax) return 0;
+        if (ageToUse > renewalMax) return { base: 0, outpatient: 0, dental: 0, total: 0 };
         
         const suppData = customer.supplements?.health_scl || {};
         const { program, scope, outpatient, dental } = suppData;
-        if (!program || !scope) return 0;
+        if (!program || !scope) return { base: 0, outpatient: 0, dental: 0, total: 0 };
 
         const ageBandIndex = product_data.health_scl_rates.age_bands.findIndex(b => ageToUse >= b.min && ageToUse <= b.max);
-        if (ageBandIndex === -1) return 0;
+        if (ageBandIndex === -1) return { base: 0, outpatient: 0, dental: 0, total: 0 };
         
         const rates = product_data.health_scl_rates;
         const base = rates[scope]?.[ageBandIndex]?.[program] || 0;
