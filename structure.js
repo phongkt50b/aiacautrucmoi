@@ -91,6 +91,18 @@ export const PRODUCT_CATALOG = {
             calculateKey: 'pul_main_by_rate_table',
             params: { rateTableKey: 'pul_rates.PUL_TRON_DOI' }
         },
+        accountValue: {
+            enabled: true,
+            calculateProjection: calculateGenericAccountValueProjection,
+            config: {
+                costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+                initialFeeRef: 'PUL_TRON_DOI',
+                persistencyBonusRef: 'persistency_bonus',
+                guaranteedInterestRef: 'guaranteed_interest_rates',
+                includeExtraPremium: true,
+                bonusType: 'standard_pul',
+            }
+        }
     },
 
     'PUL_15NAM': {
@@ -137,6 +149,18 @@ export const PRODUCT_CATALOG = {
             calculateKey: 'pul_main_by_rate_table',
             params: { rateTableKey: 'pul_rates.PUL_15NAM' }
         },
+        accountValue: {
+            enabled: true,
+            calculateProjection: calculateGenericAccountValueProjection,
+            config: {
+                costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+                initialFeeRef: 'PUL_15NAM',
+                persistencyBonusRef: 'persistency_bonus',
+                guaranteedInterestRef: 'guaranteed_interest_rates',
+                includeExtraPremium: true,
+                bonusType: 'standard_pul',
+            }
+        }
     },
 
     'PUL_5NAM': {
@@ -183,6 +207,18 @@ export const PRODUCT_CATALOG = {
             calculateKey: 'pul_main_by_rate_table',
             params: { rateTableKey: 'pul_rates.PUL_5NAM' }
         },
+        accountValue: {
+            enabled: true,
+            calculateProjection: calculateGenericAccountValueProjection,
+            config: {
+                costOfInsuranceRef: 'pul_cost_of_insurance_rates',
+                initialFeeRef: 'PUL_5NAM',
+                persistencyBonusRef: 'persistency_bonus',
+                guaranteedInterestRef: 'guaranteed_interest_rates',
+                includeExtraPremium: true,
+                bonusType: 'standard_pul',
+            }
+        }
     },
 
     'KHOE_BINH_AN': {
@@ -222,6 +258,18 @@ export const PRODUCT_CATALOG = {
         },
         rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ] },
         calculation: { calculateKey: 'mul_main_direct_input' },
+        accountValue: {
+            enabled: true,
+            calculateProjection: calculateGenericAccountValueProjection,
+            config: {
+                costOfInsuranceRef: 'mul_cost_of_insurance_rates',
+                initialFeeRef: 'KHOE_BINH_AN',
+                persistencyBonusRef: null,
+                guaranteedInterestRef: 'guaranteed_interest_rates',
+                includeExtraPremium: false,
+                bonusType: 'mul_periodic',
+            }
+        }
     },
 
     'VUNG_TUONG_LAI': {
@@ -261,6 +309,18 @@ export const PRODUCT_CATALOG = {
         },
         rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ] },
         calculation: { calculateKey: 'mul_main_direct_input' },
+        accountValue: {
+            enabled: true,
+            calculateProjection: calculateGenericAccountValueProjection,
+            config: {
+                costOfInsuranceRef: 'mul_cost_of_insurance_rates',
+                initialFeeRef: 'VUNG_TUONG_LAI',
+                persistencyBonusRef: null,
+                guaranteedInterestRef: 'guaranteed_interest_rates',
+                includeExtraPremium: false,
+                bonusType: 'mul_periodic',
+            }
+        }
     },
 
     'AN_BINH_UU_VIET': {
@@ -362,16 +422,6 @@ export const PRODUCT_CATALOG = {
         name: 'Sức khỏe Bùng Gia Lực',
         slug: 'bung-gia-luc',
         benefitMatrixKey: 'HEALTH_SCL',
-        getDisplayName: (supplementsData) => {
-            const scl = supplementsData.health_scl;
-            if (!scl) return 'Sức khỏe Bùng Gia Lực';
-            const programMap = { co_ban: 'Cơ bản', nang_cao: 'Nâng cao', toan_dien: 'Toàn diện', hoan_hao: 'Hoàn hảo' };
-            const programName = programMap[scl.program] || '';
-            const scopeStr = (scl.scope === 'main_global' ? 'Nước ngoài' : 'Việt Nam') 
-                           + (scl.outpatient ? ', Ngoại trú' : '') 
-                           + (scl.dental ? ', Nha khoa' : '');
-            return `Sức khoẻ Bùng Gia Lực – ${programName} (${scopeStr})`;
-        },
         getStbh: (supplementsData) => {
             const scl = supplementsData?.health_scl;
             if (!scl || !scl.program) return 0;
@@ -596,12 +646,15 @@ export const VIEWER_CONFIG = {
                 getValue: (row, personIndex) => formatCurrency(row.perPersonSuppAnnualEq[personIndex]),
                 getFooter: (summary, personIndex) => formatCurrency(summary.sums.supp[personIndex])
             },
-            { id: 'totalPremium', header: 'Tổng đóng/năm', align: 'right', isBold: true, getValue: (row, summary) => summary.isAnnual ? formatCurrency(row.totalYearBase) : formatCurrency(row.totalAnnualEq), getFooter: (summary) => summary.isAnnual ? formatCurrency(summary.sums.totalBase) : formatCurrency(summary.sums.totalEq) },
+            { id: 'totalPremium', header: 'Tổng đóng/năm', align: 'right', isBold: true, 
+              getValue: (row) => formatCurrency(row.totalYearBase), 
+              getFooter: (summary) => formatCurrency(summary.sums.totalBase) 
+            },
             { 
-                id: 'totalPremiumEq', header: 'Tổng nếu đóng theo năm', align: 'right', isBold: false, 
+                id: 'totalPremiumEq', header: 'Tổng quy năm', align: 'right', isBold: false, 
                 condition: (summary) => !summary.isAnnual, 
-                getValue: (row) => formatCurrency(row.totalYearBase), 
-                getFooter: (summary) => formatCurrency(summary.sums.totalBase) 
+                getValue: (row) => formatCurrency(row.totalAnnualEq), 
+                getFooter: (summary) => formatCurrency(summary.sums.totalEq) 
             },
             { 
                 id: 'diff', header: 'Chênh lệch', align: 'right', isBold: false, 
@@ -630,3 +683,173 @@ export const VIEWER_CONFIG = {
         ]
     }
 };
+
+/**
+ * Generic function to calculate account value projection.
+ * It reads configuration from the product definition.
+ */
+function calculateGenericAccountValueProjection(productConfig, args, helpers) {
+    const { mainPerson, mainProduct, basePremium, extraPremium, targetAge, customInterestRate, paymentFrequency } = args;
+    const { investment_data, roundDownTo1000, GLOBAL_CONFIG } = helpers;
+    const accountValueConfig = productConfig.accountValue.config;
+
+    const { gender, age: initialAge } = mainPerson;
+    const { key: productKey, values } = mainProduct;
+    const stbhInitial = values['main-stbh'] || 0;
+    const paymentTerm = productConfig.getPaymentTerm(values) || 0;
+    
+    const { initial_fees, guaranteed_interest_rates, admin_fees } = investment_data;
+
+    const costOfInsuranceRates = investment_data[accountValueConfig.costOfInsuranceRef] || [];
+    const persistencyBonusRates = investment_data[accountValueConfig.persistencyBonusRef] || [];
+
+    const totalYears = targetAge - initialAge + 1;
+    const totalMonths = totalYears * 12;
+
+    let parsedCustom = parseFloat(customInterestRate) || 0;
+    const customRate = (parsedCustom > 1) ? (parsedCustom / 100) : parsedCustom;
+
+    const roundVND = (v) => Math.round(v || 0);
+
+    let scenarios = {
+        guaranteed: { accountValue: 0, yearEndValues: [] },
+        customCapped: { accountValue: 0, yearEndValues: [] },
+        customFull: { accountValue: 0, yearEndValues: [] },
+    };
+    
+    let periods = 1;
+    if (paymentFrequency === 'half') periods = 2;
+    if (paymentFrequency === 'quarter') periods = 4;
+
+    const annualBasePremium = Number(basePremium || 0);
+    const annualExtraPremium = Number(extraPremium || 0);
+    const basePremiumPerPeriod = periods > 1 ? roundDownTo1000(annualBasePremium / periods) : annualBasePremium;
+    const extraPremiumPerPeriod = periods > 1 ? roundDownTo1000(annualExtraPremium / periods) : annualExtraPremium;
+
+    const startDate = (typeof GLOBAL_CONFIG !== 'undefined' && GLOBAL_CONFIG.REFERENCE_DATE) ? GLOBAL_CONFIG.REFERENCE_DATE : new Date();
+    const startYear = startDate.getFullYear();
+    const startMonth = startDate.getMonth() + 1;
+
+    const getCalendarYearFromStart = (month) => {
+        const startMonthZero = startMonth - 1;
+        const monthIndexFromStart = startMonthZero + (month - 1);
+        return startYear + Math.floor(monthIndexFromStart / 12);
+    };
+
+    const getStbhForPolicyYear = (policyYear) => {
+        if (productKey === 'KHOE_BINH_AN') {
+            const initial = Number(stbhInitial) || 0;
+            if (policyYear === 1) return initial;
+            if (policyYear >= 2 && policyYear <= 11) {
+                const extraYears = policyYear - 1;
+                return initial + Math.round(initial * 0.05 * extraYears);
+            }
+            return initial + Math.round(initial * 0.05 * 10);
+        }
+        return Number(stbhInitial) || 0;
+    };
+
+    const getAdminFeeForYear = (calendarYear) => {
+        if (!admin_fees) return 0;
+        if (admin_fees[calendarYear] !== undefined) return Number(admin_fees[calendarYear]) || 0;
+        if (admin_fees[String(calendarYear)] !== undefined) return Number(admin_fees[String(calendarYear)]) || 0;
+        return Number(admin_fees.default) || 0;
+    };
+
+    for (let month = 1; month <= totalMonths; month++) {
+        const policyYear = Math.floor((month - 1) / 12) + 1;
+        const attainedAge = initialAge + policyYear - 1;
+        const genderKey = (gender === 'Nữ' || gender === 'Nu' || gender === 'nu') ? 'nu' : 'nam';
+        const calendarYear = getCalendarYearFromStart(month);
+        
+        let isPaymentMonth = false;
+        const monthInYear = ((month - 1) % 12) + 1;
+
+        if (periods === 1 && monthInYear === 1) isPaymentMonth = true;
+        if (periods === 2 && (monthInYear === 1 || monthInYear === 7)) isPaymentMonth = true;
+        if (periods === 4 && (monthInYear === 1 || monthInYear === 4 || monthInYear === 7 || monthInYear === 10)) isPaymentMonth = true;
+
+
+        for (const key in scenarios) {
+            let currentAccountValue = scenarios[key].accountValue || 0;
+            let premiumIn = 0;
+            let initialFee = 0;
+            
+            if (isPaymentMonth && policyYear <= paymentTerm) {
+                let baseIn = basePremiumPerPeriod;
+                let extraIn = accountValueConfig.includeExtraPremium ? extraPremiumPerPeriod : 0;
+                premiumIn = baseIn + extraIn;
+                
+                const initialFeeRateBase = ((initial_fees && initial_fees[accountValueConfig.initialFeeRef]) || {})[policyYear] || 0;
+                const extraInitRate = (initial_fees && initial_fees.EXTRA) ? initial_fees.EXTRA : 0;
+                initialFee = roundVND((baseIn * Number(initialFeeRateBase || 0)) +
+                                      (extraIn * Number(extraInitRate || 0)));
+            }
+
+            const investmentAmount = currentAccountValue + premiumIn - initialFee;
+            const adminFee = getAdminFeeForYear(calendarYear) / 12;
+            const stbhCurrent = getStbhForPolicyYear(policyYear);
+            
+            const riskRateRecord = costOfInsuranceRates.find(r => Number(r.age) === Number(attainedAge));
+            const riskRate = riskRateRecord ? (riskRateRecord[genderKey] || 0) : 0;
+            const sumAtRisk = Math.max(0, stbhCurrent - investmentAmount);
+
+            let costOfInsurance = (sumAtRisk * riskRate) / 1000 / 12;
+            costOfInsurance = roundVND(costOfInsurance);
+
+            const netInvestmentAmount = investmentAmount - adminFee - costOfInsurance;
+            
+            let guaranteedRate = 0;
+            const guaranteedRateRaw = (guaranteed_interest_rates && (guaranteed_interest_rates[policyYear] !== undefined))
+                ? guaranteed_interest_rates[policyYear]
+                : (guaranteed_interest_rates && guaranteed_interest_rates.default ? guaranteed_interest_rates.default : 0);
+            guaranteedRate = Number(guaranteedRateRaw) || 0;
+            guaranteedRate = (guaranteedRate > 1) ? (guaranteedRate / 100) : guaranteedRate;
+
+            let interestRateYearly = 0;
+            if (key === 'guaranteed') {
+                interestRateYearly = guaranteedRate;
+            } else if (key === 'customCapped') {
+                interestRateYearly = (policyYear <= 20) ? Math.max(customRate, guaranteedRate) : guaranteedRate;
+            } else {
+                interestRateYearly = Math.max(customRate, guaranteedRate);
+            }
+
+            const monthlyInterestRate = Math.pow(1 + interestRateYearly, 1 / 12) - 1;
+            let interest = netInvestmentAmount * monthlyInterestRate;
+            interest = roundVND(interest);
+
+            let bonus = 0;
+            const isLastMonthOfPolicyYear = (month % 12 === 0);
+
+            if (accountValueConfig.bonusType === 'mul_periodic') {
+                if (policyYear >= 5 && policyYear <= paymentTerm && isLastMonthOfPolicyYear) {
+                    bonus = annualBasePremium * 0.03;
+                }
+            } else if (accountValueConfig.bonusType === 'standard_pul') {
+                const bonusInfo = (persistencyBonusRates || []).find(b => b.year === policyYear);
+                if (bonusInfo && isLastMonthOfPolicyYear) {
+                    const bonusYear = bonusInfo.year;
+                    if ( (bonusYear === 10 && paymentTerm >= 10) ||
+                         (bonusYear === 20 && paymentTerm >= 20) ||
+                         (bonusYear === 30 && paymentTerm >= 30) ) {
+                        bonus = annualBasePremium * bonusInfo.rate;
+                    }
+                }
+            }
+            bonus = roundVND(bonus);
+
+            scenarios[key].accountValue = Math.max(0, roundVND(netInvestmentAmount + interest + bonus));
+
+            if (month % 12 === 0) {
+                scenarios[key].yearEndValues.push(scenarios[key].accountValue);
+            }
+        }
+    }
+
+    return {
+        guaranteed: scenarios.guaranteed.yearEndValues,
+        customCapped: scenarios.customCapped.yearEndValues,
+        customFull: scenarios.customFull.yearEndValues,
+    };
+}
