@@ -232,6 +232,11 @@ export function renderWaiverSection(state, isMainProductValid) {
         productListContainer.innerHTML = '';
         return;
     }
+
+    if(personInfo.id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID) {
+        const otherFormEl = document.getElementById(`person-container-waiver-other-form`);
+        if(otherFormEl) otherFormEl.querySelector('.age-span').textContent = personInfo.age;
+    }
     
     const waiverProducts = Object.values(PRODUCT_CATALOG).filter(p => p.category === 'waiver');
     productListContainer.innerHTML = waiverProducts.map(prodConfig => {
