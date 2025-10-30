@@ -13,7 +13,7 @@ export function renderMainProductSection(state) {
         const productKey = option.value;
         const productConfig = PRODUCT_CATALOG[productKey];
         if (!productConfig) return;
-        option.disabled = !RULE_ENGINE.evaluate(productConfig.rules.eligibility, { customer: mainPerson });
+        option.disabled = !RULE_ENGINE.evaluateAnd(productConfig.rules.eligibility, { customer: mainPerson });
     });
     
     if (lastRenderedProductKey !== mainProductKey) {
@@ -68,22 +68,23 @@ export function renderSupplementaryProductsForPerson(customer, state, isMainProd
         const section = container.querySelector(`[data-product-key="${prodId}"]`);
         if (!section) return;
 
-        const context = { customer, mainProduct: state.mainProduct, state };
-        const isEligible = RULE_ENGINE.evaluate(prodConfig.rules.eligibility, context);
-        const isVisible = RULE_ENGINE.evaluate(prodConfig.rules.visibility, context);
-        const isDisabled = RULE_ENGINE.evaluate(prodConfig.rules.disabled, context);
+        const context = { customer, state, productKey: prodId, PRODUCT_CATALOG };
+        const isEligible = RULE_ENGINE.evaluateAnd(prodConfig.rules.eligibility, context);
+        const isVisible = RULE_ENGINE.evaluateAnd(prodConfig.rules.visibility, context);
+        const isDisabled = RULE_ENGINE.evaluateOr(prodConfig.rules.disabled, context);
+        const isMandatory = RULE_ENGINE.evaluateOr(prodConfig.rules.mandatory, context);
         
         section.classList.toggle('hidden', !isEligible || !isVisible);
+
         const checkbox = section.querySelector(`.${prodId}-checkbox`);
         if (!checkbox) return;
         
-        checkbox.disabled = isDisabled || !isMainProductSectionValid;
-        if(RULE_ENGINE.evaluate(prodConfig.rules.mandatory, context)) {
+        checkbox.disabled = isDisabled || !isMainProductSectionValid || isMandatory;
+        if(isMandatory) {
             checkbox.checked = true;
-            checkbox.disabled = true;
         }
 
-        section.classList.toggle('opacity-50', checkbox.disabled && !RULE_ENGINE.evaluate(prodConfig.rules.mandatory, context));
+        section.classList.toggle('opacity-50', checkbox.disabled && !isMandatory);
         section.querySelector('.product-options')?.classList.toggle('hidden', !checkbox.checked);
         
         const fee = state.fees.byPerson[customer.id]?.suppDetails?.[prodId] || 0;
@@ -199,7 +200,7 @@ export function renderWaiverSection(state, isMainProductValid) {
 
     // 1. Update dropdown options and disabled state
     const mainProductConfig = PRODUCT_CATALOG[state.mainProduct.key];
-    const noWaiverAllowed = RULE_ENGINE.evaluate(mainProductConfig?.rules.noSupplementaryInsured, { state });
+    const noWaiverAllowed = RULE_ENGINE.evaluateOr(mainProductConfig?.rules.noSupplementaryInsured, { state, PRODUCT_CATALOG });
     selEl.disabled = !isMainProductValid || noWaiverAllowed;
     
     if (noWaiverAllowed) {
@@ -234,7 +235,7 @@ export function renderWaiverSection(state, isMainProductValid) {
     
     const waiverProducts = Object.values(PRODUCT_CATALOG).filter(p => p.category === 'waiver');
     productListContainer.innerHTML = waiverProducts.map(prodConfig => {
-        const isEligible = RULE_ENGINE.evaluate(prodConfig.rules.eligibility, { customer: personInfo });
+        const isEligible = RULE_ENGINE.evaluateAnd(prodConfig.rules.eligibility, { customer: personInfo });
         const isChecked = state.waiver.enabledProducts[prodConfig.slug] || false;
         return `
             <div class="waiver-product-item ${!isEligible ? 'opacity-50' : ''}">
