@@ -1,12 +1,7 @@
 
 
 import { PRODUCT_CATALOG, GLOBAL_CONFIG } from '../structure.js';
-import { product_data } from '../data.js';
 
-/**
- * The main calculation engine for the application.
- * Orchestrates a multi-pass calculation process based on product metadata.
- */
 export function calculateAll(state) {
     const fees = {
         baseMain: 0,
@@ -28,14 +23,17 @@ export function calculateAll(state) {
 
     // --- BASE MAIN PREMIUM ---
     if (mainPerson && mainProductConfig) {
-        const calcFunc = mainProductConfig.calculation.calculate;
+        const calcKey = mainProductConfig.calculation.calculateKey;
+        const calcFunc = calcKey && state.context.registries.CALC_REGISTRY[calcKey];
+
         if (calcFunc) {
             fees.baseMain = calcFunc({
                 productInfo: state.mainProduct,
                 customer: mainPerson,
                 productConfig: mainProductConfig,
                 helpers: state.context.helpers,
-                params: mainProductConfig.calculation.params || {}
+                params: mainProductConfig.calculation.params || {},
+                state: state
             });
         }
         fees.extra = state.mainProduct.values['extra-premium'] || 0;
@@ -43,10 +41,10 @@ export function calculateAll(state) {
     }
 
     const allInsuredPersons = state.persons.filter(p => p); // All persons including main
-    const context = { state, fees, product_data, helpers: state.context.helpers };
+    const context = { state, fees, helpers: state.context.helpers };
 
     // --- PHASE A: PRE-AGGREGATIONS ---
-    const accumulators = preAggregationPhase(allInsuredPersons, context);
+    const accumulators = preAggregationPhase(allInsuredPersons);
 
     // --- PHASE B: PASS 1 (Main Riders) ---
     pass1Phase(allInsuredPersons, fees, accumulators, context);
@@ -64,8 +62,10 @@ export function calculateAll(state) {
     return fees;
 }
 
-function preAggregationPhase(allInsuredPersons, context) {
-    const accumulators = {};
+function preAggregationPhase(allInsuredPersons) {
+    const accumulators = {
+        totalHospitalSupportStbh: 0
+    };
     allInsuredPersons.forEach(person => {
         Object.keys(person.supplements).forEach(prodId => {
             const prodConfig = PRODUCT_CATALOG[prodId];
@@ -73,7 +73,7 @@ function preAggregationPhase(allInsuredPersons, context) {
             
             prodConfig.calculation.accumulatorKeys.forEach(key => {
                 if (key === 'totalHospitalSupportStbh') {
-                    accumulators[key] = (accumulators[key] || 0) + (person.supplements[prodId]?.stbh || 0);
+                    accumulators[key] += (person.supplements[prodId]?.stbh || 0);
                 }
             });
         });
@@ -86,9 +86,10 @@ function pass1Phase(allInsuredPersons, fees, accumulators, context) {
         let personSuppFee = 0;
         Object.keys(person.supplements).forEach(prodId => {
             const prodConfig = PRODUCT_CATALOG[prodId];
-            if (prodConfig?.calculation?.pass === 2) return; // Skip waivers
-            
-            const calcFunc = prodConfig.calculation.calculate;
+            if (prodConfig?.calculation?.pass === 2) return; 
+
+            const calcKey = prodConfig?.calculation?.calculateKey;
+            const calcFunc = calcKey && context.state.context.registries.CALC_REGISTRY[calcKey];
             if (!calcFunc) return;
             
             const fee = calcFunc({
@@ -97,7 +98,8 @@ function pass1Phase(allInsuredPersons, fees, accumulators, context) {
                 allPersons: context.state.persons,
                 accumulators,
                 helpers: context.helpers,
-                params: prodConfig.calculation.params || {}
+                params: prodConfig.calculation.params || {},
+                state: context.state
             });
             
             personSuppFee += fee;
@@ -124,24 +126,28 @@ function createFeeSnapshot(allInsuredPersons, fees) {
 
 function pass2Phase(fees, feeSnapshot, context) {
     const { state } = context;
-    const waiverTargetPerson = getWaiverTargetPersonInfo(state);
+    const waiverTargetPerson = state.context.registries.CALC_REGISTRY._getWaiverTargetPersonInfo(state);
     if (!waiverTargetPerson) return;
     
-    Object.keys(state.waiver.enabledProducts).forEach(waiverId => {
-        const waiverConfig = Object.values(PRODUCT_CATALOG).find(p => p.slug === waiverId && p.category === 'waiver');
+    Object.keys(state.waiver.enabledProducts).forEach(waiverSlug => {
+        if (!state.waiver.enabledProducts[waiverSlug]) return;
+
+        const waiverProdKey = Object.keys(PRODUCT_CATALOG).find(key => PRODUCT_CATALOG[key].slug === waiverSlug);
+        const waiverConfig = PRODUCT_CATALOG[waiverProdKey];
         if (!waiverConfig) return;
         
         const stbhBase = calculateWaiverStbhBase(waiverConfig, feeSnapshot, waiverTargetPerson);
-        const calcFunc = waiverConfig.calculation.calculate;
+        const calcKey = waiverConfig.calculation.calculateKey;
+        const calcFunc = calcKey && state.context.registries.CALC_REGISTRY[calcKey];
 
         if (stbhBase > 0 && calcFunc) {
             const premium = calcFunc({
                 personInfo: waiverTargetPerson,
-                stbhBase
+                stbhBase,
+                helpers: context.helpers,
             });
             
             if (premium > 0) {
-                const waiverProdKey = Object.keys(PRODUCT_CATALOG).find(key => PRODUCT_CATALOG[key].slug === waiverId);
                 fees.waiverDetails[waiverProdKey] = { premium, targetPerson: waiverTargetPerson, stbhBase };
                 fees.totalSupp += premium;
                 const personIdForFee = waiverTargetPerson.id;
@@ -178,37 +184,4 @@ function calculateWaiverStbhBase(waiverConfig, feeSnapshot, waiverTargetPerson) 
     }
 
     return Math.max(0, stbhBase);
-}
-
-function getWaiverTargetPersonInfo(state) {
-    const selectedId = state.waiver.selectedPersonId;
-    if (!selectedId) return null;
-
-    if (selectedId === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE) {
-        const otherForm = document.getElementById(`person-container-waiver-other-form`);
-        if (!otherForm) return null;
-        
-        // Temporarily collect data for this person
-        const dobStr = otherForm.querySelector('.dob-input')?.value || '';
-        let age = 0;
-        if (dobStr && /^\d{2}\/\d{2}\/\d{4}$/.test(dobStr)) {
-            const [dd, mm, yyyy] = dobStr.split('/').map(n => parseInt(n, 10));
-            const birthDate = new Date(yyyy, mm - 1, dd);
-            if (!isNaN(birthDate)) {
-                age = GLOBAL_CONFIG.REFERENCE_DATE.getFullYear() - birthDate.getFullYear();
-                const m = GLOBAL_CONFIG.REFERENCE_DATE.getMonth() - birthDate.getMonth();
-                if (m < 0 || (m === 0 && GLOBAL_CONFIG.REFERENCE_DATE.getDate() < birthDate.getDate())) age--;
-            }
-        }
-        
-        return {
-            id: GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID,
-            name: otherForm.querySelector('.name-input')?.value || 'Người khác',
-            dob: dobStr,
-            age,
-            gender: otherForm.querySelector('.gender-select')?.value || 'Nam',
-            riskGroup: parseInt(otherForm.querySelector('.occupation-input')?.dataset.group, 10) || 0,
-        };
-    }
-    return state.persons.find(p => p.id === selectedId) || null;
 }
