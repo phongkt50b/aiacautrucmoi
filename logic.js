@@ -1378,7 +1378,7 @@ function bm_renderSchemaTables(schemaKey, columns) {
         totalRowHtml = `<tr><td style="font-weight: bold;">Tổng quyền lợi</td>${totalCellsSum.map(s => `<td style="text-align: right; font-weight: bold;">${s ? formatCurrency(s) : ''}</td>`).join('')}</tr>`;
     }
 
-    return `<div><h4>${sanitizeHtml(title)}</h4><table><thead><tr><th>Tên quyền lợi</th>${headCols}</tr></thead><tbody>${bodyHtml}${totalRowHtml}</tbody></table></div>`;
+    return `<div><h3 style="color: #1f2937;">${sanitizeHtml(title)}</h3><table><thead><tr><th>Tên quyền lợi</th>${headCols}</tr></thead><tbody>${bodyHtml}${totalRowHtml}</tbody></table></div>`;
 }
 function getProductLabel(key) {
   return PRODUCT_CATALOG[key]?.name || key || '';
