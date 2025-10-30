@@ -343,7 +343,10 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     displayName: 'An Bình Ưu Việt',
     displayOrder: 10,
     getGroupingSignature: (col) => `abuv|${col.sumAssured}`,
-    getColumnLabel: (col) => col.persons.map(p => p.name).join(', '),
+    getColumnLabel: (col) => {
+        const names = col.persons.map(p => p.name).join(', ');
+        return `${names} - STBH: ${col.sumAssured.toLocaleString('vi-VN')}`;
+    },  
     benefits:[
       { id:'abuv_death',
         labelBase:'Quyền lợi bảo hiểm tử vong',
@@ -366,7 +369,10 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     displayName: 'Khoẻ Bình An',
     displayOrder: 11,
     getGroupingSignature: (col) => `kba|${col.sumAssured}`,
-    getColumnLabel: (col) => col.persons.map(p => p.name).join(', '),
+    getColumnLabel: (col) => {
+        const names = col.persons.map(p => p.name).join(', ');
+        return `${names} - STBH: ${col.sumAssured.toLocaleString('vi-VN')}`;
+    },
     benefits:[
       { id:'kba_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', formulaKey: 'percentOfSa', params: { percent: 1.0 } },
       { id:'kba_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.1, cap: 200000000 } },
@@ -382,7 +388,10 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     displayName: 'Vững Tương Lai',
     displayOrder: 12,
     getGroupingSignature: (col) => `vtl|${col.sumAssured}`,
-    getColumnLabel: (col) => col.persons.map(p => p.name).join(', '),
+    getColumnLabel: (col) => {
+        const names = col.persons.map(p => p.name).join(', ');
+        return `${names} - STBH: ${col.sumAssured.toLocaleString('vi-VN')}`;
+    },
     benefits:[
       { id:'vtl_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', formulaKey: 'percentOfSa', params: { percent: 1.0 } },
       { id:'vtl_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.1, cap: 200000000 } },
@@ -397,7 +406,10 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     displayName: 'Khoẻ Trọn Vẹn',
     displayOrder: 13,
     getGroupingSignature: (col) => `pul|${col.productKey}|${col.sumAssured}`,
-    getColumnLabel: (col) => col.persons.map(p => p.name).join(', '),
+    getColumnLabel: (col) => {
+        const names = col.persons.map(p => p.name).join(', ');
+        return `${names} - STBH: ${col.sumAssured.toLocaleString('vi-VN')}`;
+    },
     productKeys:['PUL_TRON_DOI','PUL_5NAM','PUL_15NAM'],
     benefits:[
       { id:'pul_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', formulaKey: 'percentOfSa', params: { percent: 1.0 } },
