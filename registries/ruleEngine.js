@@ -1,4 +1,3 @@
-
 export const RULE_ENGINE = {
     /**
      * Evaluates a set of rules with AND logic. All rules must pass.
@@ -59,5 +58,26 @@ export const RULE_ENGINE = {
             default:
                 return true; 
         }
+    },
+    
+    /**
+     * Resolves a value based on a key string (e.g., 'resolver:param').
+     * @param {string} key The key to resolve.
+     * @param {object} context The context object containing necessary data (e.g., values).
+     * @returns The resolved value.
+     */
+    resolveFieldByKey(key, context) {
+        if (!key) return null;
+        const [resolver, param] = key.split(':');
+        
+        if (resolver === 'from_control') {
+            return context.values?.[param] || 0;
+        }
+
+        if (resolver === 'fixed_value') {
+            return param;
+        }
+        
+        return 0; // default
     }
 };

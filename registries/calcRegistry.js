@@ -1,5 +1,3 @@
-
-
 import { product_data } from '../data.js';
 import { GLOBAL_CONFIG, PRODUCT_CATALOG } from '../structure.js';
 
@@ -117,6 +115,21 @@ export const CALC_REGISTRY = {
         return helpers.roundDownTo1000(premium);
     },
 
+    // ================== Waiver Logic Registry ==================
+    waiverResolvers: {
+        getTerm_mdp3: ({ waiverHolder, mainInsured, targetAge, productConfig }) => {
+            const eligibilityRule = productConfig.rules.eligibility.find(r => r.type === 'age');
+            if (!eligibilityRule) return 0;
+            const yearsLeftForWaiverHolder = eligibilityRule.max - waiverHolder.age + 1;
+            const yearsLeftForIllustration = targetAge - mainInsured.age + 1;
+            return Math.max(0, Math.min(yearsLeftForWaiverHolder, yearsLeftForIllustration));
+        },
+        isEligible_mdp3: ({ attainedAge, productConfig }) => {
+            const eligibilityRule = productConfig.rules.eligibility.find(r => r.type === 'age');
+            return eligibilityRule && attainedAge <= eligibilityRule.max;
+        }
+    },
+    
     // Internal helper, not a product calculation
     _getWaiverTargetPersonInfo: (state) => {
         const selectedId = state.waiver.selectedPersonId;

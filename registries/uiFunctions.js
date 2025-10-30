@@ -1,8 +1,8 @@
 
 
-import { product_data } from '../data.js';
+import { product_data, BM_SCL_PROGRAMS } from '../data.js';
 import { roundDownTo1000, formatCurrency } from '../utils.js'; // Import shared utils
-import { GLOBAL_CONFIG } from '../structure.js';
+import { GLOBAL_CONFIG, PRODUCT_CATALOG } from '../structure.js';
 
 export const UI_FUNCTIONS = {
   validate: {
@@ -135,5 +135,96 @@ export const UI_FUNCTIONS = {
            hintEl.textContent = `Tối đa ${formatCurrency(Math.min(maxByAge, remaining))} đ/ngày. Phải là bội số của ${formatCurrency(GLOBAL_CONFIG.HOSPITAL_SUPPORT_STBH_MULTIPLE)}.`;
         }
    }
+  },
+  
+  // ===================================================
+  // ===== NEW REGISTRIES FOR DATA-DRIVEN LOGIC
+  // ===================================================
+
+  displayName: {
+    scl_dynamic_display: ({ data }) => {
+        const programLabel = BM_SCL_PROGRAMS[data.program]?.label || '';
+        const scopeLabel = data.scope === 'main_global' ? ' (Toàn cầu)' : '';
+        const options = [];
+        if (data.outpatient) options.push('Ngoại trú');
+        if (data.dental) options.push('Nha khoa');
+        const optionsLabel = options.length ? ` (${options.join(', ')})` : '';
+        return `Sức khỏe Bùng Gia Lực - ${programLabel}${scopeLabel}${optionsLabel}`;
+    }
+  },
+
+  valueTransformers: {
+      roundToThousand: (raw) => roundDownTo1000(raw),
+      roundToHospitalSupportMultiple: (raw) => {
+          const multiple = GLOBAL_CONFIG.HOSPITAL_SUPPORT_STBH_MULTIPLE || 100000;
+          return Math.floor(raw / multiple) * multiple;
+      }
+  },
+  
+  stbh: {
+      from_control: ({ data }) => data.stbh || 0,
+      scl_stbh_from_program: ({ data }) => {
+          const config = PRODUCT_CATALOG['health_scl'];
+          return config?.rules.stbhByProgram?.[data.program] || 0;
+      }
+  },
+
+  bmColumnData: {
+      default_stbh: ({ productKey, person, data }) => ({
+          productKey,
+          sumAssured: data.stbh || 0,
+          persons: [person]
+      }),
+      hospital_support_column_data: ({ productKey, person, data }) => ({
+        productKey,
+        sumAssured: data.stbh || 0, // In this case, sumAssured is the daily amount
+        persons: [person]
+      }),
+      scl_column_data: ({ productKey, person, data }) => ({
+          productKey,
+          program: data.program,
+          sumAssured: 0, // STBH is derived from program inside the formula
+          persons: [person],
+          flags: {
+              scope: data.scope,
+              outpatient: data.outpatient,
+              dental: data.dental,
+              maternity: data.program === 'toan_dien' || data.program === 'hoan_hao'
+          }
+      }),
+      bhn_column_data: ({ productKey, person, data }) => ({
+          productKey,
+          sumAssured: data.stbh || 0,
+          persons: [person],
+          flags: {
+              child: person.age < 21,
+              elder: person.age >= 55
+          }
+      })
+  },
+
+  bmFormulas: {
+    percentOfSa: (col, params) => (col.sumAssured || 0) * (params.percent || 0),
+    percentOfSaWithCap: (col, params) => Math.min((col.sumAssured || 0) * (params.percent || 0), params.cap || Infinity),
+    fromProg: (col, params) => BM_SCL_PROGRAMS[col.program]?.[params.field] || 0,
+    fromProgFmt: (col, params) => {
+        const val = BM_SCL_PROGRAMS[col.program]?.[params.field];
+        return val ? `${formatCurrency(val)}${params.suffix || ''}` : '—';
+    },
+    fromProgFmtCommonDisease: (col, params) => {
+        const val = BM_SCL_PROGRAMS[col.program]?.[params.field];
+        return val ? formatCurrency(val) : 'Theo Chi phí y tế';
+    },
+    fromProgWithFallbackText: (col, params) => {
+        const val = BM_SCL_PROGRAMS[col.program]?.[params.field];
+        return val ? formatCurrency(val) : 'Không áp dụng';
+    },
+    daily: (col) => col.sumAssured || 0,
+    dailyX2: (col) => (col.sumAssured || 0) * 2,
+    rangeFromSa: (col, params) => {
+        const min = (col.sumAssured || 0) * (params.minPercent || 0);
+        const max = (col.sumAssured || 0) * (params.maxPercent || 0);
+        return `Từ ${formatCurrency(min)} đến ${formatCurrency(max)}`;
+    }
   }
 };
