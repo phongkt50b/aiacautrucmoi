@@ -597,7 +597,7 @@ function renderSuppListSummary() {
         return (personData.name && personData.name !== 'Người khác') ? personData.name : GLOBAL_CONFIG.LABELS.POLICY_OWNER;
         }
         return GLOBAL_CONFIG.LABELS.POLICY_OWNER; // Fallback
-    }
+    
     return appState.persons.find(p => p.id === id)?.name || 'Người không xác định';
   };
 
