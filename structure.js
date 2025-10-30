@@ -647,13 +647,13 @@ export const VIEWER_CONFIG = {
                 getFooter: (summary, personIndex) => formatCurrency(summary.sums.supp[personIndex])
             },
             { 
-                id: 'totalPremiumEq', header: 'Tổng đóng/năm', align: 'right', isBold: false, 
+                id: 'totalPremiumEq', header: 'Tổng đóng/năm', align: 'right', isBold: true, 
                 condition: (summary) => !summary.isAnnual, 
                 getValue: (row) => formatCurrency(row.totalAnnualEq), 
                 getFooter: (summary) => formatCurrency(summary.sums.totalEq) 
             },
             { 
-                id: 'totalPremium', header: 'Tổng nếu đóng theo năm', align: 'right', isBold: true, 
+                id: 'totalPremium', header: 'Tổng nếu đóng theo năm', align: 'right', isBold: false, 
                 getValue: (row) => formatCurrency(row.totalYearBase), 
                 getFooter: (summary) => formatCurrency(summary.sums.totalBase) 
             },
