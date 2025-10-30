@@ -600,6 +600,7 @@ function renderSuppListSummary() {
     
     return appState.persons.find(p => p.id === id)?.name || 'Người không xác định';
   };
+};
 
   const rows = Object.entries(appState.fees.byPerson)
     .filter(([, feeData]) => feeData.supp > 0)
