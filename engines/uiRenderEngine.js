@@ -252,7 +252,7 @@ export function renderWaiverSection(state, isMainProductValid) {
                            ${isChecked ? 'checked' : ''} ${!isEligible ? 'disabled' : ''}>
                     <span class="font-medium text-gray-800">${prodConfig.name}</span>
                 </label>
-                ${!isEligible ? `<div class="text-xs text-red-600 pl-8">Không đủ điều kiện (tuổi, giới tính, hoặc vai trò không phù hợp)</div>` : ''}
+                ${!isEligible ? `<div class="text-xs text-red-600 pl-8">Không áp dụng cho NĐBH chính hoặc không đủ tuổi</div>` : ''}
             </div>
         `;
     }).join('');
