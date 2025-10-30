@@ -632,7 +632,7 @@ export const VIEWER_CONFIG = {
     part3_schedule: {
         titleTemplate: (summaryData) => {
             const hasAccountValue = summaryData.projection?.guaranteed?.length > 0;
-            return `Phần 3 · Bảng phí ${hasAccountValue ? '& Minh họa giá trị tài khoản' : ''}`;
+            return `Phần 3 · Bảng phí ${hasAccountValue ? 'và minh họa giá trị tài khoản' : ''}`;
         },
         columns: [
             { id: 'policyYear', header: 'Năm HĐ', align: 'center', getValue: (row) => row.year, getFooter: () => 'Tổng' },
