@@ -91,6 +91,8 @@ export const UI_FUNCTIONS = {
         const outpatientCb = section.querySelector('#health_scl-outpatient');
         const dentalCb = section.querySelector('#health_scl-dental');
         const msgEl = section.querySelector('.dynamic-validation-msg');
+        
+        const calcFunc = state.context.registries.CALC_REGISTRY['scl_calc'];
 
         dentalCb.disabled = !outpatientCb.checked;
         if (!outpatientCb.checked && dentalCb.checked) dentalCb.checked = false;
@@ -102,9 +104,14 @@ export const UI_FUNCTIONS = {
                 if (mainPremium >= tier.minPremium) highestAllowed = tier.allowed;
             });
         }
-        programSelect.querySelectorAll('option').forEach(opt => opt.disabled = !highestAllowed.includes(opt.value));
         
-        if (programSelect.options[programSelect.selectedIndex]?.disabled) {
+        programSelect.querySelectorAll('option').forEach(opt => {
+            const isAllowed = highestAllowed.includes(opt.value);
+            opt.style.display = isAllowed ? '' : 'none';
+            opt.disabled = !isAllowed;
+        });
+        
+        if (!highestAllowed.includes(programSelect.value)) {
             msgEl.textContent = `Phí chính không đủ điều kiện cho chương trình này.`;
             msgEl.classList.remove('hidden');
             programSelect.value = 'nang_cao';
