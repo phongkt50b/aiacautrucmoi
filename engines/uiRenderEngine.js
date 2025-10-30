@@ -38,7 +38,8 @@ export function renderMainProductSection(state) {
     const productConfig = PRODUCT_CATALOG[mainProductKey];
     if (productConfig?.ui?.controls) {
         productConfig.ui.controls.forEach(controlConfig => {
-            const onRenderFunc = controlConfig.onRender;
+            const onRenderKey = controlConfig.onRender;
+            const onRenderFunc = onRenderKey && state.context.registries.UI_FUNCTIONS.onRender[onRenderKey];
             if (onRenderFunc) {
                 const el = document.getElementById(controlConfig.id);
                 if (el) {
@@ -93,7 +94,8 @@ export function renderSupplementaryProductsForPerson(customer, state, isMainProd
             feeDisplay.textContent = fee > 0 ? `Phí: ${state.context.helpers.formatCurrency(fee)}` : '';
         }
 
-        const onRenderFunc = prodConfig.ui.onRender;
+        const onRenderKey = prodConfig.ui.onRender;
+        const onRenderFunc = onRenderKey && state.context.registries.UI_FUNCTIONS.onRender[onRenderKey];
         if (onRenderFunc) {
             onRenderFunc({
                 section,
@@ -235,7 +237,8 @@ export function renderWaiverSection(state, isMainProductValid) {
 
     if(personInfo.id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID) {
         const otherFormEl = document.getElementById(`person-container-waiver-other-form`);
-        if(otherFormEl) otherFormEl.querySelector('.age-span').textContent = personInfo.age;
+        const ageSpan = otherFormEl?.querySelector('.age-span');
+        if(ageSpan) ageSpan.textContent = personInfo.age;
     }
     
     const waiverProducts = Object.values(PRODUCT_CATALOG).filter(p => p.category === 'waiver');
