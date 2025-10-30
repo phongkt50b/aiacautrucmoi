@@ -114,13 +114,8 @@ export const PRODUCT_CATALOG = {
         },
         rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ] },
         calculation: {
-            calculate: ({ productInfo, customer }) => {
-                if (!productInfo.values['main-stbh']) return 0;
-                const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
-                const rate = HELPERS.findRate('pul_rates.PUL_TRON_DOI', customer.age, genderKey);
-                const premium = Math.round((productInfo.values['main-stbh'] / 1000) * rate);
-                return HELPERS.roundDownTo1000(premium);
-            }
+            calculateKey: 'pul_main_by_rate_table',
+            params: { rateTableKey: 'pul_rates.PUL_TRON_DOI' }
         },
         accountValue: {
             enabled: true,
@@ -183,13 +178,8 @@ export const PRODUCT_CATALOG = {
         },
         rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ] },
         calculation: {
-            calculate: ({ productInfo, customer }) => {
-                if (!productInfo.values['main-stbh']) return 0;
-                const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
-                const rate = HELPERS.findRate('pul_rates.PUL_15NAM', customer.age, genderKey);
-                const premium = Math.round((productInfo.values['main-stbh'] / 1000) * rate);
-                return HELPERS.roundDownTo1000(premium);
-            }
+            calculateKey: 'pul_main_by_rate_table',
+            params: { rateTableKey: 'pul_rates.PUL_15NAM' }
         },
         accountValue: {
             enabled: true,
@@ -252,13 +242,8 @@ export const PRODUCT_CATALOG = {
         },
         rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70 } ] },
         calculation: {
-            calculate: ({ productInfo, customer }) => {
-                if (!productInfo.values['main-stbh']) return 0;
-                const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
-                const rate = HELPERS.findRate('pul_rates.PUL_5NAM', customer.age, genderKey);
-                const premium = Math.round((productInfo.values['main-stbh'] / 1000) * rate);
-                return HELPERS.roundDownTo1000(premium);
-            }
+            calculateKey: 'pul_main_by_rate_table',
+            params: { rateTableKey: 'pul_rates.PUL_5NAM' }
         },
         accountValue: {
             enabled: true,
@@ -486,15 +471,8 @@ export const PRODUCT_CATALOG = {
             premium: { min: 5000000 }
         },
         calculation: {
-            calculate: ({ productInfo, customer }) => {
-                const stbh = productInfo.values['main-stbh'];
-                const term = productInfo.values['abuv-term'];
-                if (!stbh || !term) return 0;
-                const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
-                const rate = HELPERS.findRateByTerm('an_binh_uu_viet_rates', term, customer.age, genderKey);
-                const premium = Math.round((stbh / 1000) * rate);
-                return HELPERS.roundDownTo1000(premium);
-            }
+            calculateKey: 'abuv_main_by_term_rate',
+            params: {}
         }
     },
     
@@ -534,7 +512,13 @@ export const PRODUCT_CATALOG = {
             ],
             noSupplementaryInsured: true
         },
-        calculation: { calculate: () => 0 } // Phí được tính từ sản phẩm con
+        calculation: {
+            calculateKey: 'package_main_proxy',
+            params: {
+                underlyingKey: 'AN_BINH_UU_VIET',
+                fixedValues: { stbh: 100000000, paymentTerm: '10' }
+            }
+        }
     },
     
     // =======================================================================
@@ -582,72 +566,24 @@ export const PRODUCT_CATALOG = {
                   ]
                 }
             ],
-            onRender: ({ section, customer, mainPremium, mainProductConfig }) => {
-                const programSelect = section.querySelector('#health_scl-program');
-                const outpatientCb = section.querySelector('#health_scl-outpatient');
-                const dentalCb = section.querySelector('#health_scl-dental');
-                const msgEl = section.querySelector('.dynamic-validation-msg');
-                const outSpan = section.querySelector(`#scl-outpatient-fee-hint`);
-                const dentalSpan = section.querySelector(`#scl-dental-fee-hint`);
-
-                dentalCb.disabled = !outpatientCb.checked;
-                if (!outpatientCb.checked && dentalCb.checked) dentalCb.checked = false;
-
-                let highestAllowed = ['co_ban', 'nang_cao', 'toan_dien', 'hoan_hao'];
-                if(mainProductConfig?.group !== 'PACKAGE') {
-                    highestAllowed = ['nang_cao']; 
-                    PRODUCT_CATALOG.health_scl.rules.dependencies.premiumThresholdsForProgram.forEach(tier => {
-                        if (mainPremium >= tier.minPremium) highestAllowed = tier.allowed;
-                    });
-                }
-                programSelect.querySelectorAll('option').forEach(opt => opt.disabled = !highestAllowed.includes(opt.value));
-                
-                if (programSelect.options[programSelect.selectedIndex]?.disabled) {
-                    msgEl.textContent = `Phí chính không đủ điều kiện cho chương trình này.`;
-                    msgEl.classList.remove('hidden');
-                    programSelect.value = 'nang_cao';
-                } else {
-                    msgEl.classList.add('hidden');
-                }
-
-                // Update fee hints for options
-                const comps = PRODUCT_CATALOG.health_scl.calculation.getFeeComponents(customer);
-                if (outSpan) outSpan.textContent = (outpatientCb?.checked && comps.outpatient > 0) ? `(+${formatCurrency(comps.outpatient)})` : '';
-                if (dentalSpan) dentalSpan.textContent = (dentalCb?.checked && comps.dental > 0) ? `(+${formatCurrency(comps.dental)})` : '';
+            onRender: 'scl_program_by_threshold',
+            onRenderParams: {
+                premiumThresholds: [
+                    { minPremium: 5000000, allowed: ['co_ban', 'nang_cao'] }, 
+                    { minPremium: 10000000, allowed: ['co_ban', 'nang_cao', 'toan_dien'] }, 
+                    { minPremium: 15000000, allowed: ['co_ban', 'nang_cao', 'toan_dien', 'hoan_hao'] }
+                ]
             }
         },
         rules: {
             eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 65, renewalMax: 74 }, { type: 'riskGroup', exclude: [4], required: true } ],
             disabled: [{ type: 'disabledByPackage' }],
             mandatory: [{ type: 'mandatoryInPackage' }],
-            dependencies: {
-                premiumThresholdsForProgram: [
-                    { minPremium: 5000000, allowed: ['co_ban', 'nang_cao'] }, { minPremium: 10000000, allowed: ['co_ban', 'nang_cao', 'toan_dien'] }, { minPremium: 15000000, allowed: ['co_ban', 'nang_cao', 'toan_dien', 'hoan_hao'] }
-                ]
-            },
             stbhByProgram: { co_ban: 100000000, nang_cao: 250000000, toan_dien: 500000000, hoan_hao: 1000000000 }
         },
         calculation: {
-            calculate: ({ customer, ageOverride }) => PRODUCT_CATALOG.health_scl.calculation.getFeeComponents(customer, ageOverride).total,
-            getFeeComponents: (customer, ageOverride = null) => {
-                const ageToUse = ageOverride ?? customer.age;
-                const renewalMax = PRODUCT_CATALOG.health_scl.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 99;
-                if (ageToUse > renewalMax) return { base: 0, outpatient: 0, dental: 0, total: 0 };
-                
-                const suppData = customer.supplements?.health_scl || {};
-                const { program, scope, outpatient, dental } = suppData;
-                if (!program || !scope) return { base: 0, outpatient: 0, dental: 0, total: 0 };
-
-                const ageBandIndex = HELPERS.data.health_scl_rates.age_bands.findIndex(b => ageToUse >= b.min && ageToUse <= b.max);
-                if (ageBandIndex === -1) return { base: 0, outpatient: 0, dental: 0, total: 0 };
-                
-                const rates = HELPERS.data.health_scl_rates;
-                const base = rates[scope]?.[ageBandIndex]?.[program] || 0;
-                const outpatientFee = outpatient ? (rates.outpatient?.[ageBandIndex]?.[program] || 0) : 0;
-                const dentalFee = (outpatient && dental) ? (rates.dental?.[ageBandIndex]?.[program] || 0) : 0;
-                
-                return { base, outpatient: outpatientFee, dental: dentalFee, total: HELPERS.roundDownTo1000(base + outpatientFee + dentalFee) };
-            }
+            calculateKey: 'scl_calc',
+            accumulatorKeys: [] // None for this one
         }
     },
 
@@ -677,14 +613,7 @@ export const PRODUCT_CATALOG = {
             mandatory: [{ type: 'mandatoryInPackage' }],
         },
         calculation: {
-            calculate: ({ customer, ageOverride }) => {
-                const ageToUse = ageOverride ?? customer.age;
-                const { stbh } = customer.supplements.bhn || {};
-                if (!stbh) return 0;
-                const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
-                const rate = HELPERS.findRateByRange('bhn_rates', ageToUse, genderKey);
-                return HELPERS.roundDownTo1000((stbh / 1000) * rate);
-            }
+            calculateKey: 'bhn_calc'
         }
     },
 
@@ -709,12 +638,7 @@ export const PRODUCT_CATALOG = {
             mandatory: [{ type: 'mandatoryInPackage' }],
         },
         calculation: {
-            calculate: ({ customer, ageOverride }) => {
-                const { stbh } = customer.supplements.accident || {};
-                if (!stbh || !customer.riskGroup || customer.riskGroup > 4) return 0;
-                const rate = HELPERS.data.accident_rates[customer.riskGroup] || 0;
-                return HELPERS.roundDownTo1000((stbh / 1000) * rate);
-            }
+            calculateKey: 'accident_calc'
         }
     },
 
@@ -731,42 +655,10 @@ export const PRODUCT_CATALOG = {
         ui: {
             controls: [
                 { id: 'hospital_support-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'Bội số 100.000 (đ/ngày)',
-                  validate: ({ value, customer, mainPremium, allPersons }) => {
-                      if (value <= 0) return null;
-                      if (value % 100000 !== 0) return 'Phải là bội số của 100.000';
-
-                      const maxByAge = customer.age >= 18 ? 1000000 : 300000;
-                      if (value > maxByAge) return `STBH tối đa cho tuổi ${customer.age} là ${formatCurrency(maxByAge)}`;
-
-                      const maxSupportTotal = Math.floor(mainPremium / 4000000) * 100000;
-                      let currentTotalStbh = 0;
-                      allPersons.forEach(p => {
-                          if (p.supplements?.hospital_support?.stbh) {
-                              currentTotalStbh += p.supplements.hospital_support.stbh;
-                          }
-                      });
-                      
-                      if (currentTotalStbh > maxSupportTotal) return `Tổng STBH Hỗ trợ viện phí (${formatCurrency(currentTotalStbh)}) vượt quá giới hạn cho phép theo phí chính (${formatCurrency(maxSupportTotal)})`;
-                      
-                      return null;
-                  }
+                  validateKey: 'hospital_support_stbh',
                 }
             ],
-            onRender: ({ section, customer, mainPremium, allPersons }) => {
-                 const hintEl = section.querySelector('.text-sm');
-                 if(hintEl) {
-                    const maxByAge = customer.age >= 18 ? 1000000 : 300000;
-                    const maxSupportTotal = Math.floor(mainPremium / 4000000) * 100000;
-                    let currentTotalStbh = 0;
-                      allPersons.forEach(p => {
-                           if (p.id !== customer.id && p.supplements?.hospital_support?.stbh) {
-                              currentTotalStbh += p.supplements.hospital_support.stbh;
-                          }
-                      });
-                    const remaining = Math.max(0, maxSupportTotal - currentTotalStbh);
-                    hintEl.textContent = `Tối đa ${formatCurrency(Math.min(maxByAge, remaining))} đ/ngày. Phải là bội số của 100.000.`;
-                 }
-            }
+            onRender: 'hospital_support_hint'
         },
         rules: { 
             eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 55, renewalMax: 59 } ],
@@ -774,13 +666,8 @@ export const PRODUCT_CATALOG = {
             mandatory: [{ type: 'mandatoryInPackage' }],
         },
         calculation: {
-            calculate: ({ customer, ageOverride }) => {
-                const ageToUse = ageOverride ?? customer.age;
-                const { stbh } = customer.supplements.hospital_support || {};
-                if (!stbh) return 0;
-                const rate = HELPERS.findRateByRange('hospital_fee_support_rates', ageToUse, 'rate');
-                return HELPERS.roundDownTo1000((stbh / 100) * rate);
-            }
+            calculateKey: 'hospital_support_calc',
+            accumulatorKeys: ['totalHospitalSupportStbh']
         }
     },
     'mdp3': {
@@ -815,24 +702,8 @@ export const PRODUCT_CATALOG = {
             return eligibilityRule && age <= eligibilityRule.max;
         },
         calculation: {
-            calculate: ({ personInfo, stbhBase }) => {
-                 if(!personInfo || !stbhBase || personInfo.age < 18 || personInfo.age > 60 || !personInfo.riskGroup) return 0;
-                 
-                 const riskGroup = personInfo.riskGroup;
-                 let riskFactor = 1.0;
-                 if (riskGroup === 2 || riskGroup === 3) {
-                     riskFactor = 1.5;
-                 } else if (riskGroup === 4) {
-                     riskFactor = 2.0;
-                 }
-                 
-                 const genderKey = personInfo.gender === 'Nữ' ? 'nu' : 'nam';
-                 const rate = HELPERS.data.mdp3_rates.find(r => personInfo.age >= r.ageMin && personInfo.age <= r.ageMax)?.[genderKey] || 0;
-                 
-                 const premium = (stbhBase / 1000) * rate * riskFactor;
-                 
-                 return HELPERS.roundDownTo1000(premium);
-            }
+            calculateKey: 'wop_mdp3',
+            pass: 2,
         }
     }
 };
@@ -1068,12 +939,12 @@ export const VIEWER_CONFIG = {
                 getValue: (row, personIndex) => formatCurrency(row.perPersonSuppAnnualEq[personIndex]),
                 getFooter: (summary, personIndex) => formatCurrency(summary.sums.supp[personIndex])
             },
-            { id: 'totalPremium', header: 'Tổng đóng/năm', align: 'right', isBold: true, getValue: (row) => formatCurrency(row.totalYearBase), getFooter: (summary) => formatCurrency(summary.sums.totalBase) },
+            { id: 'totalPremium', header: 'Tổng đóng/năm', align: 'right', isBold: true, getValue: (row, summary) => summary.isAnnual ? formatCurrency(row.totalYearBase) : formatCurrency(row.totalAnnualEq), getFooter: (summary) => summary.isAnnual ? formatCurrency(summary.sums.totalBase) : formatCurrency(summary.sums.totalEq) },
             { 
-                id: 'totalPremiumEq', header: 'Tổng quy năm', align: 'right', isBold: false, 
+                id: 'totalPremiumEq', header: 'Tổng nếu đóng theo năm', align: 'right', isBold: false, 
                 condition: (summary) => !summary.isAnnual, 
-                getValue: (row) => formatCurrency(row.totalAnnualEq), 
-                getFooter: (summary) => formatCurrency(summary.sums.totalEq) 
+                getValue: (row) => formatCurrency(row.totalYearBase), 
+                getFooter: (summary) => formatCurrency(summary.sums.totalBase) 
             },
             { 
                 id: 'diff', header: 'Chênh lệch', align: 'right', isBold: false, 
