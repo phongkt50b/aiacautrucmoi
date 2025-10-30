@@ -227,10 +227,20 @@ function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
 
     const perMain = roundDownTo1000(baseMain / periods);
     const perExtra = roundDownTo1000(extra / periods);
-    const perSupp = roundDownTo1000((totalSupp * factor) / periods);
+    
+    let perSupp = 0;
+    let annualEquivalentTotal = (perMain + perExtra) * periods;
+    
+    Object.values(appState.fees.byPerson).forEach(personData => {
+        Object.values(personData.suppDetails).forEach(annualFee => {
+            const perPeriodFee = roundDownTo1000((annualFee * factor) / periods);
+            perSupp += perPeriodFee;
+            annualEquivalentTotal += perPeriodFee * periods;
+        });
+    });
+
     const perTotal = perMain + perExtra + perSupp;
-    const annualEquivalent = perTotal * periods;
-    const diff = annualEquivalent - annualOriginal;
+    const diff = annualEquivalentTotal - annualOriginal;
 
     const set = (id, val) => { document.getElementById(id).textContent = formatCurrency(val); };
     set('freq-main', perMain);
@@ -239,7 +249,7 @@ function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     set('freq-total-period', perTotal);
     set('freq-total-year', annualOriginal);
     set('freq-diff', diff);
-    set('freq-total-year-equivalent', annualEquivalent);
+    set('freq-total-year-equivalent', annualEquivalentTotal);
 }
 
 // ===================================================================================
@@ -421,6 +431,13 @@ function initOccupationAutocomplete(input, container) {
 
   input.addEventListener('input', () => {
     const value = input.value.trim().toLowerCase();
+    
+    if (!value) {
+        input.dataset.group = '0';
+        if (riskGroupSpan) riskGroupSpan.textContent = '...';
+        runWorkflow(); // Re-run validation
+    }
+    
     if (value.length < 2) {
       autocompleteContainer.classList.add('hidden');
       autocompleteContainer.innerHTML = '';
@@ -513,7 +530,7 @@ function updateTargetAge() {
         targetAgeInput.value = calculatedValue;
     } else {
         const currentValue = parseInt(targetAgeInput.value, 10);
-        if (isNaN(currentValue) || currentValue <= 0) {
+        if (productJustChanged || isNaN(currentValue) || currentValue <= 0) {
            targetAgeInput.value = calculatedValue;
         }
     }
@@ -534,8 +551,8 @@ function updatePaymentFrequencyOptions(baseMainAnnual) {
     const allowHalf = baseMainAnnual >= rules.half;
     const allowQuarter = baseMainAnnual >= rules.quarter;
 
-    if (optHalf) optHalf.disabled = !allowHalf;
-    if (optQuarter) optQuarter.disabled = !allowQuarter;
+    if (optHalf) optHalf.style.display = allowHalf ? '' : 'none';
+    if (optQuarter) optQuarter.style.display = allowQuarter ? '' : 'none';
   
     if (sel.value === 'quarter' && !allowQuarter) {
       sel.value = allowHalf ? 'half' : 'year';
@@ -565,7 +582,12 @@ function renderSuppListSummary() {
 
   const getPersonName = (id) => {
     if (id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID) {
-      return GLOBAL_CONFIG.LABELS.POLICY_OWNER;
+        const waiverOtherDetails = Object.values(appState.fees.waiverDetails).find(d => d.targetPerson.id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID);
+        if (waiverOtherDetails) {
+            const personData = waiverOtherDetails.targetPerson;
+            return (personData.name && personData.name !== 'Người khác') ? personData.name : GLOBAL_CONFIG.LABELS.POLICY_OWNER;
+        }
+        return GLOBAL_CONFIG.LABELS.POLICY_OWNER; // Fallback
     }
     return appState.persons.find(p => p.id === id)?.name || 'Người không xác định';
   };
@@ -871,10 +893,18 @@ function buildPart1RowsData(ctx) {
         const acc = { per: 0, eq: 0, base: 0, diff: 0 };
         
         if (p.isMain && productKey) {
+            let productName = getProductLabel(productKey);
             const baseAnnual = appState.fees.baseMain;
-            const stbhVal = appState.mainProduct.values['main-stbh'];
+            const mainProductConfig = PRODUCT_CATALOG[productKey];
+
+            if (mainProductConfig.group === 'PACKAGE') {
+                const underlyingConfig = PRODUCT_CATALOG[mainProductConfig.packageConfig.underlyingMainProduct];
+                productName = underlyingConfig.name;
+            }
+
+            const stbhVal = appState.mainProduct.values['main-stbh'] || mainProductConfig.packageConfig?.fixedValues.stbh;
             if (baseAnnual > 0) {
-                pushRow(acc, p.name, getProductLabel(productKey), formatCurrency(stbhVal), paymentTerm || '—', baseAnnual, false);
+                pushRow(acc, p.name, productName, formatCurrency(stbhVal), paymentTerm || '—', baseAnnual, false);
             }
         }
         if (p.isMain && (appState.mainProduct.values['extra-premium'] || 0) > 0) {
