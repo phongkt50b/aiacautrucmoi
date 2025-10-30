@@ -473,7 +473,7 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     getGroupingSignature: (col) => `bhn|${col.sumAssured}|${col.flags.child}|${col.flags.elder}`,
     getColumnLabel: (col) => {
         const names = col.persons.map(p => p.name).join(', ');
-        return `${names} - 'STBH:' ${col.sumAssured.toLocaleString('vi-VN')}`;
+        return `${names} - STBH: ${col.sumAssured.toLocaleString('vi-VN')}`;
     },
     benefits:[
       { id:'bhn_early', labelBase:'BHN giai đoạn sớm', formulaLabel:'30% STBH (tối đa 4 lần, tối đa 500 tr/ lần)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.3, cap: 500000000 }, multiClaim: 4 },
@@ -494,7 +494,7 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     getGroupingSignature: (col) => `hs|${col.sumAssured}`,
     getColumnLabel: (col) => {
         const names = col.persons.map(p => p.name).join(', ');
-        return `${names} - ${col.sumAssured.toLocaleString('vi-VN')}/ngày`;
+        return `${names} - STBH: ${col.sumAssured.toLocaleString('vi-VN')}/ngày`;
     },
     benefits:[
       { id:'hs_daily', labelBase:'Trợ cấp nằm viện (tối đa 365 ngày/ đợt nằm viện)', formulaLabel:'', valueType:'number', formulaKey: 'daily' },
@@ -510,7 +510,7 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     getGroupingSignature: (col) => `acc|${col.sumAssured}`,
     getColumnLabel: (col) => {
         const names = col.persons.map(p => p.name).join(', ');
-        return `${names} - ${col.sumAssured.toLocaleString('vi-VN')}`;
+        return `${names} - STBH: ${col.sumAssured.toLocaleString('vi-VN')}`;
     },
     benefits:[
       { id:'acc_injury', labelBase:'Tổn thương do tai nạn', formulaLabel:'', valueType:'text',
