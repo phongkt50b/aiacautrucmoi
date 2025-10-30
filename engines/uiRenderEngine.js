@@ -243,7 +243,7 @@ export function renderWaiverSection(state, isMainProductValid) {
     
     const waiverProducts = Object.values(PRODUCT_CATALOG).filter(p => p.category === 'waiver');
     productListContainer.innerHTML = waiverProducts.map(prodConfig => {
-        const isEligible = RULE_ENGINE.evaluateAnd(prodConfig.rules.eligibility, { customer: personInfo });
+        const isEligible = RULE_ENGINE.evaluateAnd(prodConfig.rules.eligibility, { customer: personInfo, state });
         const isChecked = state.waiver.enabledProducts[prodConfig.slug] || false;
         return `
             <div class="waiver-product-item ${!isEligible ? 'opacity-50' : ''}">
