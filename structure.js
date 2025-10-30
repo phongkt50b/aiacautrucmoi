@@ -618,6 +618,8 @@ export const PRODUCT_CATALOG = {
         },
         rules: {
             eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 65, renewalMax: 74 }, { type: 'riskGroup', exclude: [4], required: true } ],
+            disabled: [{ type: 'disabledByPackage' }],
+            mandatory: [{ type: 'mandatoryInPackage' }],
             dependencies: {
                 premiumThresholdsForProgram: [
                     { minPremium: 5000000, allowed: ['co_ban', 'nang_cao'] }, { minPremium: 10000000, allowed: ['co_ban', 'nang_cao', 'toan_dien'] }, { minPremium: 15000000, allowed: ['co_ban', 'nang_cao', 'toan_dien', 'hoan_hao'] }
@@ -669,7 +671,11 @@ export const PRODUCT_CATALOG = {
                           }
             }]
         },
-        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70, renewalMax: 85 } ] },
+        rules: { 
+            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70, renewalMax: 85 } ],
+            disabled: [{ type: 'disabledByPackage' }],
+            mandatory: [{ type: 'mandatoryInPackage' }],
+        },
         calculation: {
             calculate: ({ customer, ageOverride }) => {
                 const ageToUse = ageOverride ?? customer.age;
@@ -697,7 +703,11 @@ export const PRODUCT_CATALOG = {
                           }
             }]
         },
-        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 64, renewalMax: 65 }, { type: 'riskGroup', required: true } ] },
+        rules: { 
+            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 64, renewalMax: 65 }, { type: 'riskGroup', required: true } ],
+            disabled: [{ type: 'disabledByPackage' }],
+            mandatory: [{ type: 'mandatoryInPackage' }],
+        },
         calculation: {
             calculate: ({ customer, ageOverride }) => {
                 const { stbh } = customer.supplements.accident || {};
@@ -758,7 +768,11 @@ export const PRODUCT_CATALOG = {
                  }
             }
         },
-        rules: { eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 55, renewalMax: 59 } ] },
+        rules: { 
+            eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 55, renewalMax: 59 } ],
+            disabled: [{ type: 'disabledByPackage' }],
+            mandatory: [{ type: 'mandatoryInPackage' }],
+        },
         calculation: {
             calculate: ({ customer, ageOverride }) => {
                 const ageToUse = ageOverride ?? customer.age;
