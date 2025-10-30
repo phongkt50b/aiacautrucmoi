@@ -296,6 +296,10 @@ function attachGlobalListeners() {
             productJustChanged = true;
             appState.mainProduct.values = {};
             
+            // Force reset target age input when product changes
+            const targetAgeInput = document.getElementById('target-age-input');
+            if (targetAgeInput) targetAgeInput.value = '';
+
             const newProductKey = e.target.value;
             const newProductConfig = PRODUCT_CATALOG[newProductKey];
 
@@ -435,7 +439,7 @@ function initOccupationAutocomplete(input, container) {
     if (!value) {
         input.dataset.group = '0';
         if (riskGroupSpan) riskGroupSpan.textContent = '...';
-        runWorkflow(); // Re-run validation
+        // runWorkflow(); // This can be removed to avoid validation firing on every keystroke deletion
     }
     
     if (value.length < 2) {
@@ -453,6 +457,12 @@ function initOccupationAutocomplete(input, container) {
   });
 
   input.addEventListener('blur', () => {
+    // If the input is cleared, reset the risk group
+    if (!input.value.trim()) {
+        input.dataset.group = '0';
+        if (riskGroupSpan) riskGroupSpan.textContent = '...';
+        runWorkflow(); // Trigger re-validation
+    }
     setTimeout(() => {
       autocompleteContainer.classList.add('hidden');
     }, 200);
@@ -582,12 +592,7 @@ function renderSuppListSummary() {
 
   const getPersonName = (id) => {
     if (id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID) {
-        const waiverOtherDetails = Object.values(appState.fees.waiverDetails).find(d => d.targetPerson.id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID);
-        if (waiverOtherDetails) {
-            const personData = waiverOtherDetails.targetPerson;
-            return (personData.name && personData.name !== 'Người khác') ? personData.name : GLOBAL_CONFIG.LABELS.POLICY_OWNER;
-        }
-        return GLOBAL_CONFIG.LABELS.POLICY_OWNER; // Fallback
+       return GLOBAL_CONFIG.LABELS.POLICY_OWNER;
     }
     return appState.persons.find(p => p.id === id)?.name || 'Người không xác định';
   };
@@ -823,7 +828,7 @@ function buildSummaryData() {
     allPersonsForSummary.push(...waiverOtherPersons);
 
     const part1 = buildPart1RowsData({ persons: allPersonsForSummary, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, waiverPremiums, freq });
-    const schedule = buildPart2ScheduleRows({ persons: allPersonsForSummary, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, waiverPremiums });
+    const schedule = buildPart2ScheduleRows({ persons: allPersonsForSummary, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, waiverPremiums, appState });
     
     const summary = { freq, periods, isAnnual, riderFactor, productKey, paymentTerm, targetAge, mainPerson, persons: allPersonsForSummary, waiverPremiums, part1, schedule, projection: null, sums: {} };
     
@@ -899,7 +904,7 @@ function buildPart1RowsData(ctx) {
 
             if (mainProductConfig.group === 'PACKAGE') {
                 const underlyingConfig = PRODUCT_CATALOG[mainProductConfig.packageConfig.underlyingMainProduct];
-                productName = underlyingConfig.name;
+                if(underlyingConfig) productName = underlyingConfig.name;
             }
 
             const stbhVal = appState.mainProduct.values['main-stbh'] || mainProductConfig.packageConfig?.fixedValues.stbh;
@@ -949,7 +954,7 @@ function buildPart1RowsData(ctx) {
 }
 
 function buildPart2ScheduleRows(ctx) {
-    const { persons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, waiverPremiums } = ctx;
+    const { persons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, waiverPremiums, appState } = ctx;
     const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
     const rows = [];
     const baseMainAnnual = appState?.fees?.baseMain || 0;
@@ -983,16 +988,23 @@ function buildPart2ScheduleRows(ctx) {
             if (p.supplements) {
                 for(const rid in p.supplements) {
                      const prodConfig = PRODUCT_CATALOG[rid];
-                     if (!prodConfig || !prodConfig.calculation.calculate || prodConfig.category === 'waiver') continue;
+                     const calcKey = prodConfig?.calculation?.calculateKey;
+                     const calcFunc = calcKey && appState.context.registries.CALC_REGISTRY[calcKey];
+
+                     if (!calcFunc || prodConfig.category === 'waiver') continue;
                      
                      if (attained > riderMaxAge(rid)) continue;
 
-                     const premiumForYear = prodConfig.calculation.calculate({ 
-                         config: prodConfig, 
-                         customer: p, 
-                         ageOverride: attained, 
+                     const tempCustomer = { ...p, age: attained };
+
+                     const premiumForYear = calcFunc({ 
+                         customer: tempCustomer,
                          mainPremium: baseMainAnnual, 
-                         totalHospitalSupportStbh: 0 
+                         allPersons: appState.persons,
+                         accumulators: { totalHospitalSupportStbh: 0 }, // Simplified for projection
+                         helpers: appState.context.helpers,
+                         params: prodConfig.calculation.params || {},
+                         state: appState
                      });
                      addRider(premiumForYear);
                 }
@@ -1001,7 +1013,7 @@ function buildPart2ScheduleRows(ctx) {
             if (fixedWaiverPremiums[p.id]) {
                 Object.entries(fixedWaiverPremiums[p.id]).forEach(([waiverId, premium]) => {
                     const wConfig = PRODUCT_CATALOG[waiverId];
-                    if (wConfig && typeof wConfig.isStillEligible === 'function' && wConfig.isStillEligible(attained)) {
+                    if (wConfig && wConfig.isStillEligible && wConfig.isStillEligible(attained)) {
                         addRider(premium);
                     }
                 });
