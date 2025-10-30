@@ -1,7 +1,5 @@
-
-
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, VIEWER_CONFIG } from './structure.js';
-import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS, BM_SCL_PROGRAMS } from './data.js';
+import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS } from './data.js';
 import { debounce, parseFormattedNumber, formatCurrency, sanitizeHtml, roundDownTo1000, clearFieldError } from './utils.js';
 
 // Import Engines
@@ -483,15 +481,35 @@ function initDateFormatter(input) {
 function roundInputToThousand(input) {
     if (!input) return;
     const raw = parseFormattedNumber(input.value || '');
-    if (!raw) { input.value = ''; return; }
-    
-    if (input.id.includes('hospital_support')) {
-        const rounded = Math.round(raw / GLOBAL_CONFIG.HOSPITAL_SUPPORT_STBH_MULTIPLE) * GLOBAL_CONFIG.HOSPITAL_SUPPORT_STBH_MULTIPLE;
-        input.value = formatCurrency(rounded);
+    if (!raw) {
+        input.value = '';
+        return;
+    }
+
+    const controlId = input.id;
+    let prodKey = null;
+
+    if (controlId.includes('-')) { // Rider product
+        prodKey = Object.keys(PRODUCT_CATALOG).find(key => controlId.startsWith(key + '-'));
+    } else { // Main product
+        prodKey = appState.mainProduct.key;
+    }
+
+    let controlConfig = null;
+    if (prodKey && PRODUCT_CATALOG[prodKey]) {
+        controlConfig = PRODUCT_CATALOG[prodKey].ui?.controls.find(c => c.id === controlId);
+    }
+
+    const transformerKey = controlConfig?.valueTransformerKey || 'roundToThousand';
+    const transformerFunc = UI_FUNCTIONS.valueTransformers[transformerKey];
+
+    if (transformerFunc) {
+        input.value = formatCurrency(transformerFunc(raw));
     } else {
-        input.value = formatCurrency(roundDownTo1000(raw));
+        input.value = formatCurrency(roundDownTo1000(raw)); // Fallback
     }
 }
+
 
 function formatNumberInput(input) {
   if (!input || !input.value) return;
@@ -711,6 +729,32 @@ function initWaiverSection() {
 // ===== LOGIC TẠO BẢNG MINH HỌA (PORTED FROM V1)
 // ===================================================================================
 
+function resolveRiderStbh(rid, person) {
+    const prodConfig = PRODUCT_CATALOG[rid];
+    const data = person.supplements[rid] || {};
+    if (prodConfig?.stbhKey) {
+        const [resolver, param] = prodConfig.stbhKey.split(':');
+        const resolverFunc = appState.context.registries.UI_FUNCTIONS?.stbh?.[resolver];
+        if (resolverFunc) {
+            return resolverFunc({ person, data, productConfig: prodConfig, params: { ...prodConfig.stbhKeyParams, controlId: param }, state: appState }) || 0;
+        }
+    }
+    return data.stbh || 0;
+}
+
+function resolveRiderDisplayName(rid, person) {
+    const prodConfig = PRODUCT_CATALOG[rid];
+    const data = person.supplements[rid] || {};
+    if (prodConfig?.displayNameKey) {
+        const resolverFunc = appState.context.registries.UI_FUNCTIONS.displayName[prodConfig.displayNameKey];
+        if (resolverFunc) {
+            return resolverFunc({ person, data, state: appState });
+        }
+    }
+    return getProductLabel(rid);
+}
+
+
 function buildViewerPayload() {
   const mainPerson = appState.persons.find(p => p.isMain);
   const mainProductConfig = PRODUCT_CATALOG[appState.mainProduct.key];
@@ -718,14 +762,13 @@ function buildViewerPayload() {
   const riderList = [];
   appState.persons.forEach(person => {
     Object.keys(person.supplements).forEach(rid => {
-      const riderConfig = PRODUCT_CATALOG[rid];
       const premiumDetail = appState.fees.byPerson[person.id]?.suppDetails?.[rid] || 0;
       if (premiumDetail > 0 && !riderList.some(r => r.slug === rid)) { // FIX: Prevent duplicate images
         const data = person.supplements[rid];
         riderList.push({
           slug: rid, 
           selected: true,
-          stbh: riderConfig.getStbh ? riderConfig.getStbh(person.supplements) : (data.stbh || 0),
+          stbh: resolveRiderStbh(rid, person),
           program: data.program, scope: data.scope, outpatient: !!data.outpatient, dental: !!data.dental,
           premium: premiumDetail
         });
@@ -747,6 +790,11 @@ function buildViewerPayload() {
   });
   
   const summaryHtml = __exportExactSummaryHtml();
+  
+  let paymentTerm = 0;
+  if (mainProductConfig?.paymentTermKey) {
+      paymentTerm = RULE_ENGINE.resolveFieldByKey(mainProductConfig.paymentTermKey, { values: appState.mainProduct.values }) || 0;
+  }
 
   return {
     v: 3, // Version
@@ -757,7 +805,7 @@ function buildViewerPayload() {
     mainPersonGender: mainPerson.gender,
     sumAssured: appState.mainProduct.values['main-stbh'],
     paymentFrequency: appState.paymentFrequency,
-    paymentTerm: mainProductConfig.getPaymentTerm ? mainProductConfig.getPaymentTerm(appState.mainProduct.values) : 0,
+    paymentTerm,
     targetAge: parseInt(document.getElementById('target-age-input')?.value, 10),
     customInterestRate: document.getElementById('custom-interest-rate-input')?.value,
     premiums: { 
@@ -797,8 +845,8 @@ function buildSummaryData() {
     const riderFactor = periods === 2 ? 1.02 : (periods === 4 ? 1.04 : 1);
     
     let paymentTerm = 0;
-    if (productConfig && typeof productConfig.getPaymentTerm === 'function') {
-        paymentTerm = parseInt(productConfig.getPaymentTerm(appState.mainProduct.values) || '0', 10);
+    if (productConfig?.paymentTermKey) {
+        paymentTerm = parseInt(RULE_ENGINE.resolveFieldByKey(productConfig.paymentTermKey, { values: appState.mainProduct.values }) || '0', 10);
     }
     
     let targetAge = parseInt(document.getElementById('target-age-input')?.value, 10) || 0;
@@ -931,16 +979,20 @@ function buildPart1RowsData(ctx) {
                 let stbh = 0, prodName = '', years = 0, stbhDisplay = '—';
                 const isWaiver = prodConfig.category === 'waiver';
 
-                if(isWaiver){
+                if (isWaiver) {
                     const waiverData = waiverPremiums[rid];
                     stbh = waiverData.stbhBase;
                     prodName = prodConfig.name;
-                    years = prodConfig.getWaiverTerm(p, mainPerson, targetAge);
+                    const resolverKey = prodConfig.waiverTermKey;
+                    const resolverFunc = resolverKey && appState.context.registries.CALC_REGISTRY.waiverResolvers[resolverKey];
+                    if (resolverFunc) {
+                        years = resolverFunc({ waiverHolder: p, mainInsured: mainPerson, targetAge, productConfig: prodConfig });
+                    }
                 } else {
                     const maxA = riderMaxAge(rid);
                     years = Math.max(0, Math.min(maxA - p.age, targetAge - mainAge) + 1);
-                    stbh = prodConfig.getStbh ? prodConfig.getStbh(p.supplements) : (p.supplements[rid].stbh || 0);
-                    prodName = prodConfig.getDisplayName ? prodConfig.getDisplayName(p.supplements) : getProductLabel(rid);
+                    stbh = resolveRiderStbh(rid, p);
+                    prodName = resolveRiderDisplayName(rid, p);
                 }
                 
                 stbhDisplay = stbh ? formatCurrency(stbh) : '—';
@@ -958,7 +1010,7 @@ function buildPart1RowsData(ctx) {
 }
 
 function buildPart2ScheduleRows(ctx) {
-    const { persons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, waiverPremiums, appState } = ctx;
+    const { persons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, waiverPremiums, appState } = ctx;
     const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
     const rows = [];
     const baseMainAnnual = appState?.fees?.baseMain || 0;
@@ -1017,7 +1069,9 @@ function buildPart2ScheduleRows(ctx) {
             if (fixedWaiverPremiums[p.id]) {
                 Object.entries(fixedWaiverPremiums[p.id]).forEach(([waiverId, premium]) => {
                     const wConfig = PRODUCT_CATALOG[waiverId];
-                    if (wConfig && wConfig.isStillEligible && wConfig.isStillEligible(attained)) {
+                    const eligibilityKey = wConfig?.waiverEligibilityKey;
+                    const resolverFunc = eligibilityKey && appState.context.registries.CALC_REGISTRY.waiverResolvers[eligibilityKey];
+                    if (resolverFunc && resolverFunc({ attainedAge: attained, productConfig: wConfig })) {
                         addRider(premium);
                     }
                 });
@@ -1199,16 +1253,11 @@ function bm_findSchema(productKey) {
     );
 }
 
-const defaultGetBenefitMatrixColumnData = (rid, suppData, person) => {
-    const prodConfig = PRODUCT_CATALOG[rid];
-    const stbh = prodConfig?.getStbh ? prodConfig.getStbh(suppData) : (suppData[rid]?.stbh || 0);
-    return { productKey: rid, sumAssured: stbh, persons: [person] };
-};
-
 function bm_collectColumns(summaryData) {
     const colsBySchema = {};
     const persons = summaryData.persons || [];
     const mainKey = summaryData.productKey;
+    const { UI_FUNCTIONS } = appState.context.registries;
     
     const mainConfig = PRODUCT_CATALOG[mainKey];
     if (mainConfig?.packageConfig?.addBenefitMatrixFrom) {
@@ -1246,9 +1295,11 @@ function bm_collectColumns(summaryData) {
             colsBySchema[schema.key] = colsBySchema[schema.key] || [];
             
             const prodConfig = PRODUCT_CATALOG[rid];
-            const colDataBase = prodConfig.getBenefitMatrixColumnData 
-                ? prodConfig.getBenefitMatrixColumnData(supp, p) 
-                : defaultGetBenefitMatrixColumnData(rid, supp, p);
+            const dataForKey = supp[rid];
+
+            const colDataBase = prodConfig.columnDataKey
+                ? UI_FUNCTIONS.bmColumnData[prodConfig.columnDataKey]({ productKey: rid, person: p, data: dataForKey, state: appState })
+                : { productKey: rid, sumAssured: (dataForKey?.stbh || 0), persons: [p] };
 
             const sig = schema.getGroupingSignature(colDataBase);
             let existingCol = colsBySchema[schema.key].find(c => c.sig === sig);
@@ -1274,10 +1325,7 @@ function bm_renderSchemaTables(schemaKey, columns) {
     let rows = [];
     schema.benefits.forEach(benef => {
         if (benef.headerCategory) {
-            let needed = false;
-            if (benef.headerCategory) {
-                needed = columns.some(c => c.flags?.[benef.headerCategory]);
-            }
+            let needed = columns.some(c => c.flags?.[benef.headerCategory]);
             if (needed) rows.push({ isHeader: true, benef, colspan: 1 + columns.length });
             return;
         }
@@ -1290,18 +1338,19 @@ function bm_renderSchemaTables(schemaKey, columns) {
             }
             
             let displayValue = '', singleValue = 0;
-            if (benef.valueType === 'number') {
-                let raw = 0;
-                if(benef.compute) raw = benef.compute(col.sumAssured);
-                else if(benef.computeDaily) raw = benef.computeDaily(col.daily);
-                else if(benef.computeProg) raw = benef.computeProg(BM_SCL_PROGRAMS[col.program]);
-                if (benef.cap && raw > benef.cap) raw = benef.cap;
-                singleValue = roundDownTo1000(raw);
-                displayValue = singleValue ? formatCurrency(singleValue * (benef.multiClaim || 1)) : '';
-            } else {
-                if (benef.computeRange) displayValue = benef.computeRange(col.sumAssured);
-                else if (benef.computeProg) displayValue = benef.computeProg(BM_SCL_PROGRAMS[col.program]);
-                else displayValue = benef.text || '';
+            const formulaKey = benef.formulaKey;
+            const formulaFunc = formulaKey && appState.context.registries.UI_FUNCTIONS.bmFormulas[formulaKey];
+            
+            if (formulaFunc) {
+                const raw = formulaFunc(col, benef.params || {});
+                if (benef.valueType === 'number') {
+                    singleValue = roundDownTo1000(raw);
+                    displayValue = singleValue ? formatCurrency(singleValue * (benef.multiClaim || 1)) : '';
+                } else {
+                    displayValue = raw;
+                }
+            } else if (benef.valueType === 'text') {
+                displayValue = benef.text || '';
             }
 
             if (displayValue) anyVisible = true;

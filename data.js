@@ -1,4 +1,5 @@
 
+
 // =======================================================================
 // ===== CÁC BẢNG DỮ LIỆU THÔ (RAW DATA TABLES)
 // =======================================================================
@@ -265,18 +266,6 @@ export const investment_data = {
 // ===== DỮ LIỆU CHO BẢNG TÓM TẮT QUYỀN LỢI (BENEFIT MATRIX)
 // ===================================================================================
 
-// Helpers used internally by the schemas below. Not exported.
-function bm_fmt(n){
-  if (n==null || n==='') return '';
-  const x=Number(n);
-  if(!isFinite(x)) return '';
-  return x.toLocaleString('vi-VN');
-}
-function bm_roundToThousand(x){
-  if(!isFinite(x)) return 0;
-  return Math.round(x/1000)*1000;
-}
-
 // Data map for Health SCL programs
 export const BM_SCL_PROGRAMS = {
   co_ban: {
@@ -360,13 +349,13 @@ export const BENEFIT_MATRIX_SCHEMAS = [
         labelBase:'Quyền lợi bảo hiểm tử vong',
         formulaLabel:'125% STBH',
         valueType:'number',
-        compute:(sa)=>sa*1.25
+        formulaKey: 'percentOfSa', params: { percent: 1.25 }
       },
       { id:'abuv_tpd',
         labelBase:'Quyền lợi bảo hiểm tàn tật toàn bộ và vĩnh viễn',
         formulaLabel:'100% STBH',
         valueType:'number',
-        compute:(sa)=>sa
+        formulaKey: 'percentOfSa', params: { percent: 1.0 }
       }
     ]
   },
@@ -379,11 +368,11 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     getGroupingSignature: (col) => `kba|${col.sumAssured}`,
     getColumnLabel: (col) => col.persons.map(p => p.name).join(', '),
     benefits:[
-      { id:'kba_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
-      { id:'kba_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
-      { id:'kba_tangcuong', labelBase:'Gia tăng bảo vệ mỗi năm 5% từ năm thứ 2 đến năm thứ 11', formulaLabel:'Tối đa 50% STBH', valueType:'number', compute:(sa)=>sa*0.50},      
-      { id:'kba_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'tối đa 30% STBH', valueType:'number', minAge:18, compute:(sa)=>sa*0.30 },
-      { id:'kba_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', compute:(sa)=>sa*0.50, cap:500000000 }
+      { id:'kba_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', formulaKey: 'percentOfSa', params: { percent: 1.0 } },
+      { id:'kba_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.1, cap: 200000000 } },
+      { id:'kba_tangcuong', labelBase:'Gia tăng bảo vệ mỗi năm 5% từ năm thứ 2 đến năm thứ 11', formulaLabel:'Tối đa 50% STBH', valueType:'number', formulaKey: 'percentOfSa', params: { percent: 0.5 } },      
+      { id:'kba_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'tối đa 30% STBH', valueType:'number', minAge:18, formulaKey: 'percentOfSa', params: { percent: 0.3 } },
+      { id:'kba_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.5, cap: 500000000 } }
     ]
   },
   {
@@ -395,10 +384,10 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     getGroupingSignature: (col) => `vtl|${col.sumAssured}`,
     getColumnLabel: (col) => col.persons.map(p => p.name).join(', '),
     benefits:[
-      { id:'vtl_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
-      { id:'vtl_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
-      { id:'vtl_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'Tối đa 30% STBH', valueType:'number', minAge:18, compute:(sa)=>sa*0.30 },
-      { id:'vtl_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', compute:(sa)=>sa*0.50, cap:500000000 }
+      { id:'vtl_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', formulaKey: 'percentOfSa', params: { percent: 1.0 } },
+      { id:'vtl_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.1, cap: 200000000 } },
+      { id:'vtl_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'Tối đa 30% STBH', valueType:'number', minAge:18, formulaKey: 'percentOfSa', params: { percent: 0.3 } },
+      { id:'vtl_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.5, cap: 500000000 } }
     ]
   },
   {
@@ -411,10 +400,10 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     getColumnLabel: (col) => col.persons.map(p => p.name).join(', '),
     productKeys:['PUL_TRON_DOI','PUL_5NAM','PUL_15NAM'],
     benefits:[
-      { id:'pul_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', compute:(sa)=>sa },
-      { id:'pul_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', compute:(sa)=>sa*0.10, cap:200000000 },
-      { id:'pul_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'Tối đa 20% STBH', valueType:'number', minAge:18, compute:(sa)=>sa*0.20 },
-      { id:'pul_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', compute:(sa)=>sa*0.50, cap:500000000 },
+      { id:'pul_life', labelBase:'Quyền lợi sinh mệnh', formulaLabel:'100% STBH', valueType:'number', formulaKey: 'percentOfSa', params: { percent: 1.0 } },
+      { id:'pul_thyroid', labelBase:'TTTBVV do ung thư tuyến giáp - giai đoạn sớm', formulaLabel:'10% STBH (tối đa 200 triệu)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.1, cap: 200000000 } },
+      { id:'pul_vitality', labelBase:'Thưởng gia tăng bảo vệ AIA Vitality', formulaLabel:'Tối đa 20% STBH', valueType:'number', minAge:18, formulaKey: 'percentOfSa', params: { percent: 0.2 } },
+      { id:'pul_no_underw', labelBase:'Tăng số tiền bảo hiểm không cần thẩm định', formulaLabel:'Tối đa 50% STBH (tối đa 500 triệu)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.5, cap: 500000000 } },
       { id:'pul_commit_5', labelBase:'Cam kết bảo vệ', formulaLabel:'', valueType:'text', productCond:'PUL_5NAM', text:'Đóng đủ phí tối thiểu 5 năm - Cam kết bảo vệ tối thiểu 30 năm' },
       { id:'pul_commit_15', labelBase:'Cam kết bảo vệ', formulaLabel:'', valueType:'text', productCond:'PUL_15NAM', text:'Đóng đủ phí tối thiểu 15 năm - Cam kết bảo vệ tối thiểu 30 năm' }
     ]
@@ -440,10 +429,10 @@ export const BENEFIT_MATRIX_SCHEMAS = [
         return `${names} - ${programLabel}${scopeLabel}${optionsLabel}`;
     },
     benefits:[
-      { id:'scl_core', labelBase:'Quyền lợi chính - STBH năm', formulaLabel:'', valueType:'number', computeProg:(m)=>m.core },
-      { id:'scl_double', labelBase:'Nhân đôi bảo vệ khi điều trị tại Cơ sở y tế công lập', formulaLabel:'', valueType:'number', computeProg:(m)=>m.double },
+      { id:'scl_core', labelBase:'Quyền lợi chính - STBH năm', formulaLabel:'', valueType:'number', formulaKey: 'fromProg', params: { field: 'core' } },
+      { id:'scl_double', labelBase:'Nhân đôi bảo vệ khi điều trị tại Cơ sở y tế công lập', formulaLabel:'', valueType:'number', formulaKey: 'fromProg', params: { field: 'double' } },
       { id:'scl_wellness', labelBase:'Quyền lợi sống khoẻ - AIA Vitality', formulaLabel:'', valueType:'text', minAge:18, text:'Tối đa 60% trung bình phí 3 năm' },
-      { id:'scl_room', labelBase:'Phòng & Giường bệnh (tối đa 100 ngày/năm)', formulaLabel:'', valueType:'text', computeProg:(m)=> bm_fmt(m.room)+'/ngày' },
+      { id:'scl_room', labelBase:'Phòng & Giường bệnh (tối đa 100 ngày/năm)', formulaLabel:'', valueType:'text', formulaKey: 'fromProgFmt', params: { field: 'room', suffix: '/ngày' } },
       { id:'scl_icu', labelBase:'Phòng Chăm sóc đặc biệt (tối đa 30 ngày/năm)', formulaLabel:'', valueType:'text', text:'Theo Chi phí y tế' },
       { id:'scl_surgery', labelBase:'Phẫu thuật', formulaLabel:'', valueType:'text', text:'Theo Chi phí y tế' },
       { id:'scl_pre', labelBase:'Điều trị trước nhập viện (tối đa 30 ngày trước khi nhập viện)', formulaLabel:'', valueType:'text', text:'Theo Chi phí y tế' },
@@ -453,13 +442,13 @@ export const BENEFIT_MATRIX_SCHEMAS = [
       { id:'scl_transplant_donor', labelBase:'Ghép tạng (người hiến tạng)', formulaLabel:'', valueType:'text', text:'50% chi phí phẫu thuật' },
       { id:'scl_cancer', labelBase:'Điều trị ung thư: gồm điều trị nội trú, ngoại trú và trong ngày', formulaLabel:'', valueType:'text', text:'Theo Chi phí y tế' },
       { id:'scl_day_surgery', labelBase:'Phẫu thuật/Thủ thuật trong ngày', formulaLabel:'', valueType:'text', text:'Theo Chi phí y tế' },
-      { id:'scl_common', labelBase:'Điều trị trong ngày cho các bệnh: Viêm phế quản; Viêm phổi; Sốt xuất huyết; Cúm (mỗi bệnh/mỗi Năm hợp đồng)', formulaLabel:'', valueType:'text', computeProg:(m)=> m.commonDisease? bm_fmt(m.commonDisease):'Theo Chi phí y tế' },
-      { id:'scl_dialysis', labelBase:'Lọc máu', formulaLabel:'', valueType:'text', computeProg:(m)=> m.dialysis? bm_fmt(m.dialysis):'Theo Chi phí y tế' },
+      { id:'scl_common', labelBase:'Điều trị trong ngày cho các bệnh: Viêm phế quản; Viêm phổi; Sốt xuất huyết; Cúm (mỗi bệnh/mỗi Năm hợp đồng)', formulaLabel:'', valueType:'text', formulaKey: 'fromProgFmtCommonDisease', params: { field: 'commonDisease' } },
+      { id:'scl_dialysis', labelBase:'Lọc máu', formulaLabel:'', valueType:'text', formulaKey: 'fromProgFmtCommonDisease', params: { field: 'dialysis' } },
       { id:'scl_maternity_header', labelBase:'Quyền lợi Thai sản', headerCategory:'maternity' },
       { id:'scl_maternity_ratio', labelBase:'Tỷ lệ chi trả thai sản', formulaLabel:'', valueType:'text', maternityOnly:true, text:'Năm 1: 50% | Năm 2: 80% | Từ năm 3: 100%' },
-      { id:'scl_mat_sum', labelBase:'Hạn mức', formulaLabel:'', valueType:'text', maternityOnly:true, computeProg:(m)=> m.maternitySum? bm_fmt(m.maternitySum):'' },
-      { id:'scl_mat_check', labelBase:'Khám thai (tối đa 8 lần/năm)', formulaLabel:'', valueType:'text', maternityOnly:true, computeProg:(m)=> m.maternityCheck? bm_fmt(m.maternityCheck)+'/lần':'' },
-      { id:'scl_mat_room', labelBase:'Phòng & Giường (tối đa 100 ngày/năm)', formulaLabel:'', valueType:'text', maternityOnly:true, computeProg:(m)=> m.maternityRoom? bm_fmt(m.maternityRoom)+'/ngày':'' },
+      { id:'scl_mat_sum', labelBase:'Hạn mức', formulaLabel:'', valueType:'text', maternityOnly:true, formulaKey: 'fromProgFmt', params: { field: 'maternitySum' } },
+      { id:'scl_mat_check', labelBase:'Khám thai (tối đa 8 lần/năm)', formulaLabel:'', valueType:'text', maternityOnly:true, formulaKey: 'fromProgFmt', params: { field: 'maternityCheck', suffix: '/lần' } },
+      { id:'scl_mat_room', labelBase:'Phòng & Giường (tối đa 100 ngày/năm)', formulaLabel:'', valueType:'text', maternityOnly:true, formulaKey: 'fromProgFmt', params: { field: 'maternityRoom', suffix: '/ngày' } },
       { id:'scl_mat_icu', labelBase:'Phòng chăm sóc đặc biệt (tối đa 30 ngày/năm)', formulaLabel:'', valueType:'text', maternityOnly:true, text:'Theo Chi phí y tế' },
       { id:'scl_mat_birth_norm', labelBase:'Sinh thường', formulaLabel:'', valueType:'text', maternityOnly:true, text:'Theo Chi phí y tế' },
       { id:'scl_mat_birth_cs', labelBase:'Sinh mổ theo chỉ định', formulaLabel:'', valueType:'text', maternityOnly:true, text:'Theo Chi phí y tế' },
@@ -467,16 +456,12 @@ export const BENEFIT_MATRIX_SCHEMAS = [
       { id:'scl_mat_newborn', labelBase:'Chăm sóc trẻ sơ sinh (tối đa 7 ngày sau sinh)', formulaLabel:'', valueType:'text', maternityOnly:true, text:'Theo Chi phí y tế' },
       { id:'scl_out_header', labelBase:'Quyền lợi Ngoại trú', headerCategory:'outpatient' },
       { id:'scl_out_title', labelBase:'Tỷ lệ chi trả', formulaLabel:'', valueType:'text', outpatientOnly:true, text:'80%' },
-      { id:'scl_out_limit', labelBase:'Hạn mức ', formulaLabel:'', valueType:'text', outpatientOnly:true,
-        computeProg:(m)=> m.outLimit ? bm_fmt(m.outLimit) : '' },
-      { id:'scl_out_visit', labelBase:'Mỗi lần khám', formulaLabel:'', valueType:'text', outpatientOnly:true,
-        computeProg:(m)=> m.outVisit ? bm_fmt(m.outVisit) : '' },
-      { id:'scl_out_mental', labelBase:'Tư vấn / Điều trị sức khoẻ tâm thần', formulaLabel:'', valueType:'text', outpatientOnly:true,
-        computeProg:(m)=> m.outMental ? bm_fmt(m.outMental) : 'Không áp dụng' },
+      { id:'scl_out_limit', labelBase:'Hạn mức ', formulaLabel:'', valueType:'text', outpatientOnly:true, formulaKey: 'fromProgFmt', params: { field: 'outLimit' } },
+      { id:'scl_out_visit', labelBase:'Mỗi lần khám', formulaLabel:'', valueType:'text', outpatientOnly:true, formulaKey: 'fromProgFmt', params: { field: 'outVisit' } },
+      { id:'scl_out_mental', labelBase:'Tư vấn / Điều trị sức khoẻ tâm thần', formulaLabel:'', valueType:'text', outpatientOnly:true, formulaKey: 'fromProgWithFallbackText', params: { field: 'outMental' } },
       { id:'scl_dental_header', labelBase:'Quyền lợi Nha khoa', headerCategory:'dental' },
       { id:'scl_dental_title', labelBase:'Tỷ lệ chi trả', formulaLabel:'', valueType:'text', dentalOnly:true, text:'80%' },
-      { id:'scl_dental_limit', labelBase:'Hạn mức năm', formulaLabel:'', valueType:'text', dentalOnly:true,
-        computeProg:(m)=> m.dentalLimit ? bm_fmt(m.dentalLimit) : '' }
+      { id:'scl_dental_limit', labelBase:'Hạn mức năm', formulaLabel:'', valueType:'text', dentalOnly:true, formulaKey: 'fromProgFmt', params: { field: 'dentalLimit' } }
     ]
   },
   {
@@ -488,15 +473,15 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     getGroupingSignature: (col) => `bhn|${col.sumAssured}|${col.flags.child}|${col.flags.elder}`,
     getColumnLabel: (col) => {
         const names = col.persons.map(p => p.name).join(', ');
-        return `${names} - ${bm_fmt(col.sumAssured)}`;
+        return `${names} - ${col.sumAssured.toLocaleString('vi-VN')}`;
     },
     benefits:[
-      { id:'bhn_early', labelBase:'BHN giai đoạn sớm', formulaLabel:'30% STBH (tối đa 4 lần, tối đa 500 tr/ lần)', valueType:'number', compute:(sa)=>sa*0.30, cap:500000000, multiClaim: 4 },
-      { id:'bhn_mid', labelBase:'BHN giai đoạn giữa', formulaLabel:'60% STBH (tối đa 2 lần, tối đa 1 tỷ/ lần)', valueType:'number', compute:(sa)=>sa*0.60, cap:1000000000, multiClaim: 2 },
-      { id:'bhn_late', labelBase:'BHN giai đoạn cuối', formulaLabel:'100% STBH (1 lần)', valueType:'number', compute:(sa)=>sa },
-      { id:'bhn_child', labelBase:'BHN ở trẻ em', formulaLabel:'60% STBH (1 lần, tối đa 500 tr, dưới 21 tuổi)', valueType:'number', compute:(sa)=>sa*0.60, cap:500000000, childOnly:true },
-      { id:'bhn_elder', labelBase:'BHN người lớn tuổi', formulaLabel:'20% STBH (1 lần, tối đa 500 tr, từ 55 tuổi)', valueType:'number', compute:(sa)=>sa*0.20, cap:500000000, elderOnly: true},
-      { id:'bhn_special', labelBase:'Quyền lợi đặc biệt', formulaLabel:'30% STBH (1 lần, tối đa 500tr)', valueType:'number', compute:(sa)=>sa*0.30, cap:500000000 },
+      { id:'bhn_early', labelBase:'BHN giai đoạn sớm', formulaLabel:'30% STBH (tối đa 4 lần, tối đa 500 tr/ lần)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.3, cap: 500000000 }, multiClaim: 4 },
+      { id:'bhn_mid', labelBase:'BHN giai đoạn giữa', formulaLabel:'60% STBH (tối đa 2 lần, tối đa 1 tỷ/ lần)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.6, cap: 1000000000 }, multiClaim: 2 },
+      { id:'bhn_late', labelBase:'BHN giai đoạn cuối', formulaLabel:'100% STBH (1 lần)', valueType:'number', formulaKey: 'percentOfSa', params: { percent: 1.0 } },
+      { id:'bhn_child', labelBase:'BHN ở trẻ em', formulaLabel:'60% STBH (1 lần, tối đa 500 tr, dưới 21 tuổi)', valueType:'number', childOnly:true, formulaKey: 'percentOfSaWithCap', params: { percent: 0.6, cap: 500000000 } },
+      { id:'bhn_elder', labelBase:'BHN người lớn tuổi', formulaLabel:'20% STBH (1 lần, tối đa 500 tr, từ 55 tuổi)', valueType:'number', elderOnly: true, formulaKey: 'percentOfSaWithCap', params: { percent: 0.2, cap: 500000000 } },
+      { id:'bhn_special', labelBase:'Quyền lợi đặc biệt', formulaLabel:'30% STBH (1 lần, tối đa 500tr)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.3, cap: 500000000 } },
       { id:'bhn_wellness', labelBase:'Quyền lợi sống khoẻ AIA Vitality', formulaLabel:'', valueType:'text', minAge:18, text:'Tối đa 30% trung bình phí 5 năm' }
     ]
   },
@@ -509,11 +494,11 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     getGroupingSignature: (col) => `hs|${col.sumAssured}`,
     getColumnLabel: (col) => {
         const names = col.persons.map(p => p.name).join(', ');
-        return `${names} - ${bm_fmt(col.sumAssured)}/ngày`;
+        return `${names} - ${col.sumAssured.toLocaleString('vi-VN')}/ngày`;
     },
     benefits:[
-      { id:'hs_daily', labelBase:'Trợ cấp nằm viện (tối đa 365 ngày/ đợt nằm viện)', formulaLabel:'', valueType:'number', computeDaily:(d)=>d },
-      { id:'hs_icu', labelBase:'Trợ cấp ICU (tối đa 25 ngày/ đợt nằm viện)', formulaLabel:'', valueType:'number', computeDaily:(d)=>d*2 }
+      { id:'hs_daily', labelBase:'Trợ cấp nằm viện (tối đa 365 ngày/ đợt nằm viện)', formulaLabel:'', valueType:'number', formulaKey: 'daily' },
+      { id:'hs_icu', labelBase:'Trợ cấp ICU (tối đa 25 ngày/ đợt nằm viện)', formulaLabel:'', valueType:'number', formulaKey: 'dailyX2' }
     ]
   },
   {
@@ -525,16 +510,11 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     getGroupingSignature: (col) => `acc|${col.sumAssured}`,
     getColumnLabel: (col) => {
         const names = col.persons.map(p => p.name).join(', ');
-        return `${names} - ${bm_fmt(col.sumAssured)}`;
+        return `${names} - ${col.sumAssured.toLocaleString('vi-VN')}`;
     },
     benefits:[
       { id:'acc_injury', labelBase:'Tổn thương do tai nạn', formulaLabel:'', valueType:'text',
-        computeRange:(sa)=>{
-          if(!sa) return '';
-          const min = bm_roundToThousand(sa*0.01);
-          const max = bm_roundToThousand(sa*2.00);
-          return `Từ ${bm_fmt(min)} đến ${bm_fmt(max)}`;
-        }
+        formulaKey: 'rangeFromSa', params: { minPercent: 0.01, maxPercent: 2.00 }
       }
     ]
   }

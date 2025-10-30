@@ -7,6 +7,8 @@
  *   mà logic.js sẽ đọc để tự động render UI, áp dụng quy tắc và tính phí.
  */
 import { product_data, investment_data, BM_SCL_PROGRAMS } from './data.js';
+import { RULE_ENGINE } from './registries/ruleEngine.js';
+
 
 function formatCurrency(value) {
     const num = Number(value) || 0;
@@ -53,7 +55,7 @@ export const PRODUCT_CATALOG = {
         slug: 'khoe-tron-ven',
         group: 'PUL',
         benefitMatrixKey: 'PUL_FAMILY',
-        getPaymentTerm: (values) => values['payment-term'],
+        paymentTermKey: 'from_control:payment-term',
         targetAgeConfig: {
             isEditable: true,
             valueKey: 'fixed_99',
@@ -111,7 +113,7 @@ export const PRODUCT_CATALOG = {
         slug: 'khoe-tron-ven',
         group: 'PUL',
         benefitMatrixKey: 'PUL_FAMILY',
-        getPaymentTerm: (values) => values['payment-term'],
+        paymentTermKey: 'from_control:payment-term',
         targetAgeConfig: {
             isEditable: true,
             valueKey: 'fixed_99',
@@ -169,7 +171,7 @@ export const PRODUCT_CATALOG = {
         slug: 'khoe-tron-ven',
         group: 'PUL',
         benefitMatrixKey: 'PUL_FAMILY',
-        getPaymentTerm: (values) => values['payment-term'],
+        paymentTermKey: 'from_control:payment-term',
         targetAgeConfig: {
             isEditable: true,
             valueKey: 'fixed_99',
@@ -227,7 +229,7 @@ export const PRODUCT_CATALOG = {
         slug: 'khoe-binh-an',
         group: 'MUL',
         benefitMatrixKey: 'KHOE_BINH_AN',
-        getPaymentTerm: (values) => values['payment-term'],
+        paymentTermKey: 'from_control:payment-term',
         targetAgeConfig: {
             isEditable: true,
             valueKey: 'fixed_99',
@@ -278,7 +280,7 @@ export const PRODUCT_CATALOG = {
         slug: 'vung-tuong-lai',
         group: 'MUL',
         benefitMatrixKey: 'VUNG_TUONG_LAI',
-        getPaymentTerm: (values) => values['payment-term'],
+        paymentTermKey: 'from_control:payment-term',
         targetAgeConfig: {
             isEditable: true,
             valueKey: 'fixed_99',
@@ -329,7 +331,7 @@ export const PRODUCT_CATALOG = {
         slug: 'an-binh-uu-viet',
         group: 'TRADITIONAL',
         benefitMatrixKey: 'AN_BINH_UU_VIET',
-        getPaymentTerm: (values) => values['abuv-term'],
+        paymentTermKey: 'from_control:abuv-term',
         targetAgeConfig: {
             isEditable: false,
             valueKey: 'agePlusTerm',
@@ -374,7 +376,7 @@ export const PRODUCT_CATALOG = {
         name: 'Trọn tâm an',
         slug: 'tron-tam-an',
         group: 'PACKAGE',
-        getPaymentTerm: (values) => PRODUCT_CATALOG['TRON_TAM_AN'].packageConfig.fixedValues.paymentTerm,
+        paymentTermKey: 'fixed_value:10',
         targetAgeConfig: {
             isEditable: false,
             valueKey: 'agePlusFixedTerm',
@@ -422,17 +424,9 @@ export const PRODUCT_CATALOG = {
         name: 'Sức khỏe Bùng Gia Lực',
         slug: 'bung-gia-luc',
         benefitMatrixKey: 'HEALTH_SCL',
-        getStbh: (supplementsData) => {
-            const scl = supplementsData?.health_scl;
-            if (!scl || !scl.program) return 0;
-            return PRODUCT_CATALOG.health_scl.rules.stbhByProgram[scl.program] || 0;
-        },
-        getBenefitMatrixColumnData: (suppData, person) => {
-            const { program, outpatient, dental, scope } = suppData.health_scl;
-            const isFemale = (p) => (p.gender || '').toLowerCase() === 'nữ';
-            const maternity = BM_SCL_PROGRAMS[program]?.maternity && isFemale(person);
-            return { productKey: 'health_scl', program, scope, flags: { outpatient, dental, maternity, scope }, persons: [person] };
-        },
+        displayNameKey: 'scl_dynamic_display',
+        stbhKey: 'scl_stbh_from_program',
+        columnDataKey: 'scl_column_data',
         ui: {
             controls: [
                 { id: 'health_scl-program', type: 'select', label: 'Quyền lợi chính',
@@ -475,12 +469,8 @@ export const PRODUCT_CATALOG = {
         name: 'Bệnh Hiểm Nghèo 2.0',
         slug: 'bhn',
         benefitMatrixKey: 'BHN_2_0',
-        getStbh: (supplementsData) => supplementsData?.bhn?.stbh || 0,
-        getBenefitMatrixColumnData: (suppData, person) => {
-            const child = person.age < 21;
-            const elder = person.age >= 55;
-            return { productKey: 'bhn', sumAssured: suppData.bhn.stbh, flags: { child, elder }, persons: [person] };
-        },
+        stbhKey: 'from_control:stbh',
+        columnDataKey: 'bhn_column_data',
         ui: {
             controls: [ { id: 'bhn-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 200.000.000', hintText: 'STBH từ 200 triệu đến 5 tỷ.',
                           validateKey: 'rider_stbh_range',
@@ -502,7 +492,8 @@ export const PRODUCT_CATALOG = {
         name: 'Bảo hiểm Tai nạn',
         slug: 'accident',
         benefitMatrixKey: 'ACCIDENT',
-        getStbh: (supplementsData) => supplementsData?.accident?.stbh || 0,
+        stbhKey: 'from_control:stbh',
+        columnDataKey: 'default_stbh',
         ui: {
             controls: [ { id: 'accident-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'VD: 500.000.000', hintText: 'STBH từ 10 triệu đến 8 tỷ.',
                          validateKey: 'rider_stbh_range',
@@ -525,14 +516,13 @@ export const PRODUCT_CATALOG = {
         slug: 'hospital_support',
         category: 'hospital_support',
         benefitMatrixKey: 'HOSPITAL_SUPPORT',
-        getStbh: (supplementsData) => supplementsData?.hospital_support?.stbh || 0,
-        getBenefitMatrixColumnData: (suppData, person) => {
-            return { productKey: 'hospital_support', sumAssured: suppData.hospital_support.stbh, daily: suppData.hospital_support.stbh, persons: [person] };
-        },
+        stbhKey: 'from_control:stbh',
+        columnDataKey: 'hospital_support_column_data',
         ui: {
             controls: [
                 { id: 'hospital_support-stbh', type: 'currencyInput', label: 'Số tiền bảo hiểm (STBH)', placeholder: 'Bội số 100.000 (đ/ngày)',
                   validateKey: 'hospital_support_stbh',
+                  valueTransformerKey: 'roundToHospitalSupportMultiple'
                 }
             ],
             onRender: 'hospital_support_hint'
@@ -552,6 +542,8 @@ export const PRODUCT_CATALOG = {
         name: 'Miễn đóng phí 3.0',
         slug: 'mdp3',
         category: 'waiver', // Đánh dấu đây là sản phẩm Miễn đóng phí
+        waiverTermKey: 'getTerm_mdp3',
+        waiverEligibilityKey: 'isEligible_mdp3',
         ui: {
             controls: [] // Không cần control riêng vì được quản lý bởi UI chung của waiver
         },
@@ -566,17 +558,6 @@ export const PRODUCT_CATALOG = {
             includeMainBasePremium: true,
             includeAllRiders: true,
             excludeRidersOfWaivedPerson: true,
-        },
-        getWaiverTerm: (waiverHolder, mainInsured, illustrationTargetAge) => {
-            const eligibilityRule = PRODUCT_CATALOG.mdp3.rules.eligibility.find(r => r.type === 'age');
-            if (!eligibilityRule) return 0;
-            const yearsLeftForWaiverHolder = eligibilityRule.max - waiverHolder.age + 1;
-            const yearsLeftForIllustration = illustrationTargetAge - mainInsured.age + 1;
-            return Math.max(0, Math.min(yearsLeftForWaiverHolder, yearsLeftForIllustration));
-        },
-        isStillEligible: (age) => {
-            const eligibilityRule = PRODUCT_CATALOG.mdp3.rules.eligibility.find(r => r.type === 'age');
-            return eligibilityRule && age <= eligibilityRule.max;
         },
         calculation: {
             calculateKey: 'wop_mdp3',
@@ -697,7 +678,7 @@ function calculateGenericAccountValueProjection(productConfig, args, helpers) {
     const { gender, age: initialAge } = mainPerson;
     const { key: productKey, values } = mainProduct;
     const stbhInitial = values['main-stbh'] || 0;
-    const paymentTerm = productConfig.getPaymentTerm(values) || 0;
+    const paymentTerm = RULE_ENGINE.resolveFieldByKey(productConfig.paymentTermKey, { values }) || 0;
     
     const { initial_fees, guaranteed_interest_rates, admin_fees } = investment_data;
 
