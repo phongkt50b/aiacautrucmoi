@@ -1,6 +1,5 @@
 
 
-
 import { PRODUCT_CATALOG, GLOBAL_CONFIG } from '../structure.js';
 import { TARGET_AGE_REGISTRY } from '../registries/targetAge.js';
 import { clearAllErrors, setFieldError, clearFieldError, collectAllErrors } from '../utils.js';
@@ -86,7 +85,8 @@ function validateMainProduct(state) {
     let ok = true;
     productConfig.ui.controls.forEach(controlConfig => {
         const el = document.getElementById(controlConfig.id);
-        const validateFunc = controlConfig.validate;
+        const validateKey = controlConfig.validateKey;
+        const validateFunc = validateKey && state.context.registries.UI_FUNCTIONS.validate[validateKey];
         if (!el || !validateFunc) return;
         
         const errorMessage = validateFunc({
@@ -131,7 +131,8 @@ function validateSupplementaryProduct(person, prodId, state) {
     let ok = true;
     prodConfig.ui.controls.forEach(controlConfig => {
         const el = section.querySelector(`#${controlConfig.id}`);
-        const validateFunc = controlConfig.validate;
+        const validateKey = controlConfig.validateKey;
+        const validateFunc = validateKey && state.context.registries.UI_FUNCTIONS.validate[validateKey];
         if (!el || !validateFunc) return;
         
         const errorMessage = validateFunc({
