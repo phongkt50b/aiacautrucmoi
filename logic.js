@@ -1038,7 +1038,7 @@ function buildPart2ScheduleRows(ctx) {
             const addRider = (baseFee) => {
                 if (!baseFee) return;
                 sumBase += baseFee;
-                if (!isAnnual) sumPer += Math.round((baseFee * riderFactor) / periods / 1000) * 1000;
+                if (!isAnnual) sumPer += roundTo1000((baseFee * riderFactor) / periods);
             };
 
             if (p.supplements) {
