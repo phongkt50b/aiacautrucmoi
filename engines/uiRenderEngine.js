@@ -209,7 +209,7 @@ export function renderWaiverSection(state, isMainProductValid) {
         selEl.innerHTML = `<option value="">-- Không áp dụng cho sản phẩm này --</option>`;
     } else {
         const currentSelectedValue = state.waiver.selectedPersonId;
-        let optionsHtml = `<option value="">-- Chọn người --</option>`;
+        let optionsHtml = `<option value="">Không mua miễn đóng phí</option>`;
         state.persons.forEach(p => {
             optionsHtml += `<option value="${p.id}">${p.name} (tuổi ${p.age || "?"})</option>`;
         });
