@@ -433,12 +433,12 @@ export const BENEFIT_MATRIX_SCHEMAS = [
     getColumnLabel: (col) => {
         const names = col.persons.map(p => p.name).join(', ');
         const programLabel = BM_SCL_PROGRAMS[col.program]?.label || '';
-        const scopeLabel = col.flags.scope === 'main_global' ? ' (Toàn cầu)' : '';
+        const scopeLabel = col.flags.scope === 'main_global' ? ' (Toàn cầu' : '(Việt Nam';
         const options = [];
         if (col.flags.outpatient) options.push('Ngoại trú');
         if (col.flags.dental) options.push('Nha khoa');
-        const optionsLabel = options.length ? ` (${options.join(', ')})` : '';
-        return `${names} - ${programLabel}${scopeLabel}${optionsLabel}`;
+        const optionsLabel = options.length ? `, ${options.join(', ')})` : ')';
+        return `${names} - ${programLabel} ${scopeLabel}${optionsLabel}`;
     },
     benefits:[
       { id:'scl_core', labelBase:'Quyền lợi chính - STBH năm', formulaLabel:'', valueType:'number', formulaKey: 'fromProg', params: { field: 'core' } },
