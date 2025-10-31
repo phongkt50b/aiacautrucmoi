@@ -23,6 +23,23 @@ export function formatCurrency(value) {
 export function roundDownTo1000(n) {
     return Math.floor(Number(n || 0) / 1000) * 1000;
 }
+/**
+ * Rounds a number mathematically to the nearest thousand.
+ * @param {number|string} n The number to round.
+ * @returns {number} The rounded number.
+ */
+export function roundTo1000(n) {
+    return Math.round(Number(n || 0) / 1000) * 1000;
+}
+
+/**
+ * Rounds a number up to the nearest thousand.
+ * @param {number|string} n The number to round.
+ * @returns {number} The rounded number.
+ */
+export function roundUpTo1000(n) {
+    return Math.ceil(Number(n || 0) / 1000) * 1000;
+}
 
 /**
  * Parses a formatted currency string (e.g., "1.000.000") back into a number.
