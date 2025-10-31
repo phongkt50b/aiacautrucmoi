@@ -118,6 +118,29 @@ export const UI_FUNCTIONS = {
         } else {
             msgEl.classList.add('hidden');
         }
+      // --- BẮT ĐẦU PHẦN BỔ SUNG ĐỂ HIỂN THỊ PHÍ ---
+        const program = programSelect.value;
+        const ageToUse = customer.age;
+
+        const ageBandIndex = product_data.health_scl_rates.age_bands.findIndex(b => ageToUse >= b.min && ageToUse <= b.max);
+        
+        if (program && ageBandIndex !== -1) {
+            const rates = product_data.health_scl_rates;
+            
+            const outpatientFee = rates.outpatient?.[ageBandIndex]?.[program] || 0;
+            const dentalFee = rates.dental?.[ageBandIndex]?.[program] || 0;
+            
+            const outpatientHintEl = section.querySelector('#scl-outpatient-fee-hint');
+            const dentalHintEl = section.querySelector('#scl-dental-fee-hint');
+            
+            if (outpatientHintEl) {
+                outpatientHintEl.textContent = outpatientFee > 0 ? `+ ${formatCurrency(outpatientFee)}` : '';
+            }
+            if (dentalHintEl) {
+                dentalHintEl.textContent = (dentalFee > 0 && outpatientCb.checked) ? `+ ${formatCurrency(dentalFee)}` : '';
+            }
+        }
+        // --- KẾT THÚC PHẦN BỔ SUNG ---
     },
     hospital_support_hint: ({ section, customer, state }) => {
         const hintEl = section.querySelector('.text-sm');
