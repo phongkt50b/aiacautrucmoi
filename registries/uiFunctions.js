@@ -167,11 +167,11 @@ export const UI_FUNCTIONS = {
   displayName: {
     scl_dynamic_display: ({ data }) => {
         const programLabel = BM_SCL_PROGRAMS[data.program]?.label || '';
-        const scopeLabel = data.scope === 'main_global' ? ' (Toàn cầu)' : '';
+        const scopeLabel = data.scope === 'main_global' ? ' (Toàn cầu' : '(Việt Nam';
         const options = [];
         if (data.outpatient) options.push('Ngoại trú');
         if (data.dental) options.push('Nha khoa');
-        const optionsLabel = options.length ? ` (${options.join(', ')})` : '';
+        const optionsLabel = options.length ? `, ${options.join(', ')})` : ')';
         return `Sức khỏe Bùng Gia Lực - ${programLabel}${scopeLabel}${optionsLabel}`;
     }
   },
