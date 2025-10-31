@@ -44,7 +44,7 @@ function initState() {
         context: {
             product_data,
             helpers: {
-                roundDownTo1000,
+                roundDownTo1000, roundTo1000, roundUpTo1000,
                 formatCurrency
             },
             registries: {
