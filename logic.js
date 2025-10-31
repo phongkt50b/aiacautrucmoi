@@ -945,7 +945,7 @@ function buildPart1RowsData(ctx) {
                 annualEq = perPeriod * periods;
                 diff = annualEq - baseAnnual;
             } else {
-                perPeriod = roundTo1000(baseAnnual / periods);
+                perPeriod = roundUpTo1000(baseAnnual / periods);
                 annualEq = perPeriod * periods;
                 diff = annualEq - baseAnnual;
             }
