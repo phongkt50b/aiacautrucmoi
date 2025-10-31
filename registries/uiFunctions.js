@@ -172,7 +172,7 @@ export const UI_FUNCTIONS = {
         if (data.outpatient) options.push('Ngoại trú');
         if (data.dental) options.push('Nha khoa');
         const optionsLabel = options.length ? `, ${options.join(', ')})` : ')';
-        return `Sức khỏe Bùng Gia Lực - ${programLabel}${scopeLabel}${optionsLabel}`;
+        return `Sức khỏe Bùng Gia Lực - ${programLabel} ${scopeLabel}${optionsLabel}`;
     }
   },
 
