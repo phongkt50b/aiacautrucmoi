@@ -1,6 +1,6 @@
 import { GLOBAL_CONFIG, PRODUCT_CATALOG, VIEWER_CONFIG } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS } from './data.js';
-import { debounce, parseFormattedNumber, formatCurrency, sanitizeHtml, roundDownTo1000, roundTo1000, roundUpTo1000, clearFieldError } from './utils.js';
+import { debounce, parseFormattedNumber, formatCurrency, sanitizeHtml, roundDownTo1000, clearFieldError } from './utils.js';
 
 // Import Engines
 import { calculateAll } from './engines/calculationEngine.js';
@@ -44,7 +44,7 @@ function initState() {
         context: {
             product_data,
             helpers: {
-                roundDownTo1000, roundTo1000, roundUpTo1000,
+                roundDownTo1000,
                 formatCurrency
             },
             registries: {
@@ -223,15 +223,15 @@ function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     breakdownBox.classList.toggle('hidden', periods === 1);
     if(periods === 1) return;
 
-    const perMain = roundUpTo1000(baseMain / periods);
-    const perExtra = roundUpTo1000(extra / periods);
+    const perMain = roundDownTo1000(baseMain / periods);
+    const perExtra = roundDownTo1000(extra / periods);
     
     let perSupp = 0;
     let annualEquivalentTotal = (perMain + perExtra) * periods;
     
     Object.values(appState.fees.byPerson).forEach(personData => {
         Object.values(personData.suppDetails).forEach(annualFee => {
-            const perPeriodFee = roundTo1000((annualFee * factor) / periods);
+            const perPeriodFee = roundDownTo1000((annualFee * factor) / periods);
             perSupp += perPeriodFee;
             annualEquivalentTotal += perPeriodFee * periods;
         });
@@ -898,7 +898,7 @@ function buildSummaryData() {
                 customInterestRate: customRateInput,
                 paymentFrequency: summary.freq,
             },
-            { investment_data, roundTo1000, GLOBAL_CONFIG }
+            { investment_data, roundDownTo1000, GLOBAL_CONFIG }
         );
     }
     
@@ -1344,7 +1344,7 @@ function bm_renderSchemaTables(schemaKey, columns) {
             if (formulaFunc) {
                 const raw = formulaFunc(col, benef.params || {});
                 if (benef.valueType === 'number') {
-                    singleValue = roundTo1000(raw);
+                    singleValue = roundDownTo1000(raw);
                     displayValue = singleValue ? formatCurrency(singleValue * (benef.multiClaim || 1)) : '';
                 } else {
                     displayValue = raw;
@@ -1378,7 +1378,7 @@ function bm_renderSchemaTables(schemaKey, columns) {
         totalRowHtml = `<tr><td style="font-weight: bold;">Tổng quyền lợi</td>${totalCellsSum.map(s => `<td style="text-align: right; font-weight: bold;">${s ? formatCurrency(s) : ''}</td>`).join('')}</tr>`;
     }
 
-    return `<div><h3>${sanitizeHtml(title)}</h3><table><thead><tr><th>Tên quyền lợi</th>${headCols}</tr></thead><tbody>${bodyHtml}${totalRowHtml}</tbody></table></div>`;
+    return `<div><h4>${sanitizeHtml(title)}</h4><table><thead><tr><th>Tên quyền lợi</th>${headCols}</tr></thead><tbody>${bodyHtml}${totalRowHtml}</tbody></table></div>`;
 }
 function getProductLabel(key) {
   return PRODUCT_CATALOG[key]?.name || key || '';
