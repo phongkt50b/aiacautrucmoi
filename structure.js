@@ -430,7 +430,7 @@ export const PRODUCT_CATALOG = {
         ui: {
             controls: [
                 { id: 'health_scl-program', type: 'select', label: 'Quyền lợi chính',
-                  options: [ { value: 'co_ban', label: 'Cơ bản' }, { value: 'nang_cao', label: 'Nâng cao' }, { value: 'toan_dien', label: 'Toàn diện' }, { value: 'hoan_hao', label: 'Hoàn hảo' } ],
+                  options: [ { value: 'co_ban', label: 'Cơ bản - STBH: 100.000.000' }, { value: 'nang_cao', label: 'Nâng cao - STBH: 250.000.000' }, { value: 'toan_dien', label: 'Toàn diện - STBH: 500.000.000' }, { value: 'hoan_hao', label: 'Hoàn hảo - STBH: 1.000.000.000' } ],
                   defaultValue: 'nang_cao'
                 },
                 { id: 'health_scl-scope', type: 'select', label: 'Phạm vi địa lý',
