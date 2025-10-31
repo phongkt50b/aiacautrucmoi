@@ -44,7 +44,7 @@ function initState() {
         context: {
             product_data,
             helpers: {
-                roundDownTo1000,
+                roundDownTo1000, roundTo1000, roundUpTo1000,
                 formatCurrency
             },
             registries: {
@@ -223,15 +223,15 @@ function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     breakdownBox.classList.toggle('hidden', periods === 1);
     if(periods === 1) return;
 
-    const perMain = roundDownTo1000(baseMain / periods);
-    const perExtra = roundDownTo1000(extra / periods);
+    const perMain = roundUpTo1000(baseMain / periods);
+    const perExtra = roundUpTo1000(extra / periods);
     
     let perSupp = 0;
     let annualEquivalentTotal = (perMain + perExtra) * periods;
     
     Object.values(appState.fees.byPerson).forEach(personData => {
         Object.values(personData.suppDetails).forEach(annualFee => {
-            const perPeriodFee = roundDownTo1000((annualFee * factor) / periods);
+            const perPeriodFee = roundTo1000((annualFee * factor) / periods);
             perSupp += perPeriodFee;
             annualEquivalentTotal += perPeriodFee * periods;
         });
@@ -898,7 +898,7 @@ function buildSummaryData() {
                 customInterestRate: customRateInput,
                 paymentFrequency: summary.freq,
             },
-            { investment_data, roundDownTo1000, GLOBAL_CONFIG }
+            { investment_data, roundTo1000, GLOBAL_CONFIG }
         );
     }
     
@@ -1156,6 +1156,10 @@ function buildPart1Section(summaryData) {
     return `${titleHtml}<table><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
 }
 
+function buildFooterSection() {
+    return `<div style="font-size: 10px; font-style: italic; color: #555; margin-top: 1rem;">(*) Công cụ này chỉ mang tính tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA...</div>`;
+}
+
 function buildPart3ScheduleSection(summaryData) {
     const config = VIEWER_CONFIG.part3_schedule;
     if (!config || !summaryData.schedule.rows.length) return '';
@@ -1214,10 +1218,6 @@ function buildPart3ScheduleSection(summaryData) {
     const titleHtml = `<h3>${sanitizeHtml(config.titleTemplate(summaryData))}</h3>`;
     const tableHtml = `<table><thead>${headerHtml}</thead><tbody>${bodyHtml}${footerHtml}</tbody></table>`;
     return `${titleHtml}${tableHtml}${buildFooterSection()}`;
-}
-
-function buildFooterSection() {
-    return `<div style="font-size: 10px; font-style: italic; color: #555; margin-top: 1rem;">(*) Công cụ này chỉ mang tính tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA...</div>`;
 }
 
 function buildPart2BenefitsSection(summaryData) {
@@ -1344,7 +1344,7 @@ function bm_renderSchemaTables(schemaKey, columns) {
             if (formulaFunc) {
                 const raw = formulaFunc(col, benef.params || {});
                 if (benef.valueType === 'number') {
-                    singleValue = roundDownTo1000(raw);
+                    singleValue = roundTo1000(raw);
                     displayValue = singleValue ? formatCurrency(singleValue * (benef.multiClaim || 1)) : '';
                 } else {
                     displayValue = raw;
@@ -1378,7 +1378,7 @@ function bm_renderSchemaTables(schemaKey, columns) {
         totalRowHtml = `<tr><td style="font-weight: bold;">Tổng quyền lợi</td>${totalCellsSum.map(s => `<td style="text-align: right; font-weight: bold;">${s ? formatCurrency(s) : ''}</td>`).join('')}</tr>`;
     }
 
-    return `<div><h4>${sanitizeHtml(title)}</h4><table><thead><tr><th>Tên quyền lợi</th>${headCols}</tr></thead><tbody>${bodyHtml}${totalRowHtml}</tbody></table></div>`;
+    return `<div><h3>${sanitizeHtml(title)}</h3><table><thead><tr><th>Tên quyền lợi</th>${headCols}</tr></thead><tbody>${bodyHtml}${totalRowHtml}</tbody></table></div>`;
 }
 function getProductLabel(key) {
   return PRODUCT_CATALOG[key]?.name || key || '';
