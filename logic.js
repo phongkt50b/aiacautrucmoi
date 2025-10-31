@@ -834,15 +834,26 @@ function buildViewerPayload() {
 function __exportExactSummaryHtml() {
     try {
         const data = buildSummaryData();
+        
+        // ⭐ Validation
+        if (!data || !data.mainPerson) {
+            throw new Error('Invalid summary data: missing mainPerson');
+        }
+        
         const introHtml = buildIntroSection(data);
         const part1Html = buildPart1Section(data);
         const part2Html = buildPart2BenefitsSection(data);
-        let part3Html = buildPart3ScheduleSection(data);
-        // Footer is now generated inside part3Html
+        const part3Html = buildPart3ScheduleSection(data);
+        
         return introHtml + part1Html + part2Html + part3Html;
     } catch (e) {
         console.error('[__exportExactSummaryHtml] error:', e);
-        return '<div style="color:red">Lỗi tạo summaryHtml</div>';
+        console.error('Stack:', e.stack);
+        return `<div style="color:red; padding: 20px;">
+            <h3>❌ Lỗi tạo summaryHtml</h3>
+            <p><strong>Lỗi:</strong> ${e.message}</p>
+            <pre style="background: #f5f5f5; padding: 10px; overflow: auto; font-size: 11px;">${e.stack}</pre>
+        </div>`;
     }
 }
 
