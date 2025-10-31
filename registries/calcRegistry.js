@@ -22,10 +22,10 @@ export const CALC_REGISTRY = {
         const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
         const rate = HELPERS_INTERNAL.findRate(params.rateTableKey, customer.age, genderKey);
         const premium = Math.round((productInfo.values['main-stbh'] / 1000) * rate);
-        return helpers.roundDownTo1000(premium);
+        return helpers.roundTo1000(premium);
     },
     mul_main_direct_input: ({ productInfo, helpers }) => {
-        return helpers.roundDownTo1000(productInfo.values['main-premium']);
+        return helpers.roundTo1000(productInfo.values['main-premium']);
     },
     abuv_main_by_term_rate: ({ productInfo, customer, helpers }) => {
         const stbh = productInfo.values['main-stbh'];
@@ -34,7 +34,7 @@ export const CALC_REGISTRY = {
         const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
         const rate = HELPERS_INTERNAL.findRateByTerm('an_binh_uu_viet_rates', term, customer.age, genderKey);
         const premium = Math.round((stbh / 1000) * rate);
-        return helpers.roundDownTo1000(premium);
+        return helpers.roundTo1000(premium);
     },
     package_main_proxy: ({ customer, params, helpers, state }) => {
         const underlyingConfig = PRODUCT_CATALOG[params.underlyingKey];
@@ -79,26 +79,26 @@ export const CALC_REGISTRY = {
         const outpatientFee = outpatient ? (rates.outpatient?.[ageBandIndex]?.[program] || 0) : 0;
         const dentalFee = (outpatient && dental) ? (rates.dental?.[ageBandIndex]?.[program] || 0) : 0;
         
-        return helpers.roundDownTo1000(base + outpatientFee + dentalFee);
+        return helpers.roundTo1000(base + outpatientFee + dentalFee);
     },
     bhn_calc: ({ customer, helpers }) => {
         const { stbh } = customer.supplements.bhn || {};
         if (!stbh) return 0;
         const genderKey = customer.gender === 'Nữ' ? 'nu' : 'nam';
         const rate = HELPERS_INTERNAL.findRateByRange(product_data.bhn_rates, customer.age, genderKey);
-        return helpers.roundDownTo1000((stbh / 1000) * rate);
+        return helpers.roundTo1000((stbh / 1000) * rate);
     },
     accident_calc: ({ customer, helpers }) => {
         const { stbh } = customer.supplements.accident || {};
         if (!stbh || !customer.riskGroup || customer.riskGroup > 4) return 0;
         const rate = product_data.accident_rates[customer.riskGroup] || 0;
-        return helpers.roundDownTo1000((stbh / 1000) * rate);
+        return helpers.roundTo1000((stbh / 1000) * rate);
     },
     hospital_support_calc: ({ customer, helpers }) => {
         const { stbh } = customer.supplements.hospital_support || {};
         if (!stbh) return 0;
         const rate = HELPERS_INTERNAL.findRateByRange(product_data.hospital_fee_support_rates, customer.age, 'rate');
-        return helpers.roundDownTo1000((stbh / 100) * rate);
+        return helpers.roundTo1000((stbh / 100) * rate);
     },
     wop_mdp3: ({ personInfo, stbhBase, helpers }) => {
         if(!personInfo || !stbhBase || personInfo.age < 18 || personInfo.age > 60 || !personInfo.riskGroup) return 0;
@@ -112,7 +112,7 @@ export const CALC_REGISTRY = {
         const rate = HELPERS_INTERNAL.findRateByRange(product_data.mdp3_rates, personInfo.age, genderKey);
         
         const premium = (stbhBase / 1000) * rate * riskFactor;
-        return helpers.roundDownTo1000(premium);
+        return helpers.roundTo1000(premium);
     },
 
     // ================== Waiver Logic Registry ==================
