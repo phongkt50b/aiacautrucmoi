@@ -212,7 +212,6 @@ function renderSummary(isValid) {
     renderFrequencyBreakdown(displayTotal, f.baseMain, f.extra, displayTotalSupp);
     renderSuppListSummary();
 }
-
 function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     const v = document.getElementById('payment-frequency').value;
     const breakdownBox = document.getElementById('frequency-breakdown');
@@ -229,19 +228,30 @@ function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     let perSupp = 0;
     let annualEquivalentTotal = (perMain + perExtra) * periods;
     
-    Object.values(appState.fees.byPerson).forEach(personData => {
-        Object.values(personData.suppDetails).forEach(annualFee => {
-            const fee = Number(annualFee) || 0; // <--- Dòng thêm vào: Đảm bảo annualFee là số
-            const perPeriodFee = roundTo1000((fee * factor) / periods); 
-            perSupp += perPeriodFee;
-            annualEquivalentTotal += perPeriodFee * periods;
+    // ⭐ FIX: Thêm validation
+    if (appState.fees.byPerson && typeof appState.fees.byPerson === 'object') {
+        Object.values(appState.fees.byPerson).forEach(personData => {
+            if (!personData || !personData.suppDetails) return; // ⭐ Skip nếu không có suppDetails
+            
+            Object.values(personData.suppDetails).forEach(annualFee => {
+                const fee = Number(annualFee) || 0;
+                if (fee <= 0) return; // ⭐ Skip nếu fee = 0
+                
+                const perPeriodFee = roundTo1000((fee * factor) / periods); 
+                perSupp += perPeriodFee;
+                annualEquivalentTotal += perPeriodFee * periods;
+            });
         });
-    });
+    }
 
     const perTotal = perMain + perExtra + perSupp;
     const diff = annualEquivalentTotal - annualOriginal;
 
-    const set = (id, val) => { document.getElementById(id).textContent = formatCurrency(val); };
+    const set = (id, val) => { 
+        const el = document.getElementById(id);
+        if (el) el.textContent = formatCurrency(val);
+    };
+    
     set('freq-main', perMain);
     set('freq-extra', perExtra);
     set('freq-supp-total', perSupp);
@@ -250,6 +260,7 @@ function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     set('freq-diff', diff);
     set('freq-total-year-equivalent', annualEquivalentTotal);
 }
+
 
 // ===================================================================================
 // ===== INITIALIZATION & EVENT BINDING
