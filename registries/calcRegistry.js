@@ -65,14 +65,14 @@ export const CALC_REGISTRY = {
     scl_calc: ({ customer, helpers }) => {
         const ageToUse = customer.age;
         const renewalMax = 65 + 9; // Placeholder, better to read from config
-        if (ageToUse > renewalMax) return { base: 0, outpatient: 0, dental: 0, total: 0 };
+        if (ageToUse > renewalMax) return 0;
         
         const suppData = customer.supplements?.health_scl || {};
         const { program, scope, outpatient, dental } = suppData;
-        if (!program || !scope) return { base: 0, outpatient: 0, dental: 0, total: 0 };
+        if (!program || !scope) return 0;
 
         const ageBandIndex = product_data.health_scl_rates.age_bands.findIndex(b => ageToUse >= b.min && ageToUse <= b.max);
-        if (ageBandIndex === -1) return { base: 0, outpatient: 0, dental: 0, total: 0 };
+        if (ageBandIndex === -1) return 0;
         
         const rates = product_data.health_scl_rates;
         const base = rates[scope]?.[ageBandIndex]?.[program] || 0;
