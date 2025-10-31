@@ -81,7 +81,7 @@ export const UI_FUNCTIONS = {
         if (stbh > 0 && factorRow && hintEl) {
             const minFee = roundDownTo1000(stbh / factorRow.maxFactor);
             const maxFee = roundDownTo1000(stbh / factorRow.minFactor);
-            hintEl.textContent = `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}.`;
+            hintEl.textContent = `Phí hợp lệ từ ${formatCurrency(minFee)} đến ${formatCurrency(maxFee)}`;
         } else if(hintEl) {
             hintEl.textContent = '';
         }
