@@ -212,6 +212,7 @@ function renderSummary(isValid) {
     renderFrequencyBreakdown(displayTotal, f.baseMain, f.extra, displayTotalSupp);
     renderSuppListSummary();
 }
+
 function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     const v = document.getElementById('payment-frequency').value;
     const breakdownBox = document.getElementById('frequency-breakdown');
@@ -228,30 +229,18 @@ function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     let perSupp = 0;
     let annualEquivalentTotal = (perMain + perExtra) * periods;
     
-    // ⭐ FIX: Thêm validation
-    if (appState.fees.byPerson && typeof appState.fees.byPerson === 'object') {
-        Object.values(appState.fees.byPerson).forEach(personData => {
-            if (!personData || !personData.suppDetails) return; // ⭐ Skip nếu không có suppDetails
-            
-            Object.values(personData.suppDetails).forEach(annualFee => {
-                const fee = Number(annualFee) || 0;
-                if (fee <= 0) return; // ⭐ Skip nếu fee = 0
-                
-                const perPeriodFee = roundTo1000((fee * factor) / periods); 
-                perSupp += perPeriodFee;
-                annualEquivalentTotal += perPeriodFee * periods;
-            });
+    Object.values(appState.fees.byPerson).forEach(personData => {
+        Object.values(personData.suppDetails).forEach(annualFee => {
+            const perPeriodFee = roundTo1000((annualFee * factor) / periods);
+            perSupp += perPeriodFee;
+            annualEquivalentTotal += perPeriodFee * periods;
         });
-    }
+    });
 
     const perTotal = perMain + perExtra + perSupp;
     const diff = annualEquivalentTotal - annualOriginal;
 
-    const set = (id, val) => { 
-        const el = document.getElementById(id);
-        if (el) el.textContent = formatCurrency(val);
-    };
-    
+    const set = (id, val) => { document.getElementById(id).textContent = formatCurrency(val); };
     set('freq-main', perMain);
     set('freq-extra', perExtra);
     set('freq-supp-total', perSupp);
@@ -260,7 +249,6 @@ function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     set('freq-diff', diff);
     set('freq-total-year-equivalent', annualEquivalentTotal);
 }
-
 
 // ===================================================================================
 // ===== INITIALIZATION & EVENT BINDING
@@ -834,26 +822,15 @@ function buildViewerPayload() {
 function __exportExactSummaryHtml() {
     try {
         const data = buildSummaryData();
-        
-        // ⭐ Validation
-        if (!data || !data.mainPerson) {
-            throw new Error('Invalid summary data: missing mainPerson');
-        }
-        
         const introHtml = buildIntroSection(data);
         const part1Html = buildPart1Section(data);
         const part2Html = buildPart2BenefitsSection(data);
-        const part3Html = buildPart3ScheduleSection(data);
-        
+        let part3Html = buildPart3ScheduleSection(data);
+        // Footer is now generated inside part3Html
         return introHtml + part1Html + part2Html + part3Html;
     } catch (e) {
         console.error('[__exportExactSummaryHtml] error:', e);
-        console.error('Stack:', e.stack);
-        return `<div style="color:red; padding: 20px;">
-            <h3>❌ Lỗi tạo summaryHtml</h3>
-            <p><strong>Lỗi:</strong> ${e.message}</p>
-            <pre style="background: #f5f5f5; padding: 10px; overflow: auto; font-size: 11px;">${e.stack}</pre>
-        </div>`;
+        return '<div style="color:red">Lỗi tạo summaryHtml</div>';
     }
 }
 
@@ -960,7 +937,7 @@ function buildPart1RowsData(ctx) {
                 annualEq = perPeriod * periods;
                 diff = annualEq - baseAnnual;
             } else {
-                perPeriod = roundUpTo1000(baseAnnual / periods);
+                perPeriod = Math.round(baseAnnual / periods / 1000) * 1000;
                 annualEq = perPeriod * periods;
                 diff = annualEq - baseAnnual;
             }
@@ -1090,48 +1067,28 @@ function buildPart2ScheduleRows(ctx) {
             }
             
             if (fixedWaiverPremiums[p.id]) {
-            Object.entries(fixedWaiverPremiums[p.id]).forEach(([waiverId, premium]) => {
-                const wConfig = PRODUCT_CATALOG[waiverId];
-                if (!wConfig) {
-                    console.warn(`[Schedule] Waiver ${waiverId} not in catalog`);
-                    return;
-                }
-                
-                const eligibilityKey = wConfig.waiverEligibilityKey;
-                if (!eligibilityKey) {
-                    console.warn(`[Schedule] No eligibilityKey for ${waiverId}`);
-                    return;
-                }
-                
-                const resolverFunc = appState.context.registries.CALC_REGISTRY?.waiverResolvers?.[eligibilityKey];
-                if (!resolverFunc) {
-                    console.warn(`[Schedule] Resolver ${eligibilityKey} not found`);
-                    return;
-                }
-                
-                try {
-                    if (resolverFunc({ attainedAge: attained, productConfig: wConfig })) {
+                Object.entries(fixedWaiverPremiums[p.id]).forEach(([waiverId, premium]) => {
+                    const wConfig = PRODUCT_CATALOG[waiverId];
+                    const eligibilityKey = wConfig?.waiverEligibilityKey;
+                    const resolverFunc = eligibilityKey && appState.context.registries.CALC_REGISTRY.waiverResolvers[eligibilityKey];
+                    if (resolverFunc && resolverFunc({ attainedAge: attained, productConfig: wConfig })) {
                         addRider(premium);
                     }
-                } catch (err) {
-                    console.error(`[Schedule] Error calling resolver ${eligibilityKey}:`, err);
-                }
-            });
-        }
-        // ⭐ FIX: Thêm các dòng này (đã bị thiếu)
+                });
+            }
+            
             perPersonSuppBase.push(sumBase);
             perPersonSuppPerPeriod.push(sumPer);
             perPersonSuppAnnualEq.push(isAnnual ? sumBase : sumPer * periods);
-        }); // ⭐ Đóng persons.forEach
+        });
 
         const suppBaseTotal = perPersonSuppBase.reduce((a, b) => a + b, 0);
         const suppAnnualEqTotal = perPersonSuppAnnualEq.reduce((a, b) => a + b, 0);
         const totalYearBase = mainYearBase + extraYearBase + suppBaseTotal;
-        const mainPerPeriod = isAnnual ? (mainYearBase + extraYearBase) : roundUpTo1000((mainYearBase + extraYearBase) / periods);
-        const totalAnnualEq = isAnnual ? totalYearBase : mainPerPeriod * periods + suppAnnualEqTotal;
+        const totalAnnualEq = isAnnual ? totalYearBase : (Math.round((mainYearBase + extraYearBase)/periods / 1000) * 1000)*periods + suppAnnualEqTotal;
         const diff = totalAnnualEq - totalYearBase;
         rows.push({ year, age: currentAge, mainYearBase, extraYearBase, perPersonSuppBase, perPersonSuppAnnualEq, totalYearBase, totalAnnualEq, diff });
-        }
+    }
     return { rows, extraAllZero: rows.every(r => r.extraYearBase === 0) };
 }
 
