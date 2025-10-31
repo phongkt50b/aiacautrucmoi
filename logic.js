@@ -937,22 +937,34 @@ function buildPart1RowsData(ctx) {
     let rows = [], perPersonTotals = [], grand = { per: 0, eq: 0, base: 0, diff: 0 };
     
     const pushRow = (acc, personName, prodName, stbhDisplay, years, baseAnnual, isRider) => {
-        if (baseAnnual <= 0) return;
-        let perPeriod = 0, annualEq = 0, diff = 0;
-        if (!isAnnual) {
-            if (isRider) {
-                perPeriod = roundTo1000((baseAnnual * riderFactor) / periods);
-                annualEq = perPeriod * periods;
-                diff = annualEq - baseAnnual;
-            } else {
-                perPeriod = roundUpTo1000(baseAnnual / periods);
-                annualEq = perPeriod * periods;
-                diff = annualEq - baseAnnual;
-            }
+    if (baseAnnual <= 0) return;
+    let perPeriod = 0, annualEq = 0, diff = 0;
+    
+    if (isAnnual) {
+        // FIX: Khi annual, annualEq = baseAnnual
+        annualEq = baseAnnual;
+        perPeriod = 0;
+        diff = 0;
+    } else {
+        if (isRider) {
+            perPeriod = roundTo1000((baseAnnual * riderFactor) / periods);
+            annualEq = perPeriod * periods;
+            diff = annualEq - baseAnnual;
+        } else {
+            perPeriod = roundUpTo1000(baseAnnual / periods);
+            annualEq = perPeriod * periods;
+            diff = annualEq - baseAnnual;
         }
-        acc.per += perPeriod; acc.eq += annualEq; acc.base += baseAnnual; acc.diff += diff;
-        rows.push({ personName, prodName, stbhDisplay, years, perPeriod, annualEq, diff, annualBase: baseAnnual });
-    };
+    }
+    
+    acc.per += perPeriod; 
+    acc.eq += annualEq; 
+    acc.base += baseAnnual; 
+    acc.diff += diff;
+    
+    rows.push({ personName, prodName, stbhDisplay, years, perPeriod, annualEq, diff, annualBase: baseAnnual });
+};
+
 
     persons.forEach(p => {
         const acc = { per: 0, eq: 0, base: 0, diff: 0 };
