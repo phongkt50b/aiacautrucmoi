@@ -231,7 +231,8 @@ function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     
     Object.values(appState.fees.byPerson).forEach(personData => {
         Object.values(personData.suppDetails).forEach(annualFee => {
-            const perPeriodFee = roundTo1000((annualFee * factor) / periods);
+            const fee = Number(annualFee) || 0; // <--- Dòng thêm vào: Đảm bảo annualFee là số
+            const perPeriodFee = roundTo1000((fee * factor) / periods); 
             perSupp += perPeriodFee;
             annualEquivalentTotal += perPeriodFee * periods;
         });
