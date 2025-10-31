@@ -1118,7 +1118,11 @@ function buildPart2ScheduleRows(ctx) {
                 }
             });
         }
-
+        // ⭐ FIX: Thêm các dòng này (đã bị thiếu)
+            perPersonSuppBase.push(sumBase);
+            perPersonSuppPerPeriod.push(sumPer);
+            perPersonSuppAnnualEq.push(isAnnual ? sumBase : sumPer * periods);
+        }); // ⭐ Đóng persons.forEach
 
         const suppBaseTotal = perPersonSuppBase.reduce((a, b) => a + b, 0);
         const suppAnnualEqTotal = perPersonSuppAnnualEq.reduce((a, b) => a + b, 0);
@@ -1127,7 +1131,7 @@ function buildPart2ScheduleRows(ctx) {
         const totalAnnualEq = isAnnual ? totalYearBase : mainPerPeriod * periods + suppAnnualEqTotal;
         const diff = totalAnnualEq - totalYearBase;
         rows.push({ year, age: currentAge, mainYearBase, extraYearBase, perPersonSuppBase, perPersonSuppAnnualEq, totalYearBase, totalAnnualEq, diff });
-    
+        }
     return { rows, extraAllZero: rows.every(r => r.extraYearBase === 0) };
 }
 
