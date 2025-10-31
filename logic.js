@@ -1079,20 +1079,35 @@ function buildPart2ScheduleRows(ctx) {
             }
             
             if (fixedWaiverPremiums[p.id]) {
-                Object.entries(fixedWaiverPremiums[p.id]).forEach(([waiverId, premium]) => {
-                    const wConfig = PRODUCT_CATALOG[waiverId];
-                    const eligibilityKey = wConfig?.waiverEligibilityKey;
-                    const resolverFunc = eligibilityKey && appState.context.registries.CALC_REGISTRY.waiverResolvers[eligibilityKey];
-                    if (resolverFunc && resolverFunc({ attainedAge: attained, productConfig: wConfig })) {
+            Object.entries(fixedWaiverPremiums[p.id]).forEach(([waiverId, premium]) => {
+                const wConfig = PRODUCT_CATALOG[waiverId];
+                if (!wConfig) {
+                    console.warn(`[Schedule] Waiver ${waiverId} not in catalog`);
+                    return;
+                }
+                
+                const eligibilityKey = wConfig.waiverEligibilityKey;
+                if (!eligibilityKey) {
+                    console.warn(`[Schedule] No eligibilityKey for ${waiverId}`);
+                    return;
+                }
+                
+                const resolverFunc = appState.context.registries.CALC_REGISTRY?.waiverResolvers?.[eligibilityKey];
+                if (!resolverFunc) {
+                    console.warn(`[Schedule] Resolver ${eligibilityKey} not found`);
+                    return;
+                }
+                
+                try {
+                    if (resolverFunc({ attainedAge: attained, productConfig: wConfig })) {
                         addRider(premium);
                     }
-                });
-            }
-            
-            perPersonSuppBase.push(sumBase);
-            perPersonSuppPerPeriod.push(sumPer);
-            perPersonSuppAnnualEq.push(isAnnual ? sumBase : sumPer * periods);
-        });
+                } catch (err) {
+                    console.error(`[Schedule] Error calling resolver ${eligibilityKey}:`, err);
+                }
+            });
+        }
+
 
         const suppBaseTotal = perPersonSuppBase.reduce((a, b) => a + b, 0);
         const suppAnnualEqTotal = perPersonSuppAnnualEq.reduce((a, b) => a + b, 0);
