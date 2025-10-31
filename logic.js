@@ -916,15 +916,7 @@ function buildSummaryData() {
         activePersonIdx.forEach((pIdx, idx) => sums.supp[idx] += r.perPersonSuppAnnualEq[pIdx]);
     });
     summary.sums = sums;
-    if (!isAnnual) {
-        console.log('[buildSummaryData] Non-annual calculation:', {
-            freq,
-            periods,
-            riderFactor,
-            part1Grand: part1.grand,
-            scheduleSums: sums
-        });
-    }
+
     return summary;
 }
 
@@ -937,34 +929,22 @@ function buildPart1RowsData(ctx) {
     let rows = [], perPersonTotals = [], grand = { per: 0, eq: 0, base: 0, diff: 0 };
     
     const pushRow = (acc, personName, prodName, stbhDisplay, years, baseAnnual, isRider) => {
-    if (baseAnnual <= 0) return;
-    let perPeriod = 0, annualEq = 0, diff = 0;
-    
-    if (isAnnual) {
-        // FIX: Khi annual, annualEq = baseAnnual
-        annualEq = baseAnnual;
-        perPeriod = 0;
-        diff = 0;
-    } else {
-        if (isRider) {
-            perPeriod = roundTo1000((baseAnnual * riderFactor) / periods);
-            annualEq = perPeriod * periods;
-            diff = annualEq - baseAnnual;
-        } else {
-            perPeriod = roundUpTo1000(baseAnnual / periods);
-            annualEq = perPeriod * periods;
-            diff = annualEq - baseAnnual;
+        if (baseAnnual <= 0) return;
+        let perPeriod = 0, annualEq = 0, diff = 0;
+        if (!isAnnual) {
+            if (isRider) {
+                perPeriod = Math.round((baseAnnual * riderFactor) / periods / 1000) * 1000;
+                annualEq = perPeriod * periods;
+                diff = annualEq - baseAnnual;
+            } else {
+                perPeriod = Math.round(baseAnnual / periods / 1000) * 1000;
+                annualEq = perPeriod * periods;
+                diff = annualEq - baseAnnual;
+            }
         }
-    }
-    
-    acc.per += perPeriod; 
-    acc.eq += annualEq; 
-    acc.base += baseAnnual; 
-    acc.diff += diff;
-    
-    rows.push({ personName, prodName, stbhDisplay, years, perPeriod, annualEq, diff, annualBase: baseAnnual });
-};
-
+        acc.per += perPeriod; acc.eq += annualEq; acc.base += baseAnnual; acc.diff += diff;
+        rows.push({ personName, prodName, stbhDisplay, years, perPeriod, annualEq, diff, annualBase: baseAnnual });
+    };
 
     persons.forEach(p => {
         const acc = { per: 0, eq: 0, base: 0, diff: 0 };
@@ -1028,6 +1008,7 @@ function buildPart1RowsData(ctx) {
 
     return { rows, perPersonTotals, grand, isAnnual, periods, riderFactor, freqLabel: GLOBAL_CONFIG.PAYMENT_FREQUENCY_LABELS[freq] || freq };
 }
+
 function buildPart2ScheduleRows(ctx) {
     const { persons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, waiverPremiums, appState } = ctx;
     const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
@@ -1057,7 +1038,7 @@ function buildPart2ScheduleRows(ctx) {
             const addRider = (baseFee) => {
                 if (!baseFee) return;
                 sumBase += baseFee;
-                if (!isAnnual) sumPer += roundTo1000((baseFee * riderFactor) / periods);
+                if (!isAnnual) sumPer += Math.round((baseFee * riderFactor) / periods / 1000) * 1000;
             };
 
             if (p.supplements) {
@@ -1076,7 +1057,7 @@ function buildPart2ScheduleRows(ctx) {
                          customer: tempCustomer,
                          mainPremium: baseMainAnnual, 
                          allPersons: appState.persons,
-                         accumulators: { totalHospitalSupportStbh: 0 },
+                         accumulators: { totalHospitalSupportStbh: 0 }, // Simplified for projection
                          helpers: appState.context.helpers,
                          params: prodConfig.calculation.params || {},
                          state: appState
@@ -1104,34 +1085,12 @@ function buildPart2ScheduleRows(ctx) {
         const suppBaseTotal = perPersonSuppBase.reduce((a, b) => a + b, 0);
         const suppAnnualEqTotal = perPersonSuppAnnualEq.reduce((a, b) => a + b, 0);
         const totalYearBase = mainYearBase + extraYearBase + suppBaseTotal;
-        
-        // FIX: Tính toán nhất quán với buildPart1RowsData
-        let totalAnnualEq;
-        if (isAnnual) {
-            totalAnnualEq = totalYearBase;
-        } else {
-            // Main và Extra dùng roundUpTo1000 (giống Part1)
-            const mainPerPeriod = roundUpTo1000(mainYearBase / periods);
-            const extraPerPeriod = roundUpTo1000(extraYearBase / periods);
-            totalAnnualEq = (mainPerPeriod + extraPerPeriod) * periods + suppAnnualEqTotal;
-        }
-        
+        const totalAnnualEq = isAnnual ? totalYearBase : (Math.round((mainYearBase + extraYearBase)/periods / 1000) * 1000)*periods + suppAnnualEqTotal;
         const diff = totalAnnualEq - totalYearBase;
-        rows.push({ 
-            year, 
-            age: currentAge, 
-            mainYearBase, 
-            extraYearBase, 
-            perPersonSuppBase, 
-            perPersonSuppAnnualEq, 
-            totalYearBase, 
-            totalAnnualEq, 
-            diff 
-        });
+        rows.push({ year, age: currentAge, mainYearBase, extraYearBase, perPersonSuppBase, perPersonSuppAnnualEq, totalYearBase, totalAnnualEq, diff });
     }
     return { rows, extraAllZero: rows.every(r => r.extraYearBase === 0) };
 }
-
 
 
 function buildIntroSection(data) {
@@ -1197,10 +1156,6 @@ function buildPart1Section(summaryData) {
     return `${titleHtml}<table><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
 }
 
-function buildFooterSection() {
-    return `<div style="font-size: 10px; font-style: italic; color: #555; margin-top: 1rem;">(*) Công cụ này chỉ mang tính tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA...</div>`;
-}
-
 function buildPart3ScheduleSection(summaryData) {
     const config = VIEWER_CONFIG.part3_schedule;
     if (!config || !summaryData.schedule.rows.length) return '';
@@ -1259,6 +1214,10 @@ function buildPart3ScheduleSection(summaryData) {
     const titleHtml = `<h3>${sanitizeHtml(config.titleTemplate(summaryData))}</h3>`;
     const tableHtml = `<table><thead>${headerHtml}</thead><tbody>${bodyHtml}${footerHtml}</tbody></table>`;
     return `${titleHtml}${tableHtml}${buildFooterSection()}`;
+}
+
+function buildFooterSection() {
+    return `<div style="font-size: 10px; font-style: italic; color: #555; margin-top: 1rem;">(*) Công cụ này chỉ mang tính tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA...</div>`;
 }
 
 function buildPart2BenefitsSection(summaryData) {
