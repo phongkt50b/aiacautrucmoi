@@ -898,7 +898,8 @@ function buildSummaryData() {
                 customInterestRate: customRateInput,
                 paymentFrequency: summary.freq,
             },
-            { investment_data, roundTo1000, GLOBAL_CONFIG }
+        
+            { investment_data, roundDownTo1000, roundTo1000, roundUpTo1000, GLOBAL_CONFIG }
         );
     }
     
