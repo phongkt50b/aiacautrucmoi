@@ -1156,6 +1156,10 @@ function buildPart1Section(summaryData) {
     return `${titleHtml}<table><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
 }
 
+function buildFooterSection() {
+    return `<div style="font-size: 10px; font-style: italic; color: #555; margin-top: 1rem;">(*) Công cụ này chỉ mang tính tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA...</div>`;
+}
+
 function buildPart3ScheduleSection(summaryData) {
     const config = VIEWER_CONFIG.part3_schedule;
     if (!config || !summaryData.schedule.rows.length) return '';
@@ -1214,10 +1218,6 @@ function buildPart3ScheduleSection(summaryData) {
     const titleHtml = `<h3>${sanitizeHtml(config.titleTemplate(summaryData))}</h3>`;
     const tableHtml = `<table><thead>${headerHtml}</thead><tbody>${bodyHtml}${footerHtml}</tbody></table>`;
     return `${titleHtml}${tableHtml}${buildFooterSection()}`;
-}
-
-function buildFooterSection() {
-    return `<div style="font-size: 10px; font-style: italic; color: #555; margin-top: 1rem;">(*) Công cụ này chỉ mang tính tham khảo cá nhân, không phải là bảng minh họa chính thức của AIA...</div>`;
 }
 
 function buildPart2BenefitsSection(summaryData) {
