@@ -119,7 +119,7 @@ export const UI_FUNCTIONS = {
             msgEl.classList.add('hidden');
         }
       // --- BẮT ĐẦU PHẦN BỔ SUNG ĐỂ HIỂN THỊ PHÍ ---
-        const program = programSelect.value;
+       const program = programSelect.value;
         const ageToUse = customer.age;
 
         const ageBandIndex = product_data.health_scl_rates.age_bands.findIndex(b => ageToUse >= b.min && ageToUse <= b.max);
@@ -134,10 +134,10 @@ export const UI_FUNCTIONS = {
             const dentalHintEl = section.querySelector('#scl-dental-fee-hint');
             
             if (outpatientHintEl) {
-                outpatientHintEl.textContent = outpatientFee > 0 ? `+ ${formatCurrency(outpatientFee)}` : '';
+                outpatientHintEl.textContent = (outpatientFee > 0 && outpatientCb.checked) ? `+ ${formatCurrency(outpatientFee)}` : '';
             }
             if (dentalHintEl) {
-                dentalHintEl.textContent = (dentalFee > 0 && outpatientCb.checked) ? `+ ${formatCurrency(dentalFee)}` : '';
+                dentalHintEl.textContent = (dentalFee > 0 && dentalCb.checked) ? `+ ${formatCurrency(dentalFee)}` : '';
             }
         }
         // --- KẾT THÚC PHẦN BỔ SUNG ---
