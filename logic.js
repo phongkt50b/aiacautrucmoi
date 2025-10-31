@@ -223,15 +223,15 @@ function renderFrequencyBreakdown(annualOriginal, baseMain, extra, totalSupp) {
     breakdownBox.classList.toggle('hidden', periods === 1);
     if(periods === 1) return;
 
-    const perMain = roundDownTo1000(baseMain / periods);
-    const perExtra = roundDownTo1000(extra / periods);
+    const perMain = roundUpTo1000(baseMain / periods);
+    const perExtra = roundUpTo1000(extra / periods);
     
     let perSupp = 0;
     let annualEquivalentTotal = (perMain + perExtra) * periods;
     
     Object.values(appState.fees.byPerson).forEach(personData => {
         Object.values(personData.suppDetails).forEach(annualFee => {
-            const perPeriodFee = roundDownTo1000((annualFee * factor) / periods);
+            const perPeriodFee = roundTo1000((annualFee * factor) / periods);
             perSupp += perPeriodFee;
             annualEquivalentTotal += perPeriodFee * periods;
         });
