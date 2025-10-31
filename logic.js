@@ -1127,7 +1127,7 @@ function buildPart2ScheduleRows(ctx) {
         const totalAnnualEq = isAnnual ? totalYearBase : mainPerPeriod * periods + suppAnnualEqTotal;
         const diff = totalAnnualEq - totalYearBase;
         rows.push({ year, age: currentAge, mainYearBase, extraYearBase, perPersonSuppBase, perPersonSuppAnnualEq, totalYearBase, totalAnnualEq, diff });
-    }
+    
     return { rows, extraAllZero: rows.every(r => r.extraYearBase === 0) };
 }
 
