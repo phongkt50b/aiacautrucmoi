@@ -259,7 +259,7 @@ export function renderWaiverSection(state, isMainProductValid) {
 
     // 4. Render fee display
     const feeText = Object.entries(state.fees.waiverDetails).map(([, data]) => {
-        return `STBH Cơ sở: ${state.context.helpers.formatCurrency(data.stbhBase)} | Phí: ${state.context.helpers.formatCurrency(data.premium)}`;
+        return `STBH: ${state.context.helpers.formatCurrency(data.stbhBase)} | Phí: ${state.context.helpers.formatCurrency(data.premium)}`;
     }).join(' | ');
     feeEl.textContent = feeText;
 }
