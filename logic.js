@@ -933,7 +933,7 @@ function buildPart1RowsData(ctx) {
         let perPeriod = 0, annualEq = 0, diff = 0;
         if (!isAnnual) {
             if (isRider) {
-                perPeriod = Math.round((baseAnnual * riderFactor) / periods / 1000) * 1000;
+                perPeriod = roundTo1000((baseAnnual * riderFactor) / periods);
                 annualEq = perPeriod * periods;
                 diff = annualEq - baseAnnual;
             } else {
