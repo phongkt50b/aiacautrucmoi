@@ -1008,7 +1008,6 @@ function buildPart1RowsData(ctx) {
 
     return { rows, perPersonTotals, grand, isAnnual, periods, riderFactor, freqLabel: GLOBAL_CONFIG.PAYMENT_FREQUENCY_LABELS[freq] || freq };
 }
-
 function buildPart2ScheduleRows(ctx) {
     const { persons, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, waiverPremiums, appState } = ctx;
     const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
@@ -1057,7 +1056,7 @@ function buildPart2ScheduleRows(ctx) {
                          customer: tempCustomer,
                          mainPremium: baseMainAnnual, 
                          allPersons: appState.persons,
-                         accumulators: { totalHospitalSupportStbh: 0 }, // Simplified for projection
+                         accumulators: { totalHospitalSupportStbh: 0 },
                          helpers: appState.context.helpers,
                          params: prodConfig.calculation.params || {},
                          state: appState
@@ -1085,12 +1084,34 @@ function buildPart2ScheduleRows(ctx) {
         const suppBaseTotal = perPersonSuppBase.reduce((a, b) => a + b, 0);
         const suppAnnualEqTotal = perPersonSuppAnnualEq.reduce((a, b) => a + b, 0);
         const totalYearBase = mainYearBase + extraYearBase + suppBaseTotal;
-        const totalAnnualEq = isAnnual ? totalYearBase : (roundUpTo1000(mainYearBase / periods) + roundUpTo1000(extraYearBase / periods)) * periods + suppAnnualEqTotal;
+        
+        // FIX: Tính toán nhất quán với buildPart1RowsData
+        let totalAnnualEq;
+        if (isAnnual) {
+            totalAnnualEq = totalYearBase;
+        } else {
+            // Main và Extra dùng roundUpTo1000 (giống Part1)
+            const mainPerPeriod = roundUpTo1000(mainYearBase / periods);
+            const extraPerPeriod = roundUpTo1000(extraYearBase / periods);
+            totalAnnualEq = (mainPerPeriod + extraPerPeriod) * periods + suppAnnualEqTotal;
+        }
+        
         const diff = totalAnnualEq - totalYearBase;
-        rows.push({ year, age: currentAge, mainYearBase, extraYearBase, perPersonSuppBase, perPersonSuppAnnualEq, totalYearBase, totalAnnualEq, diff });
+        rows.push({ 
+            year, 
+            age: currentAge, 
+            mainYearBase, 
+            extraYearBase, 
+            perPersonSuppBase, 
+            perPersonSuppAnnualEq, 
+            totalYearBase, 
+            totalAnnualEq, 
+            diff 
+        });
     }
     return { rows, extraAllZero: rows.every(r => r.extraYearBase === 0) };
 }
+
 
 
 function buildIntroSection(data) {
