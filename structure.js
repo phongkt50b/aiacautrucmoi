@@ -625,7 +625,7 @@ export const VIEWER_CONFIG = {
             { id: 'extraPremium', header: 'Phí đóng thêm', align: 'right', condition: (summary) => !summary.schedule.extraAllZero, getValue: (row) => formatCurrency(row.extraYearBase), getFooter: (summary) => formatCurrency(summary.sums.extra) },
             {
                 id: 'riderPremium', type: 'dynamic',
-                headerTemplate: (person) => `Phí BS (${person.name})`,
+                headerTemplate: (person) => `Phí SP bổ sung (${person.name})`,
                 align: 'right',
                 getValue: (row, personIndex) => formatCurrency(row.perPersonSuppAnnualEq[personIndex]),
                 getFooter: (summary, personIndex) => formatCurrency(summary.sums.supp[personIndex])
@@ -654,13 +654,13 @@ export const VIEWER_CONFIG = {
                 getFooter: () => ''
             },
             {
-                id: 'gttk_customCapped', header: (summary) => `GTTK (LS ${summary.customRate}%-20 năm)`, align: 'right',
+                id: 'gttk_customCapped', header: (summary) => `GTTK (LS ${summary.customRate}% trong 20 năm đầu, từ năm 21 là 0.5%)`, align: 'right',
                 condition: (summary) => !!summary.projection?.customCapped,
                 getValue: (row, summary) => formatCurrency(roundDownTo1000(summary.projection.customCapped[row.year - 1])),
                 getFooter: () => ''
             },
             {
-                id: 'gttk_customFull', header: (summary) => `GTTK (LS ${summary.customRate}%-Toàn thời gian)`, align: 'right',
+                id: 'gttk_customFull', header: (summary) => `GTTK (LS ${summary.customRate}% xuyên suốt hợp đồng)`, align: 'right',
                 condition: (summary) => !!summary.projection?.customFull,
                 getValue: (row, summary) => formatCurrency(roundDownTo1000(summary.projection.customFull[row.year - 1])),
                 getFooter: () => ''
