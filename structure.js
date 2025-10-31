@@ -480,6 +480,7 @@ export const PRODUCT_CATALOG = {
         rules: { 
             eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 70, renewalMax: 85 } ],
             disabled: [{ type: 'disabledByPackage' }],
+            visibility: [{ type: 'mainProductIsNot', value: 'TRON_TAM_AN' }],
             mandatory: [{ type: 'mandatoryInPackage' }],
         },
         calculation: {
@@ -503,6 +504,7 @@ export const PRODUCT_CATALOG = {
         rules: { 
             eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 64, renewalMax: 65 }, { type: 'riskGroup', required: true } ],
             disabled: [{ type: 'disabledByPackage' }],
+            visibility: [{ type: 'mainProductIsNot', value: 'TRON_TAM_AN' }],
             mandatory: [{ type: 'mandatoryInPackage' }],
         },
         calculation: {
@@ -530,6 +532,7 @@ export const PRODUCT_CATALOG = {
         rules: { 
             eligibility: [ { type: 'daysFromBirth', min: 30 }, { type: 'age', max: 55, renewalMax: 59 } ],
             disabled: [{ type: 'disabledByPackage' }],
+            visibility: [{ type: 'mainProductIsNot', value: 'TRON_TAM_AN' }],
             mandatory: [{ type: 'mandatoryInPackage' }],
         },
         calculation: {
