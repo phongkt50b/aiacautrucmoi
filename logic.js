@@ -916,7 +916,15 @@ function buildSummaryData() {
         activePersonIdx.forEach((pIdx, idx) => sums.supp[idx] += r.perPersonSuppAnnualEq[pIdx]);
     });
     summary.sums = sums;
-
+    if (!isAnnual) {
+        console.log('[buildSummaryData] Non-annual calculation:', {
+            freq,
+            periods,
+            riderFactor,
+            part1Grand: part1.grand,
+            scheduleSums: sums
+        });
+    }
     return summary;
 }
 
