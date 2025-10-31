@@ -49,6 +49,11 @@ export const RULE_ENGINE = {
             case 'mainProductGroup':
                 const mainProdConfig = PRODUCT_CATALOG[state.mainProduct.key];
                 return mainProdConfig && mainProdConfig.group === rule.value;
+            case 'mainProductIsNot':
+                const currentMainKey = state.mainProduct.key;
+                if (!currentMainKey) return true; // If no main product, don't hide anything yet
+                const keysToMatch = Array.isArray(rule.value) ? rule.value : [rule.value];
+                return !keysToMatch.includes(currentMainKey);
             case 'mandatoryInPackage':
                 const mainConfig = PRODUCT_CATALOG[state.mainProduct.key];
                 return mainConfig?.group === 'PACKAGE' && mainConfig.packageConfig.mandatoryRiders.includes(productKey);
