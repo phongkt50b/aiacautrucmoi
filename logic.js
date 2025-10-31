@@ -1344,7 +1344,7 @@ function bm_renderSchemaTables(schemaKey, columns) {
             if (formulaFunc) {
                 const raw = formulaFunc(col, benef.params || {});
                 if (benef.valueType === 'number') {
-                    singleValue = roundDownTo1000(raw);
+                    singleValue = roundTo1000(raw);
                     displayValue = singleValue ? formatCurrency(singleValue * (benef.multiClaim || 1)) : '';
                 } else {
                     displayValue = raw;
