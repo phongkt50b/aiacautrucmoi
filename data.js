@@ -492,7 +492,7 @@ export const BENEFIT_MATRIX_SCHEMAS = [
       { id:'bhn_mid', labelBase:'BHN giai đoạn giữa', formulaLabel:'60% STBH (tối đa 2 lần, tối đa 1 tỷ/ lần)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.6, cap: 1000000000 }, multiClaim: 2 },
       { id:'bhn_late', labelBase:'BHN giai đoạn cuối', formulaLabel:'100% STBH (1 lần)', valueType:'number', formulaKey: 'percentOfSa', params: { percent: 1.0 } },
       { id:'bhn_child', labelBase:'BHN ở trẻ em', formulaLabel:'60% STBH (1 lần, tối đa 500 tr, dưới 21 tuổi)', valueType:'number', childOnly:true, formulaKey: 'percentOfSaWithCap', params: { percent: 0.6, cap: 500000000 } },
-      { id:'bhn_elder', labelBase:'BHN người lớn tuổi', formulaLabel:'20% STBH (1 lần, tối đa 500 tr, từ 55 tuổi)', valueType:'number', elderOnly: true, formulaKey: 'percentOfSaWithCap', params: { percent: 0.2, cap: 500000000 } },
+      { id:'bhn_elder', labelBase:'BHN người lớn tuổi', formulaLabel:'20% STBH (1 lần, tối đa 500 tr, từ 55 tuổi)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.2, cap: 500000000 } },
       { id:'bhn_special', labelBase:'Quyền lợi đặc biệt', formulaLabel:'30% STBH (1 lần, tối đa 500tr)', valueType:'number', formulaKey: 'percentOfSaWithCap', params: { percent: 0.3, cap: 500000000 } },
       { id:'bhn_wellness', labelBase:'Quyền lợi sống khoẻ AIA Vitality', formulaLabel:'', valueType:'text', minAge:18, text:'Tối đa 30% trung bình phí 5 năm' }
     ]
