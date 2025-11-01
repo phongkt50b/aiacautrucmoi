@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Viewer Bảng Minh Họa</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --max-width: 1000px;
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    }
+    body {
+      margin:0;
+      background:#fafafa;
+      color:#222;
+      line-height:1.5;
+    }
+    header {
+      background:#fff;
+      border-bottom:1px solid #e5e5e5;
+      position:sticky; top:0; z-index:20;
+    }
+    #toolbar {
+      max-width:var(--max-width);
+      margin:0 auto;
+      padding:12px 18px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:12px;
+    }
+    #toolbar h1 { margin:0; font-size:18px; font-weight:600; }
+    button {
+      cursor:pointer;
+      background:#d4002a;
+      border:1px solid #d4002a;
+      color:#fff;
+      padding:8px 14px;
+      font-size:14px;
+      border-radius:4px;
+      transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    button:hover,
+    button:focus {
+      background-color: #a30021;
+      box-shadow: 0 4px 8px rgba(163, 0, 33, 0.4);
+      outline: none;
+    }
+    button:disabled {
+      background-color: #ccc;
+      border-color: #ccc;
+      cursor: not-allowed;
+      box-shadow: none;
+      color: #666;
+    }
+    button.secondary {
+      background:#f5f5f5;
+      color:#222;
+      border:1px solid #ccc;
+    }
+    main {
+      max-width:var(--max-width);
+      margin:28px auto 80px;
+      padding:0 18px;
+    }
+    .status {
+      font-size:14px;
+      color:#555;
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    .status::before {
+      content:"";
+      width:14px; height:14px;
+      border:2px solid #d4002a;
+      border-right-color:transparent;
+      border-radius:50%;
+      animation:spin .9s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg);} }
+    .hidden { display:none !important; }
+
+    /* Khối ảnh full-width */
+    .viewer-image-block {
+      margin:40px 0 48px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+
+    /* Image placeholder & lazy load effect */
+    .image-placeholder {
+      position: relative;
+      background-color: #f3f4f6;
+      border-radius: 8px;
+      min-height: 200px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      border: 1px solid #e5e5e5;
+      box-shadow: 0 2px 4px rgba(0,0,0,.05);
+      cursor: zoom-in;
+      transition: box-shadow .25s, background-color .5s;
+    }
+    .image-placeholder:hover {
+      box-shadow: 0 5px 20px rgba(0,0,0,.15);
+    }
+    .spinner {
+      animation: spin 1s linear infinite;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      border: 3px solid #d4002a;
+      border-right-color: transparent;
+      transition: opacity .3s;
+    }
+    .lazy-image {
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 8px;
+    }
+    .image-placeholder.loaded .spinner {
+      opacity: 0;
+      display: none;
+    }
+    .image-placeholder.loaded .lazy-image {
+      opacity: 1;
+      position: relative; /* or static */
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .image-placeholder.loaded {
+      background-color: transparent;
+      min-height: auto;
+    }
+
+    /* Lightbox */
+    #lightboxOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s;
+      cursor: zoom-out;
+    }
+    #lightboxOverlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #lightboxOverlay .lightbox-image-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #lightboxOverlay img {
+      max-width: 95vw;
+      max-height: 90vh;
+      transition: transform 0.2s ease-out;
+      cursor: grab;
+      border-radius: 4px;
+    }
+    #lightboxOverlay img.is-dragging {
+        cursor: grabbing;
+    }
+    #lightboxOverlay .close-btn {
+      position: fixed;
+      top: 14px;
+      right: 22px;
+      font-size: 40px;
+      color: #fff;
+      cursor: pointer;
+      user-select: none;
+      line-height: 1;
+      z-index: 1001;
+      transition: opacity 0.2s;
+    }
+    #lightboxOverlay .close-btn:hover {
+      opacity: 0.7;
+    }
+    .lb-nav-btn {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 50px;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-size: 32px;
+      background: rgba(255, 255, 255, .15);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      transition: background .25s;
+      z-index: 1000;
+    }
+    .lb-nav-btn:hover {
+      background: rgba(255, 255, 255, .3);
+    }
+    .lb-nav-btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+        background: rgba(255, 255, 255, .1);
+    }
+    .lb-prev { left: 20px; }
+    .lb-next { right: 20px; }
+    .lightbox-zoom-controls {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(30, 30, 30, 0.7);
+        border-radius: 20px;
+        padding: 6px 12px;
+        z-index: 1001;
+    }
+    .lightbox-zoom-controls button {
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 24px;
+        font-weight: bold;
+        width: 30px;
+        height: 30px;
+        line-height: 30px;
+        text-align: center;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .lightbox-zoom-controls button:hover {
+        background: rgba(255, 255, 255, 0.2);
+    }
+    .lightbox-zoom-controls #zoom-level {
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        min-width: 50px;
+        text-align: center;
+    }
+
+    /* Print */
+    @media print {
+      header, #lightboxOverlay { display:none !important; }
+      body { background:#fff; }
+      .viewer-image-block figure { page-break-inside:avoid; }
+    }
+
+    #summary-wrapper {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: #222;
+      line-height: 1.5;
+      max-width: 100%;
+      overflow-x: auto;
+      padding-bottom: 14px;
+      font-size: 14px; /* cỡ chữ chuẩn */
+    }
+    #summary-wrapper * {
+      font-size: inherit !important;
+    }
+
+    #summary-wrapper h3 {
+      font-weight: 600;
+      margin-top: 14px;
+      margin-bottom: 14px;
+      color: #b91c1c;
+    }
+
+    #summary-wrapper table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #ddd;
+      margin-bottom: 14px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    #summary-wrapper th, 
+    #summary-wrapper td {
+      border: 1px solid #ddd;
+      padding: 8px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    #summary-wrapper th {
+      background-color: #f3f4f6;
+      font-weight: 600;
+      color: #444;
+      text-align: center;
+    }
+
+    #summary-wrapper tr:nth-child(even) {
+      background-color: #fafafa;
+    }
+
+    #summary-wrapper strong {
+      font-weight: 600;
+    }
+
+    #summary-wrapper .text-red-600 {
+      color: #b91c1c;
+    }
+
+    /* --- Phần 1: Bảng tóm tắt sản phẩm --- */
+    /* Căn phải từ cột 3 (STBH) trở đi */
+    #summary-wrapper table:nth-of-type(1) td:nth-child(n+3) {
+      text-align: right;
+    }
+    /* Dòng tổng cuối cùng của bảng 1 */
+    /* Ô đầu tiên căn trái và bôi đậm */
+    #summary-wrapper table:nth-of-type(1) tr:last-child td:first-child {
+      text-align: left;
+    }
+    /* Các ô còn lại căn phải và bôi đậm */
+    #summary-wrapper table:nth-of-type(1) tr:last-child td:not(:first-child) {
+      text-align: right;
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.20.0",
+    "marked": "https://aistudiocdn.com/marked@^16.3.0"
+  }
+}
+</script>
+</head>
+<body>
+  <header>
+    <div id="toolbar">
+      <h1>Bảng minh họa (Viewer)</h1>
+      <div class="actions">
+        <button id="btnExportPdf">In / PDF</button>
+        <button id="btnExportHtml">Tải HTML</button>
+        <button class="secondary" id="btnReload">Tải lại</button>
+      </div>
+    </div>
+  </header>
+  <main id="content">
+    <div id="status" class="status">Đang tải dữ liệu...</div>
+  </main>
+
+  <!-- LIGHTBOX -->
+  <div id="lightboxOverlay">
+    <span class="close-btn" aria-label="Đóng">×</span>
+    <button class="lb-nav-btn lb-prev" title="Trước">‹</button>
+    <div class="lightbox-image-wrapper">
+        <img src="" alt="Hình ảnh phóng to" style="transform-origin: center center;"/>
+    </div>
+    <button class="lb-nav-btn lb-next" title="Sau">›</button>
+    <div class="lightbox-zoom-controls">
+        <button id="zoom-out" aria-label="Thu nhỏ">-</button>
+        <span id="zoom-level">100%</span>
+        <button id="zoom-in" aria-label="Phóng to">+</button>
+    </div>
+  </div>
+
+  <script id="image-config-data" type="application/json">
+    {
+      "company-intro-image": ["company-01.jpg","company-02.jpg","company-03.jpg","company-04.jpg","company-05.jpg","company-06.jpg","company-07.jpg","company-08.jpg","company-09.jpg","company-10.jpg"],
+      "main-prod-1": ["khoe-tron-ven-01.jpg","khoe-tron-ven-02.jpg","khoe-tron-ven-03.jpg","khoe-tron-ven-04.jpg","khoe-tron-ven-05.jpg","khoe-tron-ven-06.jpg","khoe-tron-ven-07.jpg","khoe-tron-ven-08.jpg","khoe-tron-ven-09.jpg","khoe-tron-ven-10.jpg","khoe-tron-ven-11.jpg"],
+      "main-prod-2": ["khoe-binh-an-01.jpg","khoe-binh-an-02.jpg","khoe-binh-an-03.jpg","khoe-binh-an-04.jpg","khoe-binh-an-05.jpg","khoe-binh-an-06.jpg","khoe-binh-an-07.jpg","khoe-binh-an-08.jpg","khoe-binh-an-09.jpg","khoe-binh-an-10.jpg","khoe-binh-an-11.jpg"],
+      "main-prod-3": ["vung-tuong-lai-01.jpg","vung-tuong-lai-02.jpg","vung-tuong-lai-03.jpg","vung-tuong-lai-04.jpg","vung-tuong-lai-05.jpg","vung-tuong-lai-06.jpg","vung-tuong-lai-07.jpg","vung-tuong-lai-08.jpg","vung-tuong-lai-09.jpg","vung-tuong-lai-10.jpg","vung-tuong-lai-11.jpg"],
+      "main-prod-4": ["an-binh-uu-viet-01.jpg","an-binh-uu-viet-02.jpg","an-binh-uu-viet-03.jpg","an-binh-uu-viet-04.jpg","an-binh-uu-viet-05.jpg","an-binh-uu-viet-06.jpg","an-binh-uu-viet-07.jpg"],
+      "main-prod-5": ["tron-tam-an-01.jpg","tron-tam-an-02.jpg","tron-tam-an-03.jpg","tron-tam-an-04.jpg","tron-tam-an-05.jpg","tron-tam-an-06.jpg"],
+      "rider-prod-1": ["bung-gia-luc-01.jpg","bung-gia-luc-02.jpg","bung-gia-luc-03.jpg","bung-gia-luc-04.jpg","bung-gia-luc-05.jpg","bung-gia-luc-06.jpg","bung-gia-luc-07.jpg","bung-gia-luc-08.jpg","bung-gia-luc-09.jpg","bung-gia-luc-10.jpg","bung-gia-luc-11.jpg","bung-gia-luc-12.jpg"],
+      "rider-prod-2": ["benh-hiem-ngheo-20-01.jpg","benh-hiem-ngheo-20-02.jpg","benh-hiem-ngheo-20-03.jpg","benh-hiem-ngheo-20-04.jpg","benh-hiem-ngheo-20-05.jpg","benh-hiem-ngheo-20-06.jpg","benh-hiem-ngheo-20-07.jpg","benh-hiem-ngheo-20-08.jpg","benh-hiem-ngheo-20-09.jpg","benh-hiem-ngheo-20-10.jpg","benh-hiem-ngheo-20-11.jpg","benh-hiem-ngheo-20-12.jpg","benh-hiem-ngheo-20-13.jpg"],
+      "rider-prod-3": ["tai-nan-01.jpg","tai-nan-02.jpg","tai-nan-03.jpg","tai-nan-04.jpg","tai-nan-05.jpg","tai-nan-06.jpg","tai-nan-07.jpg","tai-nan-08.jpg"],
+      "rider-prod-4": ["ho-tro-vien-phi-01.jpg","ho-tro-vien-phi-02.jpg","ho-tro-vien-phi-03.jpg","ho-tro-vien-phi-04.jpg","ho-tro-vien-phi-05.jpg","ho-tro-vien-phi-06.jpg","ho-tro-vien-phi-07.jpg","ho-tro-vien-phi-08.jpg","ho-tro-vien-phi-09.jpg"],
+      "rider-prod-5": []
+    }
+  </script>
+
+  <script>
+  (function(){
+  const state = {
+    payload:null,
+    images:[],
+    currentIndex:0,
+    imageConfig: {}
+  };
+
+  function decodePayload(){
+    const h = location.hash || '';
+    if(!h.startsWith('#v=')) throw new Error('Thiếu payload (#v=...)');
+    const b64 = h.slice(3);
+    const jsonStr = decodeURIComponent(escape(atob(b64)));
+    return JSON.parse(jsonStr);
+  }
+
+  function qs(sel,root=document){ return root.querySelector(sel); }
+  function qa(sel,root=document){ return Array.from(root.querySelectorAll(sel)); }
+
+  function buildSummaryHtmlFromPayload(p){
+    return p.summaryHtml || '<div class="text-red-600">Không có summaryHtml trong payload.</div>';
+  }
+
+  function renderImageBlock(urls, isFirstBlock = false){
+    if(!urls || !urls.length) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'viewer-image-block';
+
+    const fragment = document.createDocumentFragment();
+    urls.forEach((u, index) => {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'image-placeholder';
+        
+        const spinner = document.createElement('div');
+        spinner.className = 'spinner';
+
+        const img = document.createElement('img');
+        img.src = u;
+        img.alt = 'Ảnh minh họa';
+        img.className = 'lazy-image';
+        
+        const isFirstImageOverall = isFirstBlock && index === 0;
+        if (!isFirstImageOverall) {
+            img.loading = 'lazy';
+        }
+
+        img.addEventListener('load', () => {
+            placeholder.classList.add('loaded');
+        });
+        img.addEventListener('error', () => {
+            placeholder.style.display = 'none';
+        });
+
+        placeholder.appendChild(spinner);
+        placeholder.appendChild(img);
+        placeholder.addEventListener('click', () => openLightbox(u));
+        fragment.appendChild(placeholder);
+    });
+    wrap.appendChild(fragment);
+
+    state.images = state.images.concat(urls);
+    return wrap;
+  }
+
+  /* ---------- LIGHTBOX ---------- */
+  function setupLightbox(){
+    const overlay = qs('#lightboxOverlay');
+    const img = overlay.querySelector('img');
+    const closeBtn = overlay.querySelector('.close-btn');
+    const prevBtn = overlay.querySelector('.lb-prev');
+    const nextBtn = overlay.querySelector('.lb-next');
+    const zoomInBtn = qs('#zoom-in');
+    const zoomOutBtn = qs('#zoom-out');
+    const zoomLevelSpan = qs('#zoom-level');
+
+    let currentScale = 1;
+    let isDragging = false;
+    let startX, startY, posX, posY;
+
+    function resetState() {
+        currentScale = 1;
+        isDragging = false;
+        posX = 0;
+        posY = 0;
+        updateTransform();
+        img.classList.remove('is-dragging');
+    }
+
+    function updateTransform() {
+        img.style.transform = `translate(${posX}px, ${posY}px) scale(${currentScale})`;
+        zoomLevelSpan.textContent = `${Math.round(currentScale * 100)}%`;
+    }
+    
+    function show(idx){
+      if(idx < 0 || idx >= state.images.length) return;
+      state.currentIndex = idx;
+      
+      img.style.transition = 'none'; // Disable transition for reset
+      resetState();
+      
+      img.src = state.images[idx];
+      
+      // Re-enable transition after a tick
+      setTimeout(() => {
+          img.style.transition = 'transform 0.2s ease-out';
+      }, 0);
+
+      overlay.classList.add('active');
+      updateNav();
+    }
+
+    function hide(){
+      overlay.classList.remove('active');
+      setTimeout(() => { img.src = ''; }, 250); // Delay clearing src to allow fade out
+    }
+
+    function updateNav(){
+      prevBtn.disabled = (state.currentIndex === 0);
+      nextBtn.disabled = (state.currentIndex === state.images.length - 1);
+    }
+
+    function shift(d){
+      const ni = state.currentIndex + d;
+      if(ni >= 0 && ni < state.images.length) show(ni);
+    }
+
+    function handleZoom(direction) {
+        const zoomFactor = 1.2;
+        let newScale;
+        if (direction > 0) { // Zoom in
+            newScale = Math.min(currentScale * zoomFactor, 5); // Max zoom 500%
+        } else { // Zoom out
+            newScale = Math.max(currentScale / zoomFactor, 0.5); // Min zoom 50%
+        }
+
+        if (newScale <= 1) { // Reset position when zooming out to fit
+            posX = 0;
+            posY = 0;
+        }
+        currentScale = newScale;
+        updateTransform();
+    }
+
+    zoomInBtn.addEventListener('click', (e)=>{ e.stopPropagation(); handleZoom(1); });
+    zoomOutBtn.addEventListener('click', (e)=>{ e.stopPropagation(); handleZoom(-1); });
+
+    prevBtn.addEventListener('click', () => shift(-1));
+    nextBtn.addEventListener('click', () => shift(1));
+    closeBtn.addEventListener('click', hide);
+    
+    overlay.addEventListener('click', e => { 
+        if(e.target === overlay || e.target.classList.contains('lightbox-image-wrapper')) {
+            hide(); 
+        }
+    });
+
+    img.addEventListener('mousedown', (e) => {
+        if (currentScale > 1) {
+            e.preventDefault();
+            isDragging = true;
+            startX = e.clientX - posX;
+            startY = e.clientY - posY;
+            img.classList.add('is-dragging');
+        }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            e.preventDefault();
+            posX = e.clientX - startX;
+            posY = e.clientY - startY;
+            updateTransform();
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            img.classList.remove('is-dragging');
+        }
+    });
+
+    overlay.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        handleZoom(e.deltaY < 0 ? 1 : -1);
+    });
+    
+    document.addEventListener('keydown', e => {
+      if(!overlay.classList.contains('active')) return;
+      if(e.key === 'Escape') hide();
+      if(e.key === 'ArrowLeft') shift(-1);
+      if(e.key === 'ArrowRight') shift(1);
+      if(e.key === '+' || e.key === '=') handleZoom(1);
+      if(e.key === '-') handleZoom(-1);
+    });
+
+    window._lbOpenSrc = (src) => {
+      const idx = state.images.indexOf(src);
+      if(idx !== -1) show(idx);
+    };
+  }
+  function openLightbox(src){
+    if(window._lbOpenSrc) window._lbOpenSrc(src);
+  }
+
+  /* ---------- MAIN RENDER ---------- */
+  function render(){
+    const payload = state.payload;
+    const main = qs('#content');
+    const statusEl = qs('#status');
+    statusEl.classList.add('hidden');
+    main.innerHTML = '';
+    state.images = [];
+
+    // --- MAPS for mapping payload slugs to JSON keys ---
+    const slugToKeyMap = {
+      'khoe-tron-ven': 'main-prod-1',
+      'khoe-binh-an': 'main-prod-2',
+      'vung-tuong-lai': 'main-prod-3',
+      'an-binh-uu-viet': 'main-prod-4',
+      'tron-tam-an': 'main-prod-5',
+      'bung-gia-luc': 'rider-prod-1',
+      'benh-hiem-ngheo-20': 'rider-prod-2',
+      'tai-nan': 'rider-prod-3',
+      'ho-tro-vien-phi': 'rider-prod-4',
+    };
+     const riderSlugMap = {
+        health_scl:'bung-gia-luc',
+        bhn:'benh-hiem-ngheo-20',
+        accident:'tai-nan',
+        hospital_support:'ho-tro-vien-phi',
+        mdp3: 'rider-prod-5' // Assuming mdp3 has its own images
+      };
+
+    // 1. Gắn summaryHtml
+    const summaryHtml = buildSummaryHtmlFromPayload(payload);
+    const container = document.createElement('div');
+    container.id = 'summary-wrapper';
+    container.innerHTML = summaryHtml;
+    main.appendChild(container);
+
+    // Fix căn chỉnh bảng
+    function fixTableAlignments() {
+      const tables = container.querySelectorAll('table');
+      if (tables.length === 0) return;
+
+      for(let i=1; i < tables.length - 1; i++) {
+        const table = tables[i];
+        table.querySelectorAll('tbody tr').forEach(tr => {
+          tr.querySelectorAll('td').forEach((td, idx) => {
+            if (idx === 0) td.style.textAlign = 'left';
+            else td.style.textAlign = 'right';
+          });
+        });
+      }
+
+      const lastTable = tables[tables.length - 1];
+      if (lastTable) {
+        lastTable.querySelectorAll('tbody tr').forEach(tr => {
+          tr.querySelectorAll('td').forEach((td, idx) => {
+            if (idx === 0 || idx === 1) td.style.textAlign = 'center';
+            else td.style.textAlign = 'right';
+          });
+        });
+      }
+    }
+    fixTableAlignments();
+
+    // Bôi đậm dòng tổng, quyền lợi đặc biệt
+    const rows = container.querySelectorAll('tr');
+    rows.forEach(row => {
+      const text = row.textContent.toLowerCase();
+      if (text.includes('tổng') || text.includes('quyền lợi thai sản') || text.includes('quyền lợi ngoại trú') || text.includes('quyền lợi nha khoa')|| text.includes('điều trị ung thư')) {
+        row.style.fontWeight = '700';
+      }
+    });
+
+    // 2. Chèn ảnh công ty TRƯỚC TOÀN BỘ bảng minh họa
+    const companyFiles = state.imageConfig['company-intro-image'] || [];
+    const companyImgs = companyFiles.map(file => `./images/${file}`);
+    const companyBlock = renderImageBlock(companyImgs, true);
+    if(companyBlock){
+      main.insertBefore(companyBlock, container);
+    }
+
+    // 3. Chèn ảnh sản phẩm chính và riders sau phần 3
+    const part3Headings = qa('h3', container).filter(h => /Phần\s*3/i.test(h.textContent));
+    const lastPart3 = part3Headings.length ? part3Headings[part3Headings.length - 1] : null;
+    let insertAfterNode = lastPart3 ? (lastPart3.nextElementSibling || lastPart3) : container.lastElementChild;
+
+
+    // 3.1 Ảnh sản phẩm chính
+    const prodSlug = payload.productSlug || (payload.productKey || '').toLowerCase();
+    const prodKey = slugToKeyMap[prodSlug];
+    const productFiles = state.imageConfig[prodKey] || [];
+    const productImgs = productFiles.map(file => `./images/${file}`);
+    if(productImgs.length){
+      const prodBlock = renderImageBlock(productImgs);
+      insertAfterNode.parentNode.insertBefore(prodBlock, insertAfterNode.nextSibling);
+      insertAfterNode = prodBlock;
+    }
+
+    // 3.2 Ảnh riders
+    if(Array.isArray(payload.premiums?.riders)){
+      const selectedRiders = payload.premiums.riders.filter(r => r.selected);
+      selectedRiders.forEach(r => {
+        const rSlug = riderSlugMap[r.slug];
+        if(!rSlug) return;
+
+        const riderKey = slugToKeyMap[rSlug];
+        const riderFiles = state.imageConfig[riderKey] || [];
+        const riderImgs = riderFiles.map(file => `./images/${file}`);
+
+        if(riderImgs.length) {
+            const riderBlock = renderImageBlock(riderImgs);
+            insertAfterNode.parentNode.insertBefore(riderBlock, insertAfterNode.nextSibling);
+            insertAfterNode = riderBlock;
+        }
+      });
+    }
+  }
+async function exportHtmlWithEmbeddedImages() {
+  const mainContent = document.querySelector('#content');
+  if (!mainContent) {
+    alert('Không có nội dung để tải.');
+    return;
+  }
+  const clone = mainContent.cloneNode(true);
+
+  // Gỡ bỏ các spinner và các class/style tạm thời của placeholder
+  clone.querySelectorAll('.image-placeholder').forEach(placeholder => {
+    // Nếu ảnh gốc không tải được (bị lỗi), placeholder của nó sẽ bị ẩn đi.
+    // Ta sẽ kiểm tra và loại bỏ nó khỏi file HTML xuất ra.
+    if (placeholder.style.display === 'none') {
+      placeholder.remove();
+      return;
+    }
+    
+    const img = placeholder.querySelector('img');
+    if (img) {
+      // Thay thế placeholder bằng thẻ figure chứa ảnh đã load
+      const figure = document.createElement('figure');
+      figure.style.margin = '0 0 10px';
+      figure.style.border = '1px solid #e5e5e5';
+      figure.style.borderRadius = '8px';
+      figure.style.padding = '10px';
+      img.style.position = 'static';
+      img.style.opacity = '1';
+      img.style.width = '100%';
+      img.style.height = 'auto';
+      img.style.borderRadius = '4px';
+      figure.appendChild(img);
+      placeholder.parentNode.replaceChild(figure, placeholder);
+    } else {
+      // Nếu không có ảnh bên trong, cũng xóa placeholder
+      placeholder.remove();
+    }
+  });
+
+  const imgs = clone.querySelectorAll('img');
+  async function toBase64(url) {
+    try {
+      const response = await fetch(url);
+      if(!response.ok) throw new Error('Không tải được ảnh');
+      const blob = await response.blob();
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.warn('Không thể tải ảnh:', url, e);
+      return url;
+    }
+  }
+
+  for (const img of imgs) {
+    const src = img.getAttribute('src');
+    if (src && !src.startsWith('data:')) {
+      const absUrl = new URL(src, location.href).href;
+      const base64 = await toBase64(absUrl);
+      img.setAttribute('src', base64);
+    }
+  }
+
+  const contentHtml = clone.outerHTML;
+
+  const styles = Array.from(document.querySelectorAll('head style, head link[rel="stylesheet"]'))
+    .map(node => node.outerHTML).join('\n');
+
+  const fullHtml = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bảng Minh Họa - Xuất HTML</title>
+  ${styles}
+</head>
+<body>
+  ${contentHtml}
+</body>
+</html>`;
+
+  function getFormattedDateTime() {
+    const now = new Date();
+    const pad2 = n => n.toString().padStart(2, '0');
+    const day = pad2(now.getDate());
+    const month = pad2(now.getMonth() + 1);
+    const year = now.getFullYear().toString().slice(-2);
+    const hour = pad2(now.getHours());
+    const minute = pad2(now.getMinutes());
+    return `${day}-${month}-${year} - ${hour}-${minute}`;
+  }
+
+  function sanitizeFileName(name) {
+    return name.replace(/[\\/\\?%*:|"<>]/g, '-').trim();
+  }
+
+  let rawName = 'NguoiDuocBaoHiem';
+  if (state.payload && state.payload.mainPersonName) {
+    rawName = state.payload.mainPersonName;
+  }
+  const safeName = sanitizeFileName(rawName);
+  const dateTimeStr = getFormattedDateTime();
+  const fileName = `${safeName} - ${dateTimeStr}.html`;
+
+  const blob = new Blob([fullHtml], {type: 'text/html;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 0);
+}
+  
+  function setupButtons(){
+    qs('#btnExportPdf').addEventListener('click', ()=>window.print());
+    qs('#btnExportHtml').addEventListener('click', exportHtmlWithEmbeddedImages);
+    qs('#btnReload').addEventListener('click', ()=>location.reload());
+  }
+  function init(){
+    setupButtons();
+    setupLightbox();
+    try {
+      state.payload = decodePayload();
+      state.imageConfig = JSON.parse(qs('#image-config-data').textContent);
+      render();
+    } catch(e){
+      console.error(e);
+      const st=qs('#status');
+      st.textContent='Không đọc được dữ liệu.';
+      st.style.color = '#d4002a';
+      st.style.fontWeight = 'bold';
+    }
+  }
+  document.addEventListener('DOMContentLoaded', init);
+  })();
+  </script>
+</body>
+</html>
