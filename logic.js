@@ -742,7 +742,7 @@ function buildViewerPayload() {
         riderList.push({
           slug: rid, 
           selected: true,
-          stbh: resolveRiderStbh(rid, person),
+          stbh: appState.context.registries.CALC_REGISTRY.resolveRiderStbh({ rid, person, appState }),
           program: data.program, scope: data.scope, outpatient: !!data.outpatient, dental: !!data.dental,
           premium: premiumDetail
         });
