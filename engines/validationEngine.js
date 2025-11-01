@@ -49,10 +49,12 @@ function validatePersonInputs(person) {
         { selector: '.dob-input', message: 'Ngày sinh không hợp lệ', test: validateDobField },
     ];
 
+    // === ĐOẠN CODE MỚI ĐỂ THAY THẾ ===
     const occupationInput = container.querySelector('.occupation-input');
     const isChildOccupation = occupationInput?.dataset.isChild === 'true';
-
-    if (!isWopOther || (isWopOther && !isChildOccupation)) {
+    
+    // Logic mới: Nghề nghiệp là bắt buộc với tất cả mọi người, trừ khi họ là "Trẻ em".
+    if (!isChildOccupation) {
         fields.push({ selector: '.occupation-input', message: 'Chọn nghề nghiệp từ danh sách', test: (el) => (parseInt(el.dataset.group, 10) || 0) > 0 });
     }
 
@@ -205,15 +207,40 @@ function validateDobField(input) {
     return true;
 }
 
+// === HÀM MỚI ĐỂ THAY THẾ ===
 function validateWaiverSection(state) {
     const selectedId = state.waiver.selectedPersonId;
-    if (!selectedId) return true;
-    
-    if (selectedId === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE) {
-        const otherForm = document.getElementById(`person-container-waiver-other-form`);
-        if (!otherForm || !validatePersonInputs({ container: otherForm }, false, true)) {
+    // Nếu không có ai được chọn hoặc không có sản phẩm miễn đóng phí nào được tích, thì không cần kiểm tra.
+    if (!selectedId || Object.keys(state.waiver.enabledProducts).length === 0) {
+        return true;
+    }
+
+    // Tìm đúng người trong state
+    const waiverPerson = state.persons.find(p => p.id === selectedId);
+
+    // Nếu đã chọn sản phẩm miễn đóng phí, người được chọn phải hợp lệ.
+    if (waiverPerson) {
+        // 1. Kiểm tra các ô nhập liệu (tên, ngày sinh, nghề nghiệp)
+        if (!validatePersonInputs(waiverPerson)) {
+            return false;
+        }
+
+        // 2. Kiểm tra xem người này có đủ điều kiện (tuổi, nhóm nghề) không
+        let isEligible = true;
+        const waiverProdKey = Object.keys(PRODUCT_CATALOG).find(k => PRODUCT_CATALOG[k].slug === 'mdp3'); // Lấy sản phẩm mdp3
+        if (waiverProdKey) {
+            const waiverConfig = PRODUCT_CATALOG[waiverProdKey];
+            if (!RULE_ENGINE.evaluateAnd(waiverConfig.rules.eligibility, { customer: waiverPerson, state })) {
+                isEligible = false;
+            }
+        }
+        
+        if (!isEligible) {
+            const fieldToAttachError = waiverPerson.container.querySelector('.name-input');
+            setFieldError(fieldToAttachError, "Người này không đủ điều kiện tham gia Miễn đóng phí (do tuổi hoặc nhóm nghề).");
             return false;
         }
     }
-    return true;
+    
+    return true; // Mọi thứ đều hợp lệ
 }
