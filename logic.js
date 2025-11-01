@@ -492,82 +492,9 @@ function initSummaryAndViewer() {
 // ===================================================================================
 // ===== WAIVER LOGIC (now simpler, delegates to engines)
 // ===================================================================================
-function initWaiverSection() {
-    const container = document.getElementById('waiver-of-premium-container');
-    if (!container) return;
-    
-    container.innerHTML = `
-        <div>
-            <label for="waiver-person-select" class="font-medium text-gray-700 block mb-1">Áp dụng cho</label>
-            <select id="waiver-person-select" class="form-select w-full"></select>
-        </div>
-        <!-- Container này sẽ là nơi chứa form NĐBH được tạo động -->
-        <div id="waiver-dynamic-person-container" class="mt-4"></div>
-        <div id="waiver-products-list" class="hidden mt-4 space-y-4"></div>
-        <div id="waiver-fee-display" class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2"></div>
-    `;
-
-    // Gắn sự kiện lắng nghe
-    document.body.addEventListener('change', (e) => {
-        const target = e.target;
-        if (target.id === `waiver-person-select`) {
-            handleWaiverPersonChange(target.value);
-        }
-    });
-}
-
-// DÁN HÀM MỚI NÀY VÀO FILE logic.js
-function handleWaiverPersonChange(selectedValue) {
-    // Tìm và xóa người được thêm tự động trước đó (nếu có)
-    const existingDynamicWaiverPerson = appState.persons.find(p => p.isWaiverHolderOnly);
-    if (existingDynamicWaiverPerson) {
-        appState.persons = appState.persons.filter(p => !p.isWaiverHolderOnly);
-        const oldContainer = document.getElementById(existingDynamicWaiverPerson.id);
-        if (oldContainer) oldContainer.remove();
-    }
-
-    // Nếu người dùng chọn "+ Thêm người khác"
-    if (selectedValue === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE) {
-        const personId = `waiver-person-${Date.now()}`;
-        const template = document.getElementById('supplementary-person-template');
-        const clone = template.content.cloneNode(true);
-        const newContainer = clone.querySelector('.person-container');
-        
-        newContainer.id = personId; // Đặt ID duy nhất
-        
-        // Tùy chỉnh template cho phù hợp
-        newContainer.querySelector('[data-template-id="title"]').textContent = 'Thông tin Bên mua bảo hiểm';
-        newContainer.querySelector('.remove-supp-btn')?.remove(); // Xóa nút xóa
-        newContainer.querySelector('.supplementary-products-container')?.parentElement.remove(); // Xóa phần sản phẩm bổ sung
-
-        // Thêm form vào đúng vị trí trong mục Miễn đóng phí
-        document.getElementById('waiver-dynamic-person-container').appendChild(clone);
-
-        // Tạo một "người" mới trong state
-        const newPersonState = { 
-            id: newContainer.id, 
-            container: newContainer, 
-            isMain: false, 
-            isWaiverHolderOnly: true, // Đánh dấu đây là người đặc biệt
-            supplements: {} 
-        };
-        appState.persons.push(newPersonState);
-
-        // Cập nhật lại state và chạy lại toàn bộ workflow
-        appState.waiver.selectedPersonId = newPersonState.id;
-        initPerson(newPersonState); // Khởi tạo các sự kiện cho form mới
-
-    } else {
-         appState.waiver.selectedPersonId = selectedValue;
-    }
-
-    appState.waiver.enabledProducts = {}; // Reset lựa chọn sản phẩm miễn đóng phí
-    runWorkflow(); // Chạy lại để cập nhật toàn bộ giao diện và tính toán
-}
 // ===================================================================================
 // ===== VIEWER LOGIC
 // ===================================================================================
-
 function initViewerModal() {
     const viewerBtn = document.getElementById('btnFullViewer');
     viewerBtn.addEventListener('click', (e) => {
