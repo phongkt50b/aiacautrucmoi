@@ -202,8 +202,8 @@ function renderUI(validationResult) {
     renderMainProductSection(appState);
     appState.persons.forEach(p => renderSupplementaryProductsForPerson(p, appState, isMainProductSectionValid));
     renderWaiverSection(appState, isMainProductSectionValid);
-    renderSummary(isMainProductSectionValid);
-    updateSupplementaryAddButtonState(isMainProductSectionValid);
+    renderSummary(appState, isMainProductSectionValid);
+    updateSupplementaryAddButtonState(appState, isMainProductSectionValid);
     updatePaymentFrequencyOptions(appState.fees.baseMain);
 }
 
