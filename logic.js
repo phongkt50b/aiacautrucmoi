@@ -464,12 +464,7 @@ function initSummaryAndViewer() {
     document.getElementById('toggle-supp-list-btn').addEventListener('click', () => {
         document.getElementById('supp-insured-summaries').classList.toggle('hidden');
     });
-    document.getElementById('main-product').addEventListener('change', updateTargetAge);
-    document.querySelector('#main-person-container .dob-input')?.addEventListener('input', updateTargetAge);
-    document.body.addEventListener('change', (e) => {
-        if (e.target.matches('#payment-term, #abuv-term')) updateTargetAge();
-    });
-    updateTargetAge();
+    
     initViewerModal();
 }
 // ===================================================================================
