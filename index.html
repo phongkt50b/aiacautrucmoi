@@ -79,7 +79,49 @@
 
         <div id="waiver-of-premium-section" class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
            <h2 class="text-xl font-bold text-aia-red mb-4">5. Miễn Đóng Phí (Bên mua bảo hiểm)</h2>
-           <div id="waiver-of-premium-container" class="space-y-4"></div>
+           <!-- === ĐOẠN CODE MỚI ĐỂ THAY THẾ === -->
+            <div id="waiver-of-premium-container" class="space-y-4">
+                <div>
+                    <label for="waiver-person-select" class="font-medium text-gray-700 block mb-1">Áp dụng cho</label>
+                    <select id="waiper-person-select" class="form-select w-full"></select>
+                </div>
+                
+                <!-- Đây chính là form ẩn mà chúng ta cần thêm vào. "Người kiến trúc sư" sẽ cho nó hiện ra khi cần. -->
+                <div id="waiver-other-form" class="person-container space-y-6 bg-gray-100 p-4 rounded-lg mt-4 hidden">
+                     <h3 class="text-lg font-bold text-gray-700 mb-2">Thông tin Bên mua bảo hiểm</h3>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label class="font-medium text-gray-700 block mb-1">Họ và Tên</label>
+                          <input type="text" class="form-input name-input" placeholder="Nguyễn Văn B">
+                        </div>
+                          <div>
+                          <label class="font-medium text-gray-700 block mb-1">Ngày sinh</label>
+                          <input type="text" class="form-input dob-input" placeholder="DD/MM/YYYY">
+                        </div>
+                        <div>
+                          <label class="font-medium text-gray-700 block mb-1">Giới tính</label>
+                          <select class="form-select gender-select">
+                            <option value="Nam">Nam</option>
+                            <option value="Nữ">Nữ</option>
+                          </select>
+                        </div>
+                        <div class="flex items-end space-x-4">
+                          <p class="text-lg">Tuổi: <span class="font-bold text-aia-red age-span">0</span></p>
+                        </div>
+                        <div class="relative">
+                          <label class="font-medium text-gray-700 block mb-1">Nghề nghiệp</label>
+                          <input type="text" class="form-input occupation-input" placeholder="Gõ để tìm nghề nghiệp...">
+                          <div class="occupation-autocomplete hidden absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-60 overflow-y-auto"></div>
+                        </div>
+                        <div class="flex items-end space-x-4">
+                          <p class="text-lg">Nhóm nghề: <span class="font-bold text-aia-red risk-group-span">...</span></p>
+                        </div>
+                      </div>
+                </div>
+                
+                <div id="waiver-products-list" class="hidden mt-4 space-y-4"></div>
+                <div id="waiver-fee-display" class="text-right font-semibold text-aia-red min-h-[1.5rem] mt-2"></div>
+            </div>
         </div>
       </div>
 
