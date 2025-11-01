@@ -95,7 +95,6 @@ export const PRODUCT_CATALOG = {
         },
         accountValue: {
             enabled: true,
-            calculateProjection: calculateGenericAccountValueProjection,
             config: {
                 costOfInsuranceRef: 'pul_cost_of_insurance_rates',
                 initialFeeRef: 'PUL_TRON_DOI',
@@ -153,7 +152,6 @@ export const PRODUCT_CATALOG = {
         },
         accountValue: {
             enabled: true,
-            calculateProjection: calculateGenericAccountValueProjection,
             config: {
                 costOfInsuranceRef: 'pul_cost_of_insurance_rates',
                 initialFeeRef: 'PUL_15NAM',
@@ -211,7 +209,6 @@ export const PRODUCT_CATALOG = {
         },
         accountValue: {
             enabled: true,
-            calculateProjection: calculateGenericAccountValueProjection,
             config: {
                 costOfInsuranceRef: 'pul_cost_of_insurance_rates',
                 initialFeeRef: 'PUL_5NAM',
@@ -262,7 +259,6 @@ export const PRODUCT_CATALOG = {
         calculation: { calculateKey: 'mul_main_direct_input' },
         accountValue: {
             enabled: true,
-            calculateProjection: calculateGenericAccountValueProjection,
             config: {
                 costOfInsuranceRef: 'mul_cost_of_insurance_rates',
                 initialFeeRef: 'KHOE_BINH_AN',
@@ -313,7 +309,6 @@ export const PRODUCT_CATALOG = {
         calculation: { calculateKey: 'mul_main_direct_input' },
         accountValue: {
             enabled: true,
-            calculateProjection: calculateGenericAccountValueProjection,
             config: {
                 costOfInsuranceRef: 'mul_cost_of_insurance_rates',
                 initialFeeRef: 'VUNG_TUONG_LAI',
