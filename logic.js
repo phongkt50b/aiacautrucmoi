@@ -204,7 +204,7 @@ function renderUI(validationResult) {
     renderWaiverSection(appState, isMainProductSectionValid);
     renderSummary(appState, isMainProductSectionValid);
     updateSupplementaryAddButtonState(appState, isMainProductSectionValid);
-    updatePaymentFrequencyOptions(appState.fees.baseMain);
+    updatePaymentFrequencyOptions(appState, appState.fees.baseMain);
 }
 
 // ===================================================================================
