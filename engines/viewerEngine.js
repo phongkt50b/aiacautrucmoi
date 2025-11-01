@@ -1,7 +1,108 @@
-import { PRODUCT_CATALOG, VIEWER_CONFIG, GLOBAL_CONFIG } from '../structure.js';
+import { PRODUCT_CATALOG, GLOBAL_CONFIG } from '../structure.js';
 import { BENEFIT_MATRIX_SCHEMAS, investment_data } from '../data.js';
 import { formatCurrency, sanitizeHtml, roundDownTo1000, roundTo1000, roundUpTo1000 } from '../utils.js';
 import { RULE_ENGINE } from '../registries/ruleEngine.js';
+
+
+// ===================================================================================
+// ===== CẤU HÌNH CHO TRANG VIEWER (BẢNG 1 & 3)
+// ===================================================================================
+const VIEWER_CONFIG = {
+    part1_summary: {
+        title: 'Phần 1 · Tóm tắt sản phẩm',
+        columns: [
+            { id: 'personName', header: 'Tên NĐBH', getValue: (row) => row.personName },
+            { id: 'productName', header: 'Sản phẩm', getValue: (row) => row.prodName },
+            { id: 'stbh', header: 'STBH', align: 'right', getValue: (row) => row.stbhDisplay },
+            { id: 'term', header: 'Số năm đóng phí', align: 'center', getValue: (row) => row.years },
+            { 
+                id: 'periodicFee', 
+                header: (data) => `Phí (${data.freqLabel})`, 
+                align: 'right', 
+                condition: (data) => !data.isAnnual, 
+                getValue: (row) => formatCurrency(row.perPeriod) 
+            },
+            { 
+                id: 'annualEquivalent', 
+                header: 'Phí quy năm', 
+                align: 'right', 
+                condition: (data) => !data.isAnnual, 
+                getValue: (row) => formatCurrency(row.annualEq) 
+            },
+            { 
+                id: 'annualFee', 
+                header: 'Phí theo năm', 
+                align: 'right', 
+                getValue: (row) => formatCurrency(row.annualBase) 
+            },
+            { 
+                id: 'diff', 
+                header: 'Chênh lệch', 
+                align: 'right', 
+                condition: (data) => !data.isAnnual, 
+                getValue: (row) => row.diff === 0 ? '0' : `<span class="text-red-600 font-bold">${formatCurrency(row.diff)}</span>`
+            }
+        ],
+        summaryRows: [
+            { type: 'perPerson', label: 'Tổng theo người' },
+            { type: 'grandTotal', label: 'Tổng tất cả' }
+        ]
+    },
+    part3_schedule: {
+        titleTemplate: (summaryData) => {
+            const hasAccountValue = summaryData.projection?.guaranteed?.length > 0;
+            return `Phần 3 · Bảng phí ${hasAccountValue ? 'và minh họa giá trị tài khoản' : ''}`;
+        },
+        columns: [
+            { id: 'policyYear', header: 'Năm HĐ', align: 'center', getValue: (row) => row.year, getFooter: () => 'Tổng' },
+            { id: 'age', header: 'Tuổi', align: 'center', getValue: (row) => row.age, getFooter: () => '' },
+            { id: 'mainPremium', header: 'Phí chính', align: 'right', getValue: (row) => formatCurrency(row.mainYearBase), getFooter: (summary) => formatCurrency(summary.sums.main) },
+            { id: 'extraPremium', header: 'Phí đóng thêm', align: 'right', condition: (summary) => !summary.schedule.extraAllZero, getValue: (row) => formatCurrency(row.extraYearBase), getFooter: (summary) => formatCurrency(summary.sums.extra) },
+            {
+                id: 'riderPremium', type: 'dynamic',
+                headerTemplate: (person) => `Phí SP bổ sung (${person.name})`,
+                align: 'right',
+                getValue: (row, personIndex) => formatCurrency(row.perPersonSuppAnnualEq[personIndex]),
+                getFooter: (summary, personIndex) => formatCurrency(summary.sums.supp[personIndex])
+            },
+            { 
+                id: 'totalPremiumEq', header: 'Tổng đóng/năm', align: 'right', isBold: true, 
+                condition: (summary) => !summary.isAnnual, 
+                getValue: (row) => formatCurrency(row.totalAnnualEq), 
+                getFooter: (summary) => formatCurrency(summary.sums.totalEq) 
+            },
+            { 
+                id: 'totalPremium', header: 'Tổng nếu đóng theo năm', align: 'right', isBold: false, 
+                getValue: (row) => formatCurrency(row.totalYearBase), 
+                getFooter: (summary) => formatCurrency(summary.sums.totalBase) 
+            },
+            { 
+                id: 'diff', header: 'Chênh lệch', align: 'right', isBold: false, 
+                condition: (summary) => !summary.isAnnual, 
+                getValue: (row) => row.diff === 0 ? '0' : `<span class="text-red-600 font-bold">${formatCurrency(row.diff)}</span>`,
+                getFooter: (summary) => summary.sums.diff === 0 ? '0' : `<span class="text-red-600 font-bold">${formatCurrency(summary.sums.diff)}</span>`
+            },
+            {
+                id: 'gttk_guaranteed', header: 'GTTK (Lãi suất cam kết)', align: 'right',
+                condition: (summary) => !!summary.projection?.guaranteed,
+                getValue: (row, summary) => formatCurrency(roundDownTo1000(summary.projection.guaranteed[row.year - 1])),
+                getFooter: () => ''
+            },
+            {
+                id: 'gttk_customCapped', header: (summary) => `GTTK (LS ${summary.customRate}% trong 20 năm đầu, từ năm 21 là 0.5%)`, align: 'right',
+                condition: (summary) => !!summary.projection?.customCapped,
+                getValue: (row, summary) => formatCurrency(roundDownTo1000(summary.projection.customCapped[row.year - 1])),
+                getFooter: () => ''
+            },
+            {
+                id: 'gttk_customFull', header: (summary) => `GTTK (LS ${summary.customRate}% xuyên suốt hợp đồng)`, align: 'right',
+                condition: (summary) => !!summary.projection?.customFull,
+                getValue: (row, summary) => formatCurrency(roundDownTo1000(summary.projection.customFull[row.year - 1])),
+                getFooter: () => ''
+            }
+        ]
+    }
+};
 
 // ===================================================================================
 // ===== LOGIC TẠO BẢNG MINH HỌA (PORTED FROM V1)
