@@ -212,7 +212,7 @@ export const UI_FUNCTIONS = {
               scope: data.scope,
               outpatient: data.outpatient,
               dental: data.dental,
-              maternity: data.program === 'toan_dien' || data.program === 'hoan_hao' && person.gender === 'Nữ'
+              maternity: (data.program === 'toan_dien' || data.program === 'hoan_hao') && person.gender === 'Nữ'
           }
       }),
       bhn_column_data: ({ productKey, person, data }) => ({
