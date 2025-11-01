@@ -282,7 +282,7 @@ export function renderSummary(appState, isValid) {
         : (f.baseMain > 0 ? `Phí SP chính: ${fmt(f.baseMain)}` : '');
 
     renderFrequencyBreakdown(displayTotal, f.baseMain, f.extra, displayTotalSupp);
-    renderSuppListSummary();
+    renderSuppListSummary(appState);
 }
 
 export function renderFrequencyBreakdown(appState, annualOriginal, baseMain, extra, totalSupp) {
