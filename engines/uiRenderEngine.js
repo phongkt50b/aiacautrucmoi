@@ -193,61 +193,49 @@ function renderControl(config, value, customer, state) {
     }
     return html;
 }
-
+// === HÀM MỚI ĐỂ THAY THẾ ===
 export function renderWaiverSection(state, isMainProductValid) {
     const selEl = document.getElementById(`waiver-person-select`);
     const productListContainer = document.getElementById('waiver-products-list');
-    const dynamicPersonContainer = document.getElementById('waiver-dynamic-person-container');
+    const dynamicPersonForm = document.getElementById('waiver-other-form'); // Form ẩn trong HTML
     const feeEl = document.getElementById(`waiver-fee-display`);
+    if (!selEl || !productListContainer || !feeEl || !dynamicPersonForm) return;
 
-    if (!selEl || !productListContainer || !feeEl || !dynamicPersonContainer) return;
+    // Tắt/mở dropdown dựa trên tính hợp lệ của SP chính
+    selEl.disabled = !isMainProductValid;
 
-    // 1. Cập nhật các lựa chọn trong dropdown
-    const mainProductConfig = PRODUCT_CATALOG[state.mainProduct.key];
-    const noWaiverAllowed = RULE_ENGINE.evaluateOr(mainProductConfig?.rules.noSupplementaryInsured, { state, PRODUCT_CATALOG });
-    selEl.disabled = !isMainProductValid || noWaiverAllowed;
+    // BƯỚC 1: Xây dựng lại danh sách lựa chọn trong dropdown từ state
+    const currentSelectedId = state.waiver.selectedPersonId;
+    selEl.innerHTML = `<option value="">Không mua miễn đóng phí</option>` +
+        state.persons.filter(p => !p.isMain).map(p => 
+            `<option value="${p.id}">${p.name} (tuổi ${p.age || "?"})</option>`
+        ).join('') +
+        // Luôn có lựa chọn "Thêm người khác"
+        `<option value="${GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE}">+ Thêm người khác (Bên mua bảo hiểm)</option>`;
     
-    if (noWaiverAllowed) {
-        selEl.innerHTML = `<option value="">-- Không áp dụng cho sản phẩm này --</option>`;
-        dynamicPersonContainer.innerHTML = ''; // Dọn dẹp form nếu có
-    } else {
-        const currentSelectedValue = state.waiver.selectedPersonId;
-        let optionsHtml = `<option value="">Không mua miễn đóng phí</option>`;
-        // Chỉ hiển thị những người không phải là "người miễn đóng phí" tự động
-        state.persons.filter(p => !p.isWaiverHolderOnly).forEach(p => {
-            optionsHtml += `<option value="${p.id}">${p.name} (tuổi ${p.age || "?"})</option>`;
-        });
-        optionsHtml += `<option value="${GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE}">+ Thêm người khác (Bên mua bảo hiểm)</option>`;
-        
-        // Nếu người được chọn là người tự động, thêm họ vào danh sách để hiển thị
-        const dynamicPerson = state.persons.find(p => p.isWaiverHolderOnly);
-        if (dynamicPerson) {
-             optionsHtml += `<option value="${dynamicPerson.id}" selected>${dynamicPerson.name || 'Bên mua bảo hiểm'} (tuổi ${dynamicPerson.age || "?"})</option>`;
-        }
+    // Chọn đúng giá trị đang có trong state
+    selEl.value = currentSelectedId;
 
-        selEl.innerHTML = optionsHtml;
-        selEl.value = currentSelectedValue;
-    }
+    // BƯỚC 2: Đây là logic then chốt theo gợi ý của bạn
+    const showDynamicForm = currentSelectedId === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE;
+    dynamicPersonForm.classList.toggle('hidden', !showDynamicForm);
 
-    // 2. Ẩn/hiện danh sách sản phẩm
+    // BƯỚC 3: Lấy thông tin người đang được chọn (có thể là người thật hoặc là "người ảo" từ form)
     const personInfo = state.context.registries.CALC_REGISTRY._getWaiverTargetPersonInfo(state);
     
+    // BƯỚC 4: Ẩn/hiện danh sách sản phẩm
     productListContainer.classList.toggle('hidden', !personInfo);
     if (!personInfo) {
         feeEl.textContent = '';
         return;
     }
-    
-    // 3. Vẽ danh sách sản phẩm Miễn đóng phí
-    
+
+    // BƯỚC 5: Vẽ lại danh sách sản phẩm và LUÔN BẬT CHECKBOX khi form "Người khác" hiện ra
     const waiverProducts = Object.values(PRODUCT_CATALOG).filter(p => p.category === 'waiver');
     productListContainer.innerHTML = waiverProducts.map(prodConfig => {
         let isEligible;
-        // Logic mới:
-        // 1. Nếu người được chọn là "Người khác" (BMBH), luôn cho phép chọn.
-        //    Việc kiểm tra đúng sai sẽ được thực hiện ở bước cuối cùng.
-        // 2. Nếu là người có sẵn (NĐBH Chính/Bổ sung), kiểm tra điều kiện như cũ.
-        if (personInfo.isWaiverHolderOnly) {
+        // Nếu là "Người khác", luôn cho phép chọn ở UI.
+        if (showDynamicForm) {
             isEligible = true;
         } else {
             isEligible = RULE_ENGINE.evaluateAnd(prodConfig.rules.eligibility, { customer: personInfo, state });
@@ -266,7 +254,7 @@ export function renderWaiverSection(state, isMainProductValid) {
         `;
     }).join('');
 
-    // 4. Hiển thị phí
+    // BƯỚC 6: Hiển thị phí
     const feeText = Object.entries(state.fees.waiverDetails).map(([, data]) => {
         return `STBH: ${state.context.helpers.formatCurrency(data.stbhBase)} | Phí: ${state.context.helpers.formatCurrency(data.premium)}`;
     }).join(' | ');
