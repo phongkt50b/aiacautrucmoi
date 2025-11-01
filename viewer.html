@@ -624,7 +624,7 @@
         bhn:'benh-hiem-ngheo-20',
         accident:'tai-nan',
         hospital_support:'ho-tro-vien-phi',
-        mdp3: 'rider-prod-5' // Assuming mdp3 has its own images
+        mdp3: 'rider-prod-5'
       };
 
     // 1. Gắn summaryHtml
@@ -634,7 +634,6 @@
     container.innerHTML = summaryHtml;
     main.appendChild(container);
 
-    // Fix căn chỉnh bảng
     function fixTableAlignments() {
       const tables = container.querySelectorAll('table');
       if (tables.length === 0) return;
@@ -660,8 +659,7 @@
       }
     }
     fixTableAlignments();
-
-    // Bôi đậm dòng tổng, quyền lợi đặc biệt
+    
     const rows = container.querySelectorAll('tr');
     rows.forEach(row => {
       const text = row.textContent.toLowerCase();
@@ -675,43 +673,75 @@
     const companyImgs = companyFiles.map(file => `./images/${file}`);
     const companyBlock = renderImageBlock(companyImgs, true);
     if(companyBlock){
-      main.insertBefore(companyBlock, container);
+      const companyGallery = document.createElement('div');
+      companyGallery.className = 'img-company-gallery';
+      const companyTitle = document.createElement('h3');
+      companyTitle.textContent = 'Giới thiệu về AIA';
+      companyGallery.appendChild(companyTitle);
+      companyGallery.appendChild(companyBlock);
+      main.insertBefore(companyGallery, container);
     }
 
-    // 3. Chèn ảnh sản phẩm chính và riders sau phần 3
+    // 3. Chèn ảnh sản phẩm (chính và bổ sung)
     const part3Headings = qa('h3', container).filter(h => /Phần\s*3/i.test(h.textContent));
     const lastPart3 = part3Headings.length ? part3Headings[part3Headings.length - 1] : null;
-    let insertAfterNode = lastPart3 ? (lastPart3.nextElementSibling || lastPart3) : container.lastElementChild;
+    let insertAfterNode = lastPart3 ? (lastPart3.nextElementSibling || lastPart3) : container;
 
+    const galleryContainer = document.createElement('div');
+    galleryContainer.className = 'img-product-gallery';
+    let hasImages = false;
 
-    // 3.1 Ảnh sản phẩm chính
-    const prodSlug = payload.productSlug || (payload.productKey || '').toLowerCase();
-    const prodKey = slugToKeyMap[prodSlug];
-    const productFiles = state.imageConfig[prodKey] || [];
-    const productImgs = productFiles.map(file => `./images/${file}`);
-    if(productImgs.length){
-      const prodBlock = renderImageBlock(productImgs);
-      insertAfterNode.parentNode.insertBefore(prodBlock, insertAfterNode.nextSibling);
-      insertAfterNode = prodBlock;
+    const renderProductImageBlock = (title, slug, isMainProduct = false) => {
+        const imageKey = slugToKeyMap[slug];
+        if (!imageKey) return;
+        
+        const imageFiles = state.imageConfig[imageKey] || [];
+        const imageUrls = imageFiles.map(file => `./images/${file}`);
+        
+        if (imageUrls.length > 0) {
+            const blockContainer = document.createElement('div');
+            blockContainer.className = 'img-product-block';
+
+            const blockTitle = document.createElement('h3');
+            blockTitle.className = 'img-product-title';
+            blockTitle.textContent = title;
+            
+            const imageGrid = renderImageBlock(imageUrls, isMainProduct);
+            
+            blockContainer.appendChild(blockTitle);
+            blockContainer.appendChild(imageGrid);
+            galleryContainer.appendChild(blockContainer);
+            hasImages = true;
+        }
+    };
+
+    const mainProductNames = {
+        'PUL_TRON_DOI': 'Khoẻ trọn vẹn - Trọn đời', 'PUL_15NAM': 'Khoẻ trọn vẹn - 15 năm', 'PUL_5NAM': 'Khoẻ trọn vẹn - 5 năm',
+        'KHOE_BINH_AN': 'MUL - Khoẻ Bình An', 'VUNG_TUONG_LAI': 'MUL - Vững Tương Lai', 'AN_BINH_UU_VIET': 'An Bình Ưu Việt', 'TRON_TAM_AN': 'Trọn tâm an'
+    };
+    const riderNames = {
+      'health_scl': 'Sức khỏe Bùng Gia Lực', 'bhn': 'Bệnh Hiểm Nghèo 2.0', 'accident': 'Bảo hiểm Tai nạn',
+      'hospital_support': 'Hỗ trợ chi phí nằm viện', 'mdp3': 'Miễn đóng phí 3.0'
+    };
+    
+    const mainProductName = mainProductNames[payload.productKey] || payload.productKey;
+    const mainProductSlug = payload.productSlug || (payload.productKey || '').toLowerCase();
+    renderProductImageBlock(`Sản phẩm chính: ${mainProductName}`, mainProductSlug, true);
+
+    if (Array.isArray(payload.premiums?.riders)) {
+        payload.premiums.riders.filter(r => r.selected).forEach(rider => {
+            const riderSlug = riderSlugMap[rider.slug];
+            if (!riderSlug) return;
+            const riderTitle = riderNames[rider.slug] || rider.slug;
+            renderProductImageBlock(`Sản phẩm bổ sung: ${riderTitle}`, riderSlug);
+        });
     }
 
-    // 3.2 Ảnh riders
-    if(Array.isArray(payload.premiums?.riders)){
-      const selectedRiders = payload.premiums.riders.filter(r => r.selected);
-      selectedRiders.forEach(r => {
-        const rSlug = riderSlugMap[r.slug];
-        if(!rSlug) return;
-
-        const riderKey = slugToKeyMap[rSlug];
-        const riderFiles = state.imageConfig[riderKey] || [];
-        const riderImgs = riderFiles.map(file => `./images/${file}`);
-
-        if(riderImgs.length) {
-            const riderBlock = renderImageBlock(riderImgs);
-            insertAfterNode.parentNode.insertBefore(riderBlock, insertAfterNode.nextSibling);
-            insertAfterNode = riderBlock;
-        }
-      });
+    if (hasImages) {
+        const galleryTitle = document.createElement('h3');
+        galleryTitle.textContent = 'Phần 4 · Hình ảnh & Quyền lợi sản phẩm';
+        galleryContainer.insertBefore(galleryTitle, galleryContainer.firstChild);
+        insertAfterNode.parentNode.insertBefore(galleryContainer, insertAfterNode.nextSibling);
     }
   }
 async function exportHtmlWithEmbeddedImages() {
