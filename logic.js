@@ -274,7 +274,29 @@ function attachGlobalListeners() {
             }
             runWorkflow();
             productJustChanged = false;
+            
+        } else if (target.id === 'waiver-person-select') {
+            const selectedValue = target.value;
 
+            // Remove existing dynamic person if we switch away
+            const existingDynamicPerson = appState.persons.find(p => p.isWaiverHolderOnly);
+            if (existingDynamicPerson && existingDynamicPerson.id !== selectedValue) {
+                appState.persons = appState.persons.filter(p => !p.isWaiverHolderOnly);
+            }
+            
+            // If user selected "+ Add Other", create the person object.
+            if (selectedValue === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE) {
+                const newId = GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID; // Use a consistent ID
+                if (!appState.persons.some(p => p.id === newId)) {
+                    const container = document.getElementById('person-container-waiver-other-form');
+                    const newPerson = { id: newId, container, isMain: false, supplements: {}, isWaiverHolderOnly: true };
+                    Object.assign(newPerson, collectPersonData(container, false, true));
+                    appState.persons.push(newPerson);
+                }
+            }
+            
+            appState.waiver.enabledProducts = {}; // Reset product selection
+            runWorkflow();
         } else if (e.target.matches('input[type="checkbox"]') && !e.target.classList.contains('waiver-prod-checkbox')) {
             runWorkflowDebounced();
         } else {
