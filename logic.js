@@ -1224,6 +1224,4 @@ function bm_renderSchemaTables(schemaKey, columns) {
 
     return `<div><h3>${sanitizeHtml(title)}</h3><table><thead><tr><th>Tên quyền lợi</th>${headCols}</tr></thead><tbody>${bodyHtml}${totalRowHtml}</tbody></table></div>`;
 }
-function getProductLabel(key) {
-  return PRODUCT_CATALOG[key]?.name || key || '';
-}
+
