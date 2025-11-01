@@ -227,7 +227,7 @@ function runWorkflow() {
   const validationResult = runAllValidations(appState);
   appState.fees = calculateAll(appState);
   renderUI(validationResult);
-  updateTargetAge();
+  updateTargetAge(appState, productJustChanged);
 }
 
 const runWorkflowDebounced = debounce(runWorkflow, 60);
