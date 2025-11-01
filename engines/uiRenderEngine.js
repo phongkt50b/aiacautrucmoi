@@ -239,9 +239,20 @@ export function renderWaiverSection(state, isMainProductValid) {
     }
     
     // 3. Vẽ danh sách sản phẩm Miễn đóng phí
+    
     const waiverProducts = Object.values(PRODUCT_CATALOG).filter(p => p.category === 'waiver');
     productListContainer.innerHTML = waiverProducts.map(prodConfig => {
-        const isEligible = RULE_ENGINE.evaluateAnd(prodConfig.rules.eligibility, { customer: personInfo, state });
+        let isEligible;
+        // Logic mới:
+        // 1. Nếu người được chọn là "Người khác" (BMBH), luôn cho phép chọn.
+        //    Việc kiểm tra đúng sai sẽ được thực hiện ở bước cuối cùng.
+        // 2. Nếu là người có sẵn (NĐBH Chính/Bổ sung), kiểm tra điều kiện như cũ.
+        if (personInfo.isWaiverHolderOnly) {
+            isEligible = true;
+        } else {
+            isEligible = RULE_ENGINE.evaluateAnd(prodConfig.rules.eligibility, { customer: personInfo, state });
+        }
+        
         const isChecked = state.waiver.enabledProducts[prodConfig.slug] || false;
         return `
             <div class="waiver-product-item ${!isEligible ? 'opacity-50' : ''}">
