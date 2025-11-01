@@ -218,28 +218,8 @@ function buildSummaryData(appState) {
       targetAge = mainPerson.age + paymentTerm -1;
     }
 
-    const allPersonsForSummary = JSON.parse(JSON.stringify(appState.persons));
+    const allPersonsForSummary = appState.persons;
     const waiverPremiums = appState.fees.waiverDetails || {};
-
-    // Augment person data with selected waivers for unified processing
-    const waiverOtherPersons = [];
-    Object.entries(waiverPremiums).forEach(([waiverId, waiverData]) => {
-        const { premium, targetPerson } = waiverData;
-        if (premium > 0 && targetPerson) {
-            let personForWaiver = allPersonsForSummary.find(p => p.id === targetPerson.id);
-            if (!personForWaiver && targetPerson.id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID) {
-                personForWaiver = {
-                    ...targetPerson,
-                    isMain: false,
-                    supplements: {}
-                };
-                waiverOtherPersons.push(personForWaiver);
-            }
-            if(personForWaiver) {
-               personForWaiver.supplements[waiverId] = {}; // Add placeholder for iteration
-            }
-        }
-    });
 
     allPersonsForSummary.push(...waiverOtherPersons);
 
