@@ -281,7 +281,7 @@ export function renderSummary(appState, isValid) {
         ? `Phí SP chính: ${fmt(f.baseMain)} | Phí đóng thêm: ${fmt(f.extra)} | Tổng: ${fmt(f.baseMain + f.extra)}`
         : (f.baseMain > 0 ? `Phí SP chính: ${fmt(f.baseMain)}` : '');
 
-    renderFrequencyBreakdown(displayTotal, f.baseMain, f.extra, displayTotalSupp);
+    renderFrequencyBreakdown(appState, displayTotal, f.baseMain, f.extra, displayTotalSupp);
     renderSuppListSummary(appState);
 }
 
