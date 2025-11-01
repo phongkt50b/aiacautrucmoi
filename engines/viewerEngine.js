@@ -1,7 +1,8 @@
 import { PRODUCT_CATALOG, VIEWER_CONFIG, GLOBAL_CONFIG } from '../structure.js';
-import { BENEFIT_MATRIX_SCHEMAS } from '../data.js';
-import { formatCurrency, sanitizeHtml, roundTo1000 } from '../utils.js';
+import { BENEFIT_MATRIX_SCHEMAS, investment_data } from '../data.js';
+import { formatCurrency, sanitizeHtml, roundDownTo1000, roundTo1000 } from '../utils.js';
 import { RULE_ENGINE } from '../registries/ruleEngine.js';
+
 // ===================================================================================
 // ===== LOGIC TẠO BẢNG MINH HỌA (PORTED FROM V1)
 // ==================================================================================
