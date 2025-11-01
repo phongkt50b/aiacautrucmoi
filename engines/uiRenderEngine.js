@@ -3,6 +3,7 @@
 import { PRODUCT_CATALOG, GLOBAL_CONFIG } from '../structure.js';
 import { RULE_ENGINE } from '../registries/ruleEngine.js';
 import { formatCurrency } from '../utils.js';
+import { TARGET_AGE_REGISTRY } from '../registries/targetAge.js';
 
 let lastRenderedProductKey = null;
 
