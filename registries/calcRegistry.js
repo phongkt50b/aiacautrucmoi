@@ -164,7 +164,7 @@ export const CALC_REGISTRY = {
      * Generic function to calculate account value projection.
      * It reads configuration from the product definition.
      */
-    function calculateGenericAccountValueProjection(productConfig, args, helpers) {
+    calculateGenericAccountValueProjection(productConfig, args, helpers) {
         const { mainPerson, mainProduct, basePremium, extraPremium, targetAge, customInterestRate, paymentFrequency } = args;
         const { investment_data, roundDownTo1000, GLOBAL_CONFIG } = helpers;
         const accountValueConfig = productConfig.accountValue.config;
