@@ -332,6 +332,11 @@ export const CALC_REGISTRY = {
         };
     },
     
+    // Lấy tên các sản phẩm 
+    getProductLabel(key) {
+      return PRODUCT_CATALOG[key]?.name || key || '';
+    },
+    
     // Xây dữ liệu trong bảng 1
     
     buildPart1RowsData(ctx) {
@@ -405,8 +410,8 @@ export const CALC_REGISTRY = {
                 } else {
                     const maxA = riderMaxAge(rid);
                     years = Math.max(0, Math.min(maxA - p.age, targetAge - mainAge) + 1);
-                    stbh = resolveRiderStbh(rid, p);
-                    prodName = resolveRiderDisplayName(rid, p);
+                    stbh = this.resolveRiderStbh({ rid, person: p, appState });
+                    prodName = this.resolveRiderDisplayName({ rid, person: p, appState });
                 }
                 
                 stbhDisplay = stbh ? formatCurrency(stbh) : '—';
@@ -508,8 +513,30 @@ export const CALC_REGISTRY = {
     return { rows, extraAllZero: rows.every(r => r.extraYearBase === 0) };
 },
 
-getProductLabel(key) {
-  return PRODUCT_CATALOG[key]?.name || key || '';
+// Lấy số tiền rider    
+resolveRiderStbh({ rid, person, appState }) {
+    const prodConfig = PRODUCT_CATALOG[rid];
+    const data = person.supplements[rid] || {};
+    if (prodConfig?.stbhKey) {
+        const [resolver, param] = prodConfig.stbhKey.split(':');
+        const resolverFunc = appState.context.registries.UI_FUNCTIONS?.stbh?.[resolver];
+        if (resolverFunc) {
+            return resolverFunc({ person, data, productConfig: prodConfig, params: { ...prodConfig.stbhKeyParams, controlId: param }, state: appState }) || 0;
+        }
+    }
+    return data.stbh || 0;
+},
+
+resolveRiderDisplayName({ rid, person, appState }) {
+    const prodConfig = PRODUCT_CATALOG[rid];
+    const data = person.supplements[rid] || {};
+    if (prodConfig?.displayNameKey) {
+        const resolverFunc = appState.context.registries.UI_FUNCTIONS.displayName[prodConfig.displayNameKey];
+        if (resolverFunc) {
+            return resolverFunc({ person, data, state: appState });
+        }
+    }
+    return this.getProductLabel(rid);
 }
 
 };
