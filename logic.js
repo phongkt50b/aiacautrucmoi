@@ -276,7 +276,7 @@ function attachGlobalListeners() {
             productJustChanged = false;
             
         } else if (e.target.id === 'waiver-person-select') {
-            const selectedValue = target.value;
+            const selectedValue = e.target.value;
 
             // Remove existing dynamic person if we switch away
             const existingDynamicPerson = appState.persons.find(p => p.isWaiverHolderOnly);
