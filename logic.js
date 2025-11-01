@@ -751,7 +751,7 @@ function resolveRiderDisplayName(rid, person) {
             return resolverFunc({ person, data, state: appState });
         }
     }
-    return getProductLabel(rid);
+    return appState.context.registries.CALC_REGISTRY.getProductLabel(rid);
 }
 
 
