@@ -133,33 +133,11 @@ export const CALC_REGISTRY = {
     },
     
     // Internal helper, not a product calculation
+    // THAY THẾ HÀM CŨ BẰNG HÀM NÀY
     _getWaiverTargetPersonInfo: (state) => {
         const selectedId = state.waiver.selectedPersonId;
         if (!selectedId) return null;
-        if (selectedId === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE) {
-            const otherForm = document.getElementById('person-container-waiver-other-form');
-            if (!otherForm) return null;
-            
-            const dobStr = otherForm.querySelector('.dob-input')?.value || '';
-            let age = 0;
-            if (dobStr && /^\d{2}\/\d{2}\/\d{4}$/.test(dobStr)) {
-                const [dd, mm, yyyy] = dobStr.split('/').map(n => parseInt(n, 10));
-                const birthDate = new Date(yyyy, mm - 1, dd);
-                if (!isNaN(birthDate)) {
-                    age = GLOBAL_CONFIG.REFERENCE_DATE.getFullYear() - birthDate.getFullYear();
-                    const m = GLOBAL_CONFIG.REFERENCE_DATE.getMonth() - birthDate.getMonth();
-                    if (m < 0 || (m === 0 && GLOBAL_CONFIG.REFERENCE_DATE.getDate() < birthDate.getDate())) age--;
-                }
-            }
-            return {
-                id: GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID,
-                name: otherForm.querySelector('.name-input')?.value || 'Người khác',
-                dob: dobStr,
-                age: age,
-                gender: otherForm.querySelector('.gender-select')?.value || 'Nam',
-                riskGroup: parseInt(otherForm.querySelector('.occupation-input')?.dataset.group, 10) || 0,
-            };
-        }
+        // Đơn giản chỉ cần tìm người trong danh sách chính thức!
         return state.persons.find(p => p.id === selectedId) || null;
     },
     /**
