@@ -896,24 +896,29 @@ function buildSummaryData() {
     
     const summary = { freq, periods, isAnnual, riderFactor, productKey, paymentTerm, targetAge, mainPerson, persons: allPersonsForSummary, waiverPremiums, part1, schedule, projection: null, sums: {} };
     
-    if (productConfig?.accountValue?.calculateProjection) {
-        const customRateInput = document.getElementById('custom-interest-rate-input')?.value || '4.7';
-        summary.customRate = customRateInput;
-        summary.projection = productConfig.accountValue.calculateProjection(
-            productConfig,
-            {
-                mainPerson: appState.persons.find(p => p.isMain),
-                mainProduct: appState.mainProduct,
-                basePremium: appState.fees.baseMain,
-                extraPremium: appState.mainProduct.values['extra-premium'],
-                targetAge: summary.targetAge,
-                customInterestRate: customRateInput,
-                paymentFrequency: summary.freq,
-            },
-        
-            { investment_data, roundDownTo1000, roundTo1000, roundUpTo1000, GLOBAL_CONFIG }
-        );
-    }
+    if (productConfig?.accountValue?.enabled) { // Chúng ta chỉ cần kiểm tra xem tính năng này có được bật không
+    const customRateInput = document.getElementById('custom-interest-rate-input')?.value || '4.7';
+    summary.customRate = customRateInput;
+
+    // Lấy hàm tính toán từ "xưởng" calcRegistry
+    const projectionFunc = appState.context.registries.CALC_REGISTRY.calculateGenericAccountValueProjection;
+    
+        if (projectionFunc) {
+            summary.projection = projectionFunc(
+                productConfig,
+                {
+                    mainPerson: appState.persons.find(p => p.isMain),
+                    mainProduct: appState.mainProduct,
+                    basePremium: appState.fees.baseMain,
+                    extraPremium: appState.mainProduct.values['extra-premium'],
+                    targetAge: summary.targetAge,
+                    customInterestRate: customRateInput,
+                    paymentFrequency: summary.freq,
+                },
+                { investment_data, roundDownTo1000, roundTo1000, roundUpTo1000, GLOBAL_CONFIG }
+            );
+        }
+    }    
     
     // Pre-calculate sums for footer
     const activePersonIdx = summary.persons.map((p, i) => summary.schedule.rows.some(r => (r.perPersonSuppAnnualEq[i] || 0) > 0) ? i : -1).filter(i => i !== -1);
