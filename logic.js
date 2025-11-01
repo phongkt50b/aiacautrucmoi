@@ -275,7 +275,7 @@ function attachGlobalListeners() {
             runWorkflow();
             productJustChanged = false;
             
-        } else if (target.id === 'waiver-person-select') {
+        } else if (e.target.id === 'waiver-person-select') {
             const selectedValue = target.value;
 
             // Remove existing dynamic person if we switch away
