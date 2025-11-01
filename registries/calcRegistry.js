@@ -1,6 +1,7 @@
 import { product_data } from '../data.js';
 import { GLOBAL_CONFIG, PRODUCT_CATALOG } from '../structure.js';
 import { RULE_ENGINE } from './ruleEngine.js';
+import { formatCurrency } from '../utils.js';
 
 const HELPERS_INTERNAL = {
     findRate: (tablePath, age, genderKey, ageField = 'age') => {
