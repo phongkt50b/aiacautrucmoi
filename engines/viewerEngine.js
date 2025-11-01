@@ -1,6 +1,6 @@
 import { PRODUCT_CATALOG, VIEWER_CONFIG, GLOBAL_CONFIG } from '../structure.js';
 import { BENEFIT_MATRIX_SCHEMAS, investment_data } from '../data.js';
-import { formatCurrency, sanitizeHtml, roundDownTo1000, roundTo1000 } from '../utils.js';
+import { formatCurrency, sanitizeHtml, roundDownTo1000, roundTo1000, roundUpTo1000 } from '../utils.js';
 import { RULE_ENGINE } from '../registries/ruleEngine.js';
 
 // ===================================================================================
