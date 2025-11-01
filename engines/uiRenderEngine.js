@@ -2,7 +2,7 @@
 
 import { PRODUCT_CATALOG, GLOBAL_CONFIG } from '../structure.js';
 import { RULE_ENGINE } from '../registries/ruleEngine.js';
-import { formatCurrency, sanitizeHtml } from '../utils.js';
+import { formatCurrency, sanitizeHtml, roundDownTo1000, roundTo1000, roundUpTo1000 } from '../utils.js';
 import { TARGET_AGE_REGISTRY } from '../registries/targetAge.js';
 
 let lastRenderedProductKey = null;
