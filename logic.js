@@ -1,4 +1,4 @@
-import { GLOBAL_CONFIG, PRODUCT_CATALOG, VIEWER_CONFIG } from './structure.js';
+import { GLOBAL_CONFIG, PRODUCT_CATALOG } from './structure.js';
 import { product_data, investment_data, BENEFIT_MATRIX_SCHEMAS } from './data.js';
 import { debounce, parseFormattedNumber, formatCurrency, sanitizeHtml, roundDownTo1000, roundTo1000, roundUpTo1000, clearFieldError } from './utils.js';
 
