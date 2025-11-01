@@ -727,33 +727,7 @@ function initWaiverSection() {
 
 // ===================================================================================
 // ===== LOGIC TẠO BẢNG MINH HỌA (PORTED FROM V1)
-// ===================================================================================
-
-function resolveRiderStbh(rid, person) {
-    const prodConfig = PRODUCT_CATALOG[rid];
-    const data = person.supplements[rid] || {};
-    if (prodConfig?.stbhKey) {
-        const [resolver, param] = prodConfig.stbhKey.split(':');
-        const resolverFunc = appState.context.registries.UI_FUNCTIONS?.stbh?.[resolver];
-        if (resolverFunc) {
-            return resolverFunc({ person, data, productConfig: prodConfig, params: { ...prodConfig.stbhKeyParams, controlId: param }, state: appState }) || 0;
-        }
-    }
-    return data.stbh || 0;
-}
-
-function resolveRiderDisplayName(rid, person) {
-    const prodConfig = PRODUCT_CATALOG[rid];
-    const data = person.supplements[rid] || {};
-    if (prodConfig?.displayNameKey) {
-        const resolverFunc = appState.context.registries.UI_FUNCTIONS.displayName[prodConfig.displayNameKey];
-        if (resolverFunc) {
-            return resolverFunc({ person, data, state: appState });
-        }
-    }
-    return appState.context.registries.CALC_REGISTRY.getProductLabel(rid);
-}
-
+// ==================================================================================
 
 function buildViewerPayload() {
   const mainPerson = appState.persons.find(p => p.isMain);
