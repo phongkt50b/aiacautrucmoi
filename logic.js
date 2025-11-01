@@ -217,7 +217,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initPerson(appState.persons.find(p => p.isMain));
     initSupplementaryButton();
     initSummaryAndViewer();
-    initWaiverSection();
     attachGlobalListeners();
     runWorkflow();
 });
