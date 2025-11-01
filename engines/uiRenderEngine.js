@@ -197,52 +197,48 @@ function renderControl(config, value, customer, state) {
 export function renderWaiverSection(state, isMainProductValid) {
     const selEl = document.getElementById(`waiver-person-select`);
     const productListContainer = document.getElementById('waiver-products-list');
-    const otherForm = document.getElementById('waiver-other-form');
+    const dynamicPersonContainer = document.getElementById('waiver-dynamic-person-container');
     const feeEl = document.getElementById(`waiver-fee-display`);
 
-    if (!selEl || !productListContainer || !otherForm || !feeEl) return;
+    if (!selEl || !productListContainer || !feeEl || !dynamicPersonContainer) return;
 
-    // 1. Update dropdown options and disabled state
+    // 1. Cập nhật các lựa chọn trong dropdown
     const mainProductConfig = PRODUCT_CATALOG[state.mainProduct.key];
     const noWaiverAllowed = RULE_ENGINE.evaluateOr(mainProductConfig?.rules.noSupplementaryInsured, { state, PRODUCT_CATALOG });
     selEl.disabled = !isMainProductValid || noWaiverAllowed;
     
     if (noWaiverAllowed) {
         selEl.innerHTML = `<option value="">-- Không áp dụng cho sản phẩm này --</option>`;
+        dynamicPersonContainer.innerHTML = ''; // Dọn dẹp form nếu có
     } else {
         const currentSelectedValue = state.waiver.selectedPersonId;
         let optionsHtml = `<option value="">Không mua miễn đóng phí</option>`;
-        state.persons.forEach(p => {
+        // Chỉ hiển thị những người không phải là "người miễn đóng phí" tự động
+        state.persons.filter(p => !p.isWaiverHolderOnly).forEach(p => {
             optionsHtml += `<option value="${p.id}">${p.name} (tuổi ${p.age || "?"})</option>`;
         });
         optionsHtml += `<option value="${GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE}">+ Thêm người khác (Bên mua bảo hiểm)</option>`;
+        
+        // Nếu người được chọn là người tự động, thêm họ vào danh sách để hiển thị
+        const dynamicPerson = state.persons.find(p => p.isWaiverHolderOnly);
+        if (dynamicPerson) {
+             optionsHtml += `<option value="${dynamicPerson.id}" selected>${dynamicPerson.name || 'Bên mua bảo hiểm'} (tuổi ${dynamicPerson.age || "?"})</option>`;
+        }
+
         selEl.innerHTML = optionsHtml;
         selEl.value = currentSelectedValue;
     }
 
-    // 2. Show/hide other person form
-    otherForm.classList.toggle('hidden', state.waiver.selectedPersonId !== GLOBAL_CONFIG.WAIVER_OTHER_PERSON_SELECT_VALUE);
-
-    // 3. Render product list
-    if (!state.waiver.selectedPersonId) {
-        productListContainer.classList.add('hidden');
+    // 2. Ẩn/hiện danh sách sản phẩm
+    const personInfo = state.context.registries.CALC_REGISTRY._getWaiverTargetPersonInfo(state);
+    
+    productListContainer.classList.toggle('hidden', !personInfo);
+    if (!personInfo) {
         feeEl.textContent = '';
         return;
     }
-    productListContainer.classList.remove('hidden');
-
-    const personInfo = state.context.registries.CALC_REGISTRY._getWaiverTargetPersonInfo(state);
-    if (!personInfo) {
-        productListContainer.innerHTML = '';
-        return;
-    }
-
-    if(personInfo.id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID) {
-        const otherFormEl = document.getElementById(`person-container-waiver-other-form`);
-        const ageSpan = otherFormEl?.querySelector('.age-span');
-        if(ageSpan) ageSpan.textContent = personInfo.age;
-    }
     
+    // 3. Vẽ danh sách sản phẩm Miễn đóng phí
     const waiverProducts = Object.values(PRODUCT_CATALOG).filter(p => p.category === 'waiver');
     productListContainer.innerHTML = waiverProducts.map(prodConfig => {
         const isEligible = RULE_ENGINE.evaluateAnd(prodConfig.rules.eligibility, { customer: personInfo, state });
@@ -254,12 +250,12 @@ export function renderWaiverSection(state, isMainProductValid) {
                            ${isChecked ? 'checked' : ''} ${!isEligible ? 'disabled' : ''}>
                     <span class="font-medium text-gray-800">${prodConfig.name}</span>
                 </label>
-                ${!isEligible ? `<div class="text-xs text-red-600 pl-8">Không áp dụng cho NĐBH chính hoặc không đủ tuổi</div>` : ''}
+                ${!isEligible ? `<div class="text-xs text-red-600 pl-8">Không áp dụng cho người này</div>` : ''}
             </div>
         `;
     }).join('');
 
-    // 4. Render fee display
+    // 4. Hiển thị phí
     const feeText = Object.entries(state.fees.waiverDetails).map(([, data]) => {
         return `STBH: ${state.context.helpers.formatCurrency(data.stbhBase)} | Phí: ${state.context.helpers.formatCurrency(data.premium)}`;
     }).join(' | ');
