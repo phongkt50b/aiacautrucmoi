@@ -411,14 +411,6 @@ export function renderSuppListSummary(appState) {
   if (!box) return;
 
   const getPersonName = (id) => {
-    if (id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID) {
-        const waiverOtherDetails = Object.values(appState.fees.waiverDetails).find(d => d.targetPerson.id === GLOBAL_CONFIG.WAIVER_OTHER_PERSON_ID);
-        if (waiverOtherDetails) {
-            const personData = waiverOtherDetails.targetPerson;
-            return (personData.name && personData.name !== 'Người khác') ? personData.name : GLOBAL_CONFIG.LABELS.POLICY_OWNER;
-        }
-        return GLOBAL_CONFIG.LABELS.POLICY_OWNER;
-    }
     return appState.persons.find(p => p.id === id)?.name || 'Người không xác định';
   };
   const rows = Object.entries(appState.fees.byPerson)
