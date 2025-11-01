@@ -325,7 +325,7 @@ function buildPart2BenefitsSection(summaryData, appState) {
     });
 
     const blocks = sortedSchemaKeys
-        .map(sk => bm_renderSchemaTables(sk, colsBySchema[sk], summaryData, appState))
+        .map(sk => bm_renderSchemaTables(sk, colsBySchema[sk], appState))
         .filter(Boolean);
 
     if (!blocks.length) return `<h3>Phần 2 · Tóm tắt quyền lợi sản phẩm</h3><div>Không có quyền lợi nào để hiển thị.</div>`;
