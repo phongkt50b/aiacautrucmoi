@@ -79,7 +79,7 @@ function __exportExactSummaryHtml(appState) {
             throw new Error('Invalid summary data: missing mainPerson');
         }
         
-        const introHtml = buildIntroSection(data);
+        const introHtml = buildIntroSection(data, appState);
         const part1Html = buildPart1Section(data);
         const part2Html = buildPart2BenefitsSection(data, appState);
         const part3Html = buildPart3ScheduleSection(data);
@@ -188,7 +188,7 @@ function buildSummaryData(appState) {
     return summary;
 }
 
-function buildIntroSection(data) {
+function buildIntroSection(data, appState) {
     const sel = document.getElementById('payment-frequency');
     let freqLabel = sel ? sel.options[sel.selectedIndex].text : data.freq;
     return `<div class="mb-4"><h3>BẢNG MINH HỌA PHÍ & QUYỀN LỢI</h3><div>Sản phẩm chính: <strong>${sanitizeHtml(appState.context.registries.CALC_REGISTRY.getProductLabel(data.productKey) || '—')}</strong>&nbsp;|&nbsp; Kỳ đóng: <strong>${sanitizeHtml(freqLabel)}</strong>&nbsp;|&nbsp; Minh họa đến tuổi: <strong>${sanitizeHtml(data.targetAge)}</strong></div></div>`;
