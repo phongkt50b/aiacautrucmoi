@@ -363,7 +363,7 @@ export const CALC_REGISTRY = {
         const acc = { per: 0, eq: 0, base: 0, diff: 0 };
         
         if (p.isMain && productKey) {
-            let productName = getProductLabel(productKey);
+            let productName = this.getProductLabel(productKey);
             const baseAnnual = appState.fees.baseMain;
             const mainProductConfig = PRODUCT_CATALOG[productKey];
 
@@ -505,6 +505,10 @@ export const CALC_REGISTRY = {
         rows.push({ year, age: currentAge, mainYearBase, extraYearBase, perPersonSuppBase, perPersonSuppAnnualEq, totalYearBase, totalAnnualEq, diff });
     }
     return { rows, extraAllZero: rows.every(r => r.extraYearBase === 0) };
+},
+
+getProductLabel(key) {
+  return PRODUCT_CATALOG[key]?.name || key || '';
 }
 
 };
