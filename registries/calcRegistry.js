@@ -334,7 +334,7 @@ export const CALC_REGISTRY = {
     // Xây dữ liệu trong bảng 1
     
     buildPart1RowsData(ctx) {
-    const { persons, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, waiverPremiums, freq } = ctx;
+    const { persons, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, waiverPremiums, freq, appState } = ctx;
     const mainPerson = persons.find(p => p.isMain);
     const mainAge = mainPerson?.age || 0;
     const riderMaxAge = (key) => (PRODUCT_CATALOG[key]?.rules.eligibility.find(r => r.renewalMax)?.renewalMax || 64);
