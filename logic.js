@@ -659,7 +659,7 @@ function initViewerModal() {
 
 function openFullViewer() {
     try {
-        const payload = buildViewerPayload();
+        const payload = generateViewerPayload(appState);
         if (!payload.productKey) return;
         
         const json = JSON.stringify(payload);
