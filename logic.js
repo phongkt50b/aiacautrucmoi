@@ -5,7 +5,20 @@ import { debounce, parseFormattedNumber, formatCurrency, sanitizeHtml, roundDown
 // Import Engines
 import { calculateAll } from './engines/calculationEngine.js';
 import { runAllValidations } from './engines/validationEngine.js';
-import { renderMainProductSection, renderSupplementaryProductsForPerson, renderWaiverSection, generateSupplementaryProductsHtml } from './engines/uiRenderEngine.js';
+import { 
+    renderMainProductSection, 
+    renderSupplementaryProductsForPerson, 
+    renderWaiverSection, 
+    generateSupplementaryProductsHtml,
+    renderSummary,
+    renderFrequencyBreakdown,
+    updateSupplementaryAddButtonState,
+    updateTargetAge,
+    updatePaymentFrequencyOptions,
+    showGlobalErrors,
+    hideGlobalErrors,
+    renderSuppListSummary 
+} from './engines/uiRenderEngine.js';
 import { generateViewerPayload } from './engines/viewerEngine.js';
 
 // Import Registries
