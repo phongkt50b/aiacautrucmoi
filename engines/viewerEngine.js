@@ -220,9 +220,6 @@ function buildSummaryData(appState) {
 
     const allPersonsForSummary = appState.persons;
     const waiverPremiums = appState.fees.waiverDetails || {};
-
-    allPersonsForSummary.push(...waiverOtherPersons);
-
     const part1 = appState.context.registries.CALC_REGISTRY.buildPart1RowsData({ persons: allPersonsForSummary, productKey, paymentTerm, targetAge, riderFactor, periods, isAnnual, waiverPremiums, freq, appState });
     const schedule = appState.context.registries.CALC_REGISTRY.buildPart2ScheduleRows({ persons: allPersonsForSummary, mainPerson, paymentTerm, targetAge, periods, isAnnual, riderFactor, productKey, waiverPremiums, appState });    
     const summary = { freq, periods, isAnnual, riderFactor, productKey, paymentTerm, targetAge, mainPerson, persons: allPersonsForSummary, waiverPremiums, part1, schedule, projection: null, sums: {} };
